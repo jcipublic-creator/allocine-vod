@@ -257,12 +257,12 @@ body {
 .menu-item:active { background: rgba(255,255,255,.06); }
 .menu-item:disabled { opacity: .4; cursor: default; }
 
-/* ── Prefs modal ── */
-#prefs-modal {
+/* ── Prefs & Profils modals ── */
+#prefs-modal, #profiles-modal {
   display: none; position: fixed; inset: 0; z-index: 500;
   background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
 }
-#prefs-modal.open { display: flex; }
+#prefs-modal.open, #profiles-modal.open { display: flex; }
 .prefs-sheet {
   background: #0f2540; border-radius: 18px 18px 0 0;
   padding: 20px 20px calc(20px + var(--sb)); width: 100%;

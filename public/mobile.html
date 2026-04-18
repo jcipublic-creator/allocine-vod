@@ -263,13 +263,28 @@ body {
   max-height: 75vh; overflow-y: auto;
 }
 .prefs-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
-.prefs-section { margin-bottom: 16px; }
-.prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
-.pref-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(42,79,112,.3); font-size: 13px; }
-.pref-item:last-child { border-bottom: none; }
-.pref-title { color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.pref-year { font-size: 11px; color: var(--muted); margin-left: 8px; flex-shrink: 0; }
-.prefs-empty { color: var(--muted); font-size: 13px; font-style: italic; }
+.prefs-section { margin-bottom: 20px; }
+.prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.pref-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); }
+.pref-row:last-child { border-bottom: none; }
+.pref-label { font-size: 14px; color: var(--text); }
+.pref-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+/* Toggle switch */
+.toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider {
+  position: absolute; inset: 0; cursor: pointer;
+  background: var(--blue3); border-radius: 13px; transition: background .2s;
+}
+.toggle-slider::before {
+  content: ''; position: absolute; width: 20px; height: 20px;
+  left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s;
+}
+.toggle input:checked + .toggle-slider { background: var(--gold); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
+/* Note dans confirm */
+.confirm-note { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 18px; padding: 12px 14px; background: rgba(255,255,255,.04); border-radius: 10px; border: 1px solid var(--blue3); }
+.confirm-note .note-label { font-size: 13px; color: var(--text); }
 </style>
 </head>
 <body>
@@ -279,6 +294,10 @@ body {
     <h3>🔄 Relancer le scraping ?</h3>
     <p>La liste sera mise à jour en arrière-plan.</p>
     <div class="last-scrape" id="confirm-last-scrape"></div>
+    <div class="confirm-note">
+      <span class="note-label">Note presse minimum</span>
+      <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
+    </div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
       <button class="btn-confirm" onclick="closeConfirm();startScrape()">Confirmer</button>
@@ -297,10 +316,6 @@ body {
 <div class="header">
   <div class="header-title">🎬 Films VOD</div>
   <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap;flex:1"></div>
-  <div style="display:flex;align-items:center;gap:4px" id="note-wrap">
-    <span class="note-label">≥</span>
-    <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
-  </div>
   <button class="menu-btn" id="menu-btn" onclick="toggleMenu(event)">☰</button>
 </div>
 
@@ -342,7 +357,6 @@ body {
     <option value="">Tous pays</option>
   </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
-  <label class="filter-toggle"><input type="checkbox" id="fil-show-all"  onchange="applyFilters()"><span>Tout afficher</span></label>
   <div class="sort-group">
     <button class="sort-btn active" id="sort-presse"      onclick="applySort('presse')">Presse</button>
     <button class="sort-btn"        id="sort-spectateurs" onclick="applySort('spectateurs')">Spectateurs</button>
@@ -469,10 +483,8 @@ const UI = {
     const genres = new Set();
     _allFilms.forEach(f => (f.genre||'').split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
     const sel = document.getElementById('fil-genre');
-    const cur = _genreDefaultApplied ? sel.value : '__excl__';
-    if (!_genreDefaultApplied) { _genreDefaultApplied = true; }
+    const cur = sel.value;
     sel.innerHTML = '<option value="">Tous genres</option>' +
-      '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Anim et Docu</option>' +
       [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
     this.applyFilters();
   },
@@ -570,7 +582,6 @@ function applyFiltersMobile() {
   const typeFilter = document.getElementById('fil-type').value;
   const paysFilter = document.getElementById('fil-pays').value;
   const onlyVoir = document.getElementById('fil-only-voir')?.checked;
-  const showAll = document.getElementById('fil-show-all')?.checked;
 
   let visible = 0;
   _allFilms.forEach((film, i) => {
@@ -583,16 +594,18 @@ function applyFiltersMobile() {
     const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const ud = _userdata[film.allocineId] || {};
 
-    const EXCL_GENRES = ['animation', 'documentaire'];
     const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
-    const matchGenre = !genreFilter
-      || (genreFilter === '__excl__' && !genres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))
-      || (genreFilter !== '__excl__' && genres.some(g => g.includes(genreFilter)));
+    const matchGenreFilter = !genreFilter || genres.some(g => g.includes(genreFilter));
+    const matchDocu = _prefs.showDocumentaires || !genres.some(g => g.includes('documentaire'));
+    const matchAnim = _prefs.showAnimations    || !genres.some(g => g.includes('animation'));
+    const matchGenre = matchGenreFilter && matchDocu && matchAnim;
     const matchType = !typeFilter
       || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
       || (typeFilter === 'vod' && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
     const matchPays = !paysFilter || filmPays.some(p => p === paysFilter);
-    const matchListe = (showAll || (!ud.vu && !ud.nonInteresse)) && (!onlyVoir || !!ud.vouloir);
+    const matchListe = (!_prefs.hideVus || !ud.vu) &&
+                       (!_prefs.hideNonInteresse || !ud.nonInteresse) &&
+                       (!onlyVoir || !!ud.vouloir);
 
     const ok = matchAnnee && matchGenre && matchType && matchPays && matchListe;
     card.style.display = ok ? '' : 'none';
@@ -676,47 +689,57 @@ function closeMenu() {
 }
 document.addEventListener('click', () => closeMenu());
 
-// ─── Préférences ──────────────────────────────────────────────────────────────
+// ─── Préférences d'affichage ─────────────────────────────────────────────────
+const PREFS_KEY = 'vod_prefs';
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+
+function loadPrefs() {
+  try { Object.assign(_prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch(e) {}
+}
+function savePrefs() {
+  localStorage.setItem(PREFS_KEY, JSON.stringify(_prefs));
+}
+function setPref(key, val) {
+  _prefs[key] = val;
+  savePrefs();
+  applyFilters();
+}
+
 function openPrefs() {
   renderPrefs();
   document.getElementById('prefs-modal').classList.add('open');
 }
-
 function closePrefs() {
   document.getElementById('prefs-modal').classList.remove('open');
 }
-
 function renderPrefs() {
-  const vu   = _allFilms.filter(f => (_userdata[f.allocineId] || {}).vu);
-  const voir = _allFilms.filter(f => (_userdata[f.allocineId] || {}).vouloir);
-  const nope = _allFilms.filter(f => (_userdata[f.allocineId] || {}).nonInteresse);
-
-  const section = (title, films) => {
-    const items = films.length
-      ? films.map(f => `<div class="pref-item">
-          <span class="pref-title">${esc(f.titre)}</span>
-          <span class="pref-year">${f.anneeReelle || f.anneeSortie || ''}</span>
-        </div>`).join('')
-      : `<div class="prefs-empty">Aucun film</div>`;
-    return `<div class="prefs-section">
-      <div class="prefs-section-title">${title}${films.length ? ` · ${films.length}` : ''}</div>
-      ${items}
+  const row = (key, label) => `
+    <div class="pref-row">
+      <div class="pref-label">${label}</div>
+      <label class="toggle">
+        <input type="checkbox" ${_prefs[key] ? 'checked' : ''} onchange="setPref('${key}', this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
     </div>`;
-  };
-
-  document.getElementById('prefs-content').innerHTML =
-    section('👁 Vus', vu) +
-    section('🔖 À voir', voir) +
-    section('✕ Non intéressé', nope);
+  document.getElementById('prefs-content').innerHTML = `
+    <div class="prefs-section">
+      <div class="prefs-section-title">Genres</div>
+      ${row('showDocumentaires', 'Afficher les documentaires')}
+      ${row('showAnimations',    'Afficher les animations')}
+    </div>
+    <div class="prefs-section">
+      <div class="prefs-section-title">Ma liste</div>
+      ${row('hideVus',          'Masquer les films déjà vus')}
+      ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
+    </div>`;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
+  loadPrefs();
   const hadCache = loadCache();
   await pingServer();
-  if (!hadCache) {
-    await loadFilmsFromServer();
-  }
+  if (!hadCache) await loadFilmsFromServer();
   await loadUserdata();
 })();
 </script>

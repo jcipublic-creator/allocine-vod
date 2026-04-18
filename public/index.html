@@ -507,7 +507,7 @@ const UI = {
     [...genres].sort().forEach(g => {
       const id = `genre-cb-${g.replace(/\s+/g, '_')}`;
       const lbl = document.createElement('label');
-      lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="applyFilters()"> ${esc(g)}`;
+      lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="_exclMode=false;applyFilters()"> ${esc(g)}`;
       dd.appendChild(lbl);
     });
     const actions = document.createElement('div');
@@ -580,11 +580,14 @@ function getFilmUrl(film) {
 }
 
 // ─── Filtres desktop ──────────────────────────────────────────────────────────
+let _exclMode = false;
+
 function selectExcludeAnimDoc() {
   const EXCLUDED = ['animation', 'documentaire'];
   document.querySelectorAll('#genre-dropdown input[type=checkbox]').forEach(cb => {
     cb.checked = !EXCLUDED.includes(cb.value.toLowerCase());
   });
+  _exclMode = true;
   updateGenreBtn();
   applyFiltersDesktop();
 }
@@ -613,6 +616,7 @@ function toggleGenreDropdown(e) {
 }
 
 function selectAllGenres(checked) {
+  _exclMode = false;
   document.querySelectorAll('#genre-dropdown input[type=checkbox]')
     .forEach(cb => cb.checked = checked);
   updateGenreBtn();
@@ -646,7 +650,10 @@ function applyFiltersDesktop() {
     const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const ud = _userdata[film.allocineId] || {};
 
-    const matchGenre = selectedGenres.length === 0 || selectedGenres.some(g => filmGenres.some(fg => fg.includes(g)));
+    const EXCL_GENRES = ['animation', 'documentaire'];
+    const matchGenre = selectedGenres.length === 0
+      || (_exclMode && !filmGenres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))
+      || (!_exclMode && selectedGenres.some(g => filmGenres.some(fg => fg.includes(g))));
     const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
     const matchPlat = !plat || providers.some(p => p.includes(plat));
     const matchPays = !paysFilter || filmPays.some(p => p === paysFilter);

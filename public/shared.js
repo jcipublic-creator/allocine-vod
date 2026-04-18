@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v63'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v64'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -68,7 +68,7 @@ function flagFor(pays) {
 
 function renderPlatBadges(providers) {
   if (!providers || providers.length === 0) return '<span class="pb-none">—</span>';
-  const filtered = providers.filter(p => !/dvd/i.test(p.name));
+  const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name));
   if (filtered.length === 0) return '<span class="pb-none">—</span>';
   return filtered.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('');
 }

@@ -8,7 +8,7 @@ const { Redis } = require('@upstash/redis');
 const app = express();
 const PORT = Number(process.env.PORT || 3009);
 const TOTAL_PAGES = Number(process.env.TOTAL_PAGES || 25);
-const DETAILS_TTL_MS = 1000 * 60 * 60 * 6; // 6h
+const DETAILS_TTL_MS = 1000 * 60 * 60 * 24; // 24h
 const BUILD = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();

@@ -397,7 +397,7 @@ function startScrape() {
       // Mise à jour de l'écran seulement maintenant
       _allFilms = pendingFilms;
       _allPlats = new Set(); _platsDone = 0;
-      _details  = {};
+      // _details conservé : on ne re-scrappe que si > 24h (TTL serveur)
       _scrapingDone = true; // scraping terminé, le worker peut s'arrêter
       renderCards(_allFilms);
       populateGenreFilter();

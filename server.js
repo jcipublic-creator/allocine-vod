@@ -19,7 +19,11 @@ const DATA_DIR = process.env.DATA_DIR || __dirname;
 let lastScrapeErrors = [];
 
 // ── Séries ────────────────────────────────────────────────────────────────────
-const SERIES_PAGES           = 10;  // pages max sur /series/top/
+const SERIES_SOURCES = [
+  { label: 'Top AlloCiné',       baseUrl: 'https://www.allocine.fr/series/top/',                       pages: 10 },
+  { label: 'Meilleures 2020s',   baseUrl: 'https://www.allocine.fr/series/meilleures/decennie-2020/', pages: 5  },
+];
+const SERIES_PAGES           = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
 const SERIES_DETAILS_TTL_MS  = 1000 * 60 * 60 * 24 * 7; // 7 jours
 let cachedSeries             = [];
 let lastSeriesScrape         = null;
@@ -1054,27 +1058,31 @@ app.get('/api/series/scrape', async (req, res) => {
 
   const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   const allSeries = [];
+  let globalPage = 0;
 
-  for (let page = 1; page <= SERIES_PAGES; page++) {
-    seriesProgress.current = page;
-    send({ type: 'progress', page, total: SERIES_PAGES });
-    const url = `https://www.allocine.fr/series/top/?page=${page}`;
-    try {
-      let html = getCachedPage(url);
-      if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
-      const raw = parseSeries(html);
-      allSeries.push(...raw);
-      send({ type: 'series', series: raw, page, total: SERIES_PAGES });
-      console.log(`[series] Page ${page}/${SERIES_PAGES} → ${raw.length} séries`);
-      // Arrêt anticipé si la page est vide (fin du catalogue)
-      if (raw.length === 0) { console.log(`[series] Page vide — arrêt à la page ${page}`); break; }
-    } catch(e) {
-      const msg = e.response ? `HTTP ${e.response.status}` : e.message;
-      console.error(`[series] Page ${page} erreur: ${msg}`);
-      lastSeriesScrapeErrors.push({ page, message: msg });
-      send({ type: 'error', page, message: msg });
+  for (const source of SERIES_SOURCES) {
+    console.log(`[series] Source: ${source.label}`);
+    for (let page = 1; page <= source.pages; page++) {
+      globalPage++;
+      seriesProgress.current = globalPage;
+      send({ type: 'progress', page: globalPage, total: SERIES_PAGES, source: source.label });
+      const url = `${source.baseUrl}?page=${page}`;
+      try {
+        let html = getCachedPage(url);
+        if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+        const raw = parseSeries(html);
+        allSeries.push(...raw);
+        send({ type: 'series', series: raw, page: globalPage, total: SERIES_PAGES });
+        console.log(`[series] ${source.label} page ${page}/${source.pages} → ${raw.length} séries`);
+        if (raw.length === 0) { console.log(`[series] Page vide — passage à la source suivante`); break; }
+      } catch(e) {
+        const msg = e.response ? `HTTP ${e.response.status}` : e.message;
+        console.error(`[series] ${source.label} page ${page} erreur: ${msg}`);
+        lastSeriesScrapeErrors.push({ source: source.label, page, message: msg });
+        send({ type: 'error', page: globalPage, message: msg });
+      }
+      await sleep(1500 + Math.random() * 500);
     }
-    await sleep(1500 + Math.random() * 500);
   }
 
   const result = dedupeAndSortSeries(allSeries);

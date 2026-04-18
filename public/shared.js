@@ -2,6 +2,9 @@
 // shared.js — Logique métier partagée (sans DOM)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─── Pont global vers UI (appelé depuis onchange="applyFilters()" dans le HTML) ─
+function applyFilters() { UI.applyFilters(); }
+
 // ─── État global ──────────────────────────────────────────────────────────────
 let _allFilms     = [];
 let _details      = {};   // filmKey → { pays, annee, providers, ... }

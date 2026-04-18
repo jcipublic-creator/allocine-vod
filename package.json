@@ -1,0 +1,15 @@
+{
+  "name": "allocine-vod-scraper-v9",
+  "version": "1.1.0",
+  "description": "Meilleurs films VOD AlloCiné – scraper local",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "PORT=3003 node server.js"
+  },
+  "dependencies": {
+    "axios": "^1.7.0",
+    "express": "^4.19.0",
+    "cheerio": "^1.0.0"
+  }
+}

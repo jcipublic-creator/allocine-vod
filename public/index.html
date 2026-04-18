@@ -1,0 +1,1047 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/icon-192.svg">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🎬 AlloCiné VOD Scraper</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --navy: #0d2137; --blue: #1c3a56; --blue2: #2a4f70;
+    --gold: #f0c040; --green: #1a7f4b; --orange: #e8a000;
+    --text: #e8edf2; --muted: #7a9bb5;
+  }
+  body { background: var(--navy); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+
+  header { background: var(--blue); border-bottom: 2px solid var(--gold); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .logo { font-size: 20px; font-weight: 800; color: var(--gold); }
+  .logo span { color: var(--text); font-weight: 400; }
+
+  .controls { background: var(--blue); border-radius: 12px; padding: 20px 28px; margin: 24px 32px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  .field { display: flex; flex-direction: column; gap: 6px; }
+  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; font-weight: 600; }
+  select, input[type="number"] {
+    background: var(--navy); border: 1px solid var(--blue2); color: var(--text);
+    padding: 9px 12px; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer;
+  }
+  select { min-width: 120px; }
+  input[type="number"] { width: 100px; }
+  select:focus, input:focus { border-color: var(--gold); }
+
+  .btn-run {
+    background: var(--gold); color: var(--navy); border: none; border-radius: 8px;
+    padding: 10px 26px; font-size: 14px; font-weight: 800; cursor: pointer;
+    transition: transform .15s, box-shadow .15s; white-space: nowrap;
+  }
+  .btn-run:hover  { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(240,192,64,.4); }
+  .btn-run:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  #filter-bar { background: var(--blue); border-radius: 12px; padding: 16px 28px; margin: 0 32px 16px; display: none; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
+  #filter-bar label { color: var(--muted); }
+  .filter-count { font-size: 12px; color: var(--muted); margin-left: auto; align-self: center; }
+  .btn-reset { background: none; border: 1px solid var(--blue2); color: var(--muted); border-radius: 6px; padding: 8px 14px; font-size: 12px; cursor: pointer; }
+  .btn-reset:hover { border-color: var(--gold); color: var(--gold); }
+
+  #progress-zone { margin: 0 32px 16px; display: none; }
+  .progress-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
+  .progress-track { background: var(--blue2); border-radius: 6px; height: 8px; overflow: hidden; }
+  .progress-fill  { background: var(--gold); height: 100%; width: 0%; border-radius: 6px; transition: width .3s; }
+  .progress-sub   { font-size: 11px; color: var(--muted); margin-top: 5px; }
+
+  /* Barre de chargement des plateformes (secondaire) */
+  #plat-zone { margin: 0 32px 16px; display: none; }
+  .plat-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .plat-track { background: var(--blue2); border-radius: 4px; height: 4px; overflow: hidden; }
+  .plat-fill  { background: #3498db; height: 100%; width: 0%; border-radius: 4px; transition: width .4s; }
+
+  #error-banner { margin: 0 32px 16px; background: #3a1010; border: 1px solid #c0392b; border-radius: 8px; padding: 12px 18px; color: #f0c040; font-size: 13px; display: none; }
+
+  #results-header { margin: 0 32px 12px; display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  .result-count { font-size: 15px; font-weight: 700; color: var(--gold); }
+  .export-btns { display: flex; gap: 10px; }
+  .btn-export { border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; }
+  .btn-csv  { background: var(--green); color: #fff; }
+  .btn-xlsx { background: #217346; color: #fff; }
+  .btn-export:hover { opacity: .85; }
+
+  #table-wrap { margin: 0 32px 40px; overflow-x: auto; display: none; border-radius: 10px; overflow: hidden; border: 1px solid var(--blue2); }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th {
+    background: var(--navy); color: var(--gold); padding: 10px 14px;
+    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .7px;
+    border-bottom: 2px solid var(--gold); white-space: nowrap;
+  }
+  thead th.center { text-align: center; }
+  /* ── Multi-select genre ── */
+  .multi-select { position: relative; }
+  .multi-btn {
+    background: var(--blue2); border: 1px solid var(--blue3); color: var(--text);
+    padding: 9px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
+    min-width: 160px; text-align: left; white-space: nowrap;
+  }
+  .multi-btn:hover { border-color: var(--gold); }
+  .multi-btn.active { border-color: var(--gold); color: var(--gold); }
+  .multi-dropdown {
+    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
+    background: #1a3550; border: 1px solid var(--blue3); border-radius: 8px;
+    min-width: 200px; max-height: 260px; overflow-y: auto;
+    box-shadow: 0 8px 24px rgba(0,0,0,.5);
+  }
+  .multi-dropdown.open { display: block; }
+  .multi-dropdown label {
+    display: flex; align-items: center; gap: 8px;
+    padding: 7px 12px; cursor: pointer; font-size: 13px; color: var(--text);
+  }
+  .multi-dropdown label:hover { background: rgba(240,192,64,.1); }
+  .multi-dropdown label input[type=checkbox] { accent-color: var(--gold); width: 14px; height: 14px; }
+  .multi-dropdown .ms-actions {
+    display: flex; gap: 8px; padding: 6px 12px; border-top: 1px solid var(--blue3);
+    position: sticky; bottom: 0; background: #1a3550;
+  }
+  .multi-dropdown .ms-actions button {
+    font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;
+    background: var(--blue2); border: 1px solid var(--blue3); color: var(--muted);
+  }
+  .multi-dropdown .ms-actions button:hover { color: var(--gold); border-color: var(--gold); }
+
+  thead th.th-sort { cursor: pointer; user-select: none; }
+  thead th.th-sort:hover { color: #fff; }
+  thead th.th-sort.active { color: #fff; border-bottom-color: #fff; }
+  tbody tr.film-row { cursor: pointer; transition: background .1s; }
+  tbody tr.film-row:nth-child(odd) { background: rgba(28,58,86,.4); }
+  tbody tr.film-row:hover { background: rgba(240,192,64,.15); }
+  tbody tr.film-row.open { background: rgba(240,192,64,.08); }
+  .td-arrow { cursor: pointer; color: var(--gold); font-size: 11px; padding: 0 6px !important; user-select: none; width: 18px; text-align: center; }
+  .td-arrow::after { content: '▶'; }
+  tbody tr.film-row.open .td-arrow::after { content: '▼'; }
+  .year-badge { display: inline-block; font-size: 10px; background: rgba(240,192,64,.15);
+    color: var(--gold); border: 1px solid rgba(240,192,64,.3); border-radius: 4px;
+    padding: 1px 5px; margin-left: 6px; vertical-align: middle; font-weight: 600; }
+  tbody tr.detail-row td { background: var(--navy); padding: 0; border-bottom: 1px solid var(--blue2); }
+  tbody td { padding: 10px 14px; border-bottom: 1px solid rgba(42,79,112,.3); vertical-align: middle; }
+
+  .td-num   { color: var(--muted); text-align: center; font-size: 11px; width: 36px; }
+  .td-arrow { text-align: center; color: var(--muted); width: 24px; font-size: 11px; transition: transform .2s; }
+  .open .td-arrow { transform: rotate(90deg); color: var(--gold); }
+  .td-title { font-weight: 700; }
+  .td-title a { color: var(--text); text-decoration: none; }
+  .td-title a:hover { color: var(--gold); }
+  .td-orig  { color: var(--muted); font-size: 11px; margin-top: 2px; font-style: italic; }
+  .td-genre { color: #8fc; font-size: 12px; }
+  .td-real  { font-weight: 600; }
+  .td-cast  { color: var(--muted); font-size: 12px; }
+  .td-note  { text-align: center; font-weight: 800; font-size: 15px; }
+  .td-spect { text-align: center; color: var(--muted); font-size: 13px; }
+  .note-green  { color: #2ecc71; }
+  .note-orange { color: var(--orange); }
+
+  /* ── Colonne Plateformes dans le tableau ── */
+  .td-plat { min-width: 140px; max-width: 220px; }
+  .plat-badges { display: flex; flex-wrap: wrap; gap: 4px; }
+  .pb {
+    display: inline-block; border-radius: 12px; padding: 2px 8px;
+    font-size: 10px; font-weight: 700; white-space: nowrap; border: 1px solid transparent;
+  }
+  .pb.svod     { background: rgba(39,174,96,.2);  border-color: #27ae60; color: #5dcc8a; }
+  .pb.location { background: rgba(52,152,219,.15); border-color: #3498db; color: #74b9e8; }
+  .pb.achat    { background: rgba(155,89,182,.15); border-color: #9b59b6; color: #c39bd3; }
+  .pb.vod      { background: rgba(127,140,141,.15);border-color: #7f8c8d; color: #aab7b8; }
+  .pb-loading  { color: var(--muted); font-size: 11px; font-style: italic; }
+  .pb-none     { color: var(--muted); font-size: 11px; }
+
+  /* ── Panneau détail ── */
+  .detail-panel {
+    padding: 20px 28px; display: none; gap: 28px; flex-wrap: wrap;
+    border-top: 1px solid var(--blue2);
+  }
+  .detail-panel.visible { display: flex; }
+  .synopsis-block { flex: 2; min-width: 280px; }
+  .synopsis-block h4 { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  .synopsis-text { font-size: 13px; color: #bcd; line-height: 1.7; }
+  .synopsis-text.empty { color: var(--muted); font-style: italic; }
+  .meta-block { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 14px; }
+  .meta-item h4 { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .meta-item p  { font-size: 13px; color: var(--text); }
+  .meta-item p.loading { color: var(--muted); font-style: italic; }
+  .pays-pill {
+    display: inline-block; background: var(--blue2); border-radius: 20px;
+    padding: 3px 12px; font-size: 12px; margin: 3px 4px 3px 0; color: var(--text);
+  }
+
+  /* ── Filtres Ma liste ── */
+  .ua-check {
+    display: flex; align-items: center; gap: 6px;
+    font-size: 12px; color: var(--text); cursor: pointer;
+    text-transform: none; letter-spacing: 0; font-weight: 400;
+  }
+  .ua-check input[type=checkbox] { accent-color: var(--gold); width: 13px; height: 13px; }
+
+  /* ── Boutons actions utilisateur ── */
+  .user-actions { display: flex; gap: 4px; min-width: 90px; }
+  .ua-btn {
+    background: none; border: 1px solid var(--blue2); color: var(--muted);
+    border-radius: 6px; padding: 3px 7px; font-size: 12px; cursor: pointer;
+    transition: all .15s; white-space: nowrap; line-height: 1.4;
+  }
+  .ua-btn:hover { border-color: var(--gold); color: var(--text); }
+  .ua-btn.active-vu   { border-color: #2ecc71; color: #2ecc71; background: rgba(46,204,113,.12); }
+  .ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
+  .ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
+
+  #empty { margin: 60px 32px; text-align: center; display: none; }
+  #empty h2 { color: var(--muted); font-size: 18px; margin-bottom: 8px; }
+
+  @media (max-width: 750px) {
+    .controls, #filter-bar, #progress-zone, #plat-zone, #results-header, #table-wrap, #empty, #error-banner { margin-left: 12px; margin-right: 12px; }
+    header { padding: 14px; }
+    .td-cast, .td-spect, .td-plat { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
+  <div style="font-size:12px;color:var(--muted)">Cliquez sur un film pour le résumé · <span style="color:var(--gold);font-weight:600">v9.1 — fix scraping multiple</span></div>
+</header>
+
+<div class="controls">
+  <div class="field">
+    <label>Note presse min.</label>
+    <input type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
+  </div>
+  <button class="btn-run" id="btn-run" onclick="startScrape()">▶ Lancer le scraping</button>
+  <button class="btn-run" style="background:#555;font-size:12px;padding:6px 12px;margin-left:8px;" onclick="testAllocine()" id="btn-test">🔍 Tester AlloCiné</button>
+  <button class="btn-run" style="background:#7f3030;font-size:12px;padding:6px 12px;margin-left:8px;" onclick="clearCache()" id="btn-cache">🗑️ Vider le cache</button>
+</div>
+
+<div id="filter-bar">
+  <div class="field">
+    <label>Genre</label>
+    <div class="multi-select" id="genre-ms">
+      <button class="multi-btn" id="genre-btn" onclick="toggleGenreDropdown(event)">Tous les genres ▾</button>
+      <div class="multi-dropdown" id="genre-dropdown"></div>
+    </div>
+  </div>
+  <div class="field">
+    <label>Année</label>
+    <select id="fil-annee" onchange="applyFilters()">
+      <option value="">Toutes les années</option>
+      <option value="2026">À partir de 2026</option>
+      <option value="2025">À partir de 2025</option>
+      <option value="2024">À partir de 2024</option>
+      <option value="2023">À partir de 2023</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Type</label>
+    <select id="fil-type" onchange="applyFilters()">
+      <option value="">Streaming &amp; VOD</option>
+      <option value="svod">Streaming seulement</option>
+      <option value="vod">VOD seulement</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Plateforme</label>
+    <select id="fil-plat" onchange="applyFilters()">
+      <option value="">Toutes les plateformes</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Pays</label>
+    <select id="fil-pays" onchange="applyFilters()">
+      <option value="">Tous les pays</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Note presse min.</label>
+    <select id="fil-note" onchange="applyFilters()">
+      <option value="0">Toutes les notes</option>
+      <option value="4">≥ 4,0</option>
+      <option value="3.8">≥ 3,8</option>
+      <option value="3.5" selected>≥ 3,5</option>
+    </select>
+  </div>
+  <div class="field">
+    <label>Ma liste</label>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      <label class="ua-check"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"> 🔖 Seulement "À voir"</label>
+      <label class="ua-check"><input type="checkbox" id="fil-show-all"  onchange="applyFilters()"> Tout afficher</label>
+    </div>
+  </div>
+  <button class="btn-reset" onclick="resetFilters()">✕ Réinitialiser</button>
+  <div class="filter-count" id="filter-count"></div>
+</div>
+
+<div id="progress-zone">
+  <div class="progress-label" id="prog-label">Connexion à AlloCiné…</div>
+  <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
+  <div class="progress-sub" id="prog-sub"></div>
+</div>
+
+<!-- Barre de progression secondaire pour les plateformes -->
+<div id="plat-zone">
+  <div class="plat-label" id="plat-label">📺 Chargement des plateformes… <span id="plat-count" style="color:var(--gold)"></span></div>
+  <div class="plat-track"><div class="plat-fill" id="plat-fill"></div></div>
+  <div id="plat-debug" style="font-size:11px;color:#e67e22;margin-top:4px;display:none;"></div>
+</div>
+
+<div id="error-banner"></div>
+<details style="margin:0 32px 12px;font-size:11px;">
+  <summary style="cursor:pointer;color:#888;">🔧 Console debug (cliquer pour ouvrir)</summary>
+  <pre id="dbg-console" style="background:#111;color:#0f0;padding:10px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:10px;line-height:1.4;white-space:pre-wrap;"></pre>
+</details>
+
+<div id="results-header">
+  <div class="result-count" id="result-count"></div>
+  <div class="export-btns">
+    <button class="btn-export btn-csv"  onclick="downloadCSV()">⬇ CSV</button>
+    <button class="btn-export btn-xlsx" onclick="downloadXLSX()">⬇ Excel</button>
+  </div>
+</div>
+
+<div id="table-wrap">
+  <table>
+    <thead>
+      <tr>
+        <th class="center" style="width:36px">#</th>
+        <th style="width:20px"></th>
+        <th>Titre</th>
+        <th>Genre</th>
+        <th>Réalisateur</th>
+        <th class="td-cast">Acteurs principaux</th>
+        <th class="center th-sort" id="th-annee" onclick="applySort('annee')" title="Trier par année de sortie">Année</th>
+        <th class="center th-sort" id="th-presse" onclick="applySort('presse')" title="Trier par note presse">Presse ↓</th>
+        <th class="center td-spect th-sort" id="th-spect" onclick="applySort('spectateurs')" title="Trier par note spectateurs">Spectateurs</th>
+        <th class="td-plat">Plateformes</th>
+        <th style="min-width:100px">Mes notes</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+</div>
+
+<div id="empty"><h2>Aucun film trouvé</h2><p style="color:var(--muted);font-size:13px">Essayez de modifier les filtres.</p></div>
+
+<script>
+let _allFilms     = [];
+let _details      = {};   // filmKey → { pays, annee, providers, ... } — persisté entre scrapes
+let _userdata     = {};   // allocineId → { vu, vouloir, nonInteresse }
+let _allPlats     = new Set();
+let _platsDone    = 0;
+let _loadGen      = 0;    // compteur de génération — annule les workers de l'ancien scraping
+let _sortBy       = 'presse'; // 'presse' | 'spectateurs'
+let _scrapingDone = true;     // false pendant un scraping actif
+
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+// ─── Base de données utilisateur ─────────────────────────────────
+async function loadUserdata() {
+  try {
+    const r = await fetch('/api/userdata');
+    _userdata = await r.json();
+    reapplyUserActions();
+    applyFilters();
+  } catch(e) { console.warn('Erreur chargement userdata:', e.message); }
+}
+
+async function saveUserdata(id) {
+  try {
+    await fetch('/api/userdata', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id, ...(_userdata[id] || {}) })
+    });
+  } catch(e) { console.warn('Erreur sauvegarde userdata:', e.message); }
+}
+
+function renderUserActions(film, idx) {
+  const id = film.allocineId;
+  if (!id) return '<span style="color:var(--muted);font-size:10px">—</span>';
+  const ud = _userdata[id] || {};
+  return `<div class="user-actions">
+    <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')" title="J'ai vu ce film">👁</button>
+    <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')" title="Je veux le voir">🔖</button>
+    <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')" title="Pas intéressé">✕</button>
+  </div>`;
+}
+
+function toggleUA(id, idx, field) {
+  if (!_userdata[id]) _userdata[id] = {};
+  _userdata[id][field] = !_userdata[id][field];
+  const el = document.getElementById(`ua-${idx}`);
+  const film = _allFilms[idx];
+  if (el && film) el.innerHTML = renderUserActions(film, idx);
+  saveUserdata(id);
+}
+
+function reapplyUserActions() {
+  _allFilms.forEach((film, i) => {
+    const el = document.getElementById(`ua-${i}`);
+    if (el) el.innerHTML = renderUserActions(film, i);
+  });
+}
+
+function reapplyBadges() {
+  _allFilms.forEach((film, i) => {
+    const det = _details[filmKey(film)];
+    if (!det) return;
+    const el = document.getElementById(`plat-${i}`);
+    if (el) el.innerHTML = renderPlatBadges(det.providers || []);
+  });
+}
+
+// ── Mini-console de debug visible dans la page ──
+const _dbgLines = [];
+function dbgLog(msg) {
+  const ts = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+  _dbgLines.push(`[${ts}] ${msg}`);
+  if (_dbgLines.length > 30) _dbgLines.shift();
+  const el = document.getElementById('dbg-console');
+  if (el) el.textContent = _dbgLines.join('\n');
+  console.log('[DBG]', msg);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Scraping principal
+// ─────────────────────────────────────────────────────────────
+function startScrape() {
+  const noteMin = parseFloat(document.getElementById('inp-note').value || '3.5');
+  const btn     = document.getElementById('btn-run');
+
+  // On garde _details pour réutiliser les plateformes déjà chargées
+  _allFilms = []; _allPlats = new Set(); _platsDone = 0;
+  _scrapingDone = false;
+  _loadGen++;  // invalide tous les workers de plateformes en cours
+
+  btn.disabled = true;
+  btn.textContent = '⏳ Scraping…';
+  show('progress-zone');
+  hide('results-header'); hide('table-wrap'); hide('empty'); hide('filter-bar');
+  hide('plat-zone');
+  document.getElementById('error-banner').style.display = 'none';
+  document.getElementById('prog-fill').style.width = '0%';
+  document.getElementById('prog-label').textContent = 'Connexion à AlloCiné…';
+  document.getElementById('prog-sub').textContent = '';
+  document.getElementById('tbody').innerHTML = '';
+
+  const seen = new Set(); // dédup client-side cross-pages
+  let platformStarted = false;
+
+  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023&noteMin=${noteMin}`);
+
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+
+    if (d.type === 'films') {
+      // Mise à jour de la barre de progression
+      const pct = Math.round(d.page / d.total * 100);
+      document.getElementById('prog-fill').style.width = pct + '%';
+      const anneeLabel = d.annee ? ` — ${d.annee}` : '';
+      document.getElementById('prog-label').textContent =
+        `Page ${d.page} / ${d.total}${anneeLabel} — ${_allFilms.length} films…`;
+
+      // Ajout des nouveaux films (dédup)
+      const newFilms = d.films.filter(f => {
+        const key = `${f.titre.toLowerCase()}|${f.notePresse}`;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+      });
+
+      if (newFilms.length > 0) {
+        _allFilms.push(...newFilms);
+        // Pas de tri pendant le scraping — les indices doivent rester stables
+        // pour que le worker de plateformes écrive au bon endroit
+        populateGenreFilter();
+        renderTable(_allFilms);
+        reapplyBadges();
+        applyFilters();
+        show('filter-bar'); show('results-header'); show('table-wrap');
+
+        // Démarre le chargement des plateformes dès les premiers films
+        if (!platformStarted) {
+          platformStarted = true;
+          startPlatformLoading();
+        }
+      }
+    }
+
+    if (d.type === 'error') showError(`⚠ Erreur page ${d.page} : ${d.message}`);
+
+    if (d.type === 'done') {
+      es.close();
+      _scrapingDone = true;
+      document.getElementById('prog-fill').style.width = '100%';
+      document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films trouvés`;
+      document.getElementById('prog-sub').textContent = '';
+      btn.disabled = false;
+      btn.textContent = '▶ Lancer le scraping';
+      if (!_allFilms.length) show('empty');
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    _scrapingDone = true;
+    btn.disabled = false;
+    btn.textContent = '▶ Lancer le scraping';
+    showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
+  };
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Chargement automatique des plateformes (4 en parallèle)
+// ─────────────────────────────────────────────────────────────
+async function startPlatformLoading() {
+  const gen = _loadGen;
+  _platsDone = 0;
+  let _platErrors = 0;
+
+  show('plat-zone');
+  document.getElementById('plat-fill').style.width = '0%';
+  const dbgEl = document.getElementById('plat-debug');
+  if (dbgEl) { dbgEl.style.display = 'none'; dbgEl.textContent = ''; }
+  updatePlatProgress();
+
+  let idx = 0;
+
+  async function worker() {
+    while (true) {
+      if (_loadGen !== gen) return;
+
+      if (idx < _allFilms.length) {
+        const i = idx++;
+        const key = filmKey(_allFilms[i]);
+
+        if (_details[key]) {
+          // Film déjà connu — badge instantané, pas de requête réseau
+          _platsDone++;
+          const el = document.getElementById(`plat-${i}`);
+          if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
+          (_details[key].providers || []).forEach(p => _allPlats.add(p.name));
+          updatePlatProgress();
+          continue;
+        }
+
+        const err = await fetchDetails(i, gen);
+        if (_loadGen !== gen) return;
+        _platsDone++;
+        if (err) {
+          _platErrors++;
+          const d = document.getElementById('plat-debug');
+          if (d) { d.style.display = 'block'; d.textContent = `⚠️ ${_platErrors} erreur(s) — ${err}`; }
+        }
+        updatePlatProgress();
+
+      } else if (_scrapingDone) {
+        break; // scraping terminé et tous les films traités
+      } else {
+        await sleep(300); // attend de nouveaux films du scraper
+      }
+    }
+  }
+
+  await worker();
+
+  if (_loadGen !== gen) return;
+
+  // Tri final une fois TOUTES les plateformes chargées
+  // (on ne trie pas avant pour que les indices restent stables pendant le worker)
+  applySort();
+
+  const labelTxt = _platErrors > 0
+    ? `📺 Plateformes chargées (${_platErrors} échec(s))`
+    : '📺 Plateformes chargées';
+  document.getElementById('plat-label').innerHTML = `${labelTxt} <span id="plat-count" style="color:var(--gold)"></span>`;
+  document.getElementById('plat-fill').style.width = '100%';
+  populatePlatFilter();
+  populatePaysFilter();
+}
+
+function updatePlatProgress() {
+  const total = _allFilms.length;
+  const pct   = total ? Math.round(_platsDone / total * 100) : 0;
+  document.getElementById('plat-fill').style.width = pct + '%';
+  document.getElementById('plat-count').textContent = `${_platsDone} / ${total}`;
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Fetch d'un film individuel
+// ─────────────────────────────────────────────────────────────
+// Retourne null si ok, ou un message d'erreur si échec
+async function fetchDetails(idx, gen) {
+  if (_loadGen !== gen) return null;
+
+  // Capture la référence AVANT tout await — _allFilms peut être re-trié entre temps
+  const film = _allFilms[idx];
+  if (!film) return null;
+  const key  = filmKey(film);
+  if (_details[key]) return null; // déjà chargé
+
+  // Retrouve la position courante du film dans _allFilms (après un éventuel re-tri)
+  const platEl = () => {
+    const cur = _allFilms.indexOf(film);
+    return cur >= 0 ? document.getElementById(`plat-${cur}`) : null;
+  };
+
+  try {
+    const params = new URLSearchParams();
+    if (film.allocineId) params.set('allocineId', film.allocineId);
+    else params.set('q', film.titre);
+
+    const resp = await fetch(`/api/details?${params}`);
+    if (_loadGen !== gen) return null;
+
+    if (!resp.ok) {
+      const errMsg = `HTTP ${resp.status} pour "${film.titre}"`;
+      console.error('[plateformes]', errMsg);
+      _details[key] = { providers: [] };
+      const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
+      return errMsg;
+    }
+
+    const data = await resp.json();
+    if (_loadGen !== gen) return null;
+
+    if (data.error) {
+      console.warn(`[plateformes] "${film.titre}" → erreur serveur: ${data.error}`);
+      _details[key] = { providers: [] };
+      const el = platEl(); if (el) el.innerHTML = `<span class="pb-none" title="${data.error}">⚠</span>`;
+      return data.error;
+    }
+
+    _details[key] = data;
+    if (data.allocineId && !film.allocineId) film.allocineId = data.allocineId;
+
+    const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
+    (data.providers || []).forEach(p => _allPlats.add(p.name));
+    // Mise à jour progressive du filtre pays
+    if (data.pays) populatePaysFilter();
+    // Met à jour le panneau détail si ouvert
+    const curIdx = _allFilms.indexOf(film);
+    if (curIdx >= 0) updateDetailPanel(curIdx, data);
+
+    if (!data.providers || data.providers.length === 0)
+      console.log(`[plateformes] "${film.titre}" → aucune plateforme`);
+
+    return null;
+
+  } catch (e) {
+    if (_loadGen !== gen) return null;
+    const errMsg = `Réseau: ${e.message}`;
+    console.error('[plateformes]', film.titre, e);
+    _details[key] = { providers: [] };
+    const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
+    return errMsg;
+  }
+}
+
+function renderPlatBadges(providers) {
+  if (!providers || providers.length === 0) return '<span class="pb-none">—</span>';
+  return '<div class="plat-badges">' +
+    providers.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('') +
+    '</div>';
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Filtres
+// ─────────────────────────────────────────────────────────────
+function populateGenreFilter() {
+  const genres = new Set();
+  _allFilms.forEach(f => f.genre.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
+  const dd = document.getElementById('genre-dropdown');
+  dd.innerHTML = '';
+  [...genres].sort().forEach(g => {
+    const id = `genre-cb-${g.replace(/\s+/g, '_')}`;
+    const lbl = document.createElement('label');
+    lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="applyFilters()"> ${esc(g)}`;
+    dd.appendChild(lbl);
+  });
+  // Boutons tout sélect / tout déselect
+  const actions = document.createElement('div');
+  actions.className = 'ms-actions';
+  actions.innerHTML = `<button onclick="selectAllGenres(true)">Tout</button><button onclick="selectAllGenres(false)">Aucun</button>`;
+  dd.appendChild(actions);
+  updateGenreBtn();
+}
+
+function populatePlatFilter() {
+  const sel = document.getElementById('fil-plat');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Toutes les plateformes</option>';
+  [..._allPlats].sort().forEach(p =>
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
+  );
+}
+
+function populatePaysFilter() {
+  const paysSet = new Set();
+  Object.values(_details).forEach(det => {
+    if (!det || !det.pays) return;
+    det.pays.split(',').map(p => p.trim()).filter(Boolean).forEach(p => paysSet.add(p));
+  });
+  const sel = document.getElementById('fil-pays');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Tous les pays</option>';
+  [...paysSet].sort((a, b) => a.localeCompare(b, 'fr')).forEach(p =>
+    sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
+  );
+  // Restaure la sélection si le pays est toujours dans la liste
+  if (cur && [...paysSet].includes(cur)) sel.value = cur;
+}
+
+function getSelectedGenres() {
+  return [...document.querySelectorAll('#genre-dropdown input[type=checkbox]:checked')]
+    .map(cb => cb.value.toLowerCase());
+}
+
+function updateGenreBtn() {
+  const selected = getSelectedGenres();
+  const btn = document.getElementById('genre-btn');
+  if (!btn) return;
+  if (selected.length === 0) {
+    btn.textContent = 'Tous les genres ▾';
+    btn.classList.remove('active');
+  } else {
+    btn.textContent = `${selected.length} genre${selected.length > 1 ? 's' : ''} ▾`;
+    btn.classList.add('active');
+  }
+}
+
+function toggleGenreDropdown(e) {
+  e.stopPropagation();
+  document.getElementById('genre-dropdown').classList.toggle('open');
+}
+
+function selectAllGenres(checked) {
+  document.querySelectorAll('#genre-dropdown input[type=checkbox]')
+    .forEach(cb => cb.checked = checked);
+  updateGenreBtn();
+  applyFilters();
+}
+
+// Fermer le dropdown si on clique ailleurs
+document.addEventListener('click', () => {
+  document.getElementById('genre-dropdown')?.classList.remove('open');
+});
+
+function applyFilters() {
+  updateGenreBtn();
+  const selectedGenres = getSelectedGenres(); // [] = tous
+  const anneeFilter = document.getElementById('fil-annee').value;          // '' | '2025' | …
+  const typeFilter  = document.getElementById('fil-type').value;            // '' | 'svod' | 'vod'
+  const plat    = document.getElementById('fil-plat').value.toLowerCase();
+  const paysFilter = document.getElementById('fil-pays').value;
+  const noteMin = parseFloat(document.getElementById('fil-note').value || '0');
+  const onlyVoir  = document.getElementById('fil-only-voir')?.checked;
+  const showAll   = document.getElementById('fil-show-all')?.checked;
+
+  const rows = document.querySelectorAll('tr.film-row');
+  let visible = 0;
+  rows.forEach(row => {
+    const i    = parseInt(row.dataset.idx);
+    const film = _allFilms[i];
+    const det  = _details[filmKey(film)] || {};
+    const provObjs  = det.providers || [];
+    const providers = provObjs.map(p => p.name.toLowerCase());
+    const filmGenres = film.genre.split(',').map(g => g.trim().toLowerCase());
+    const filmPays   = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
+
+    const ud = _userdata[film.allocineId] || {};
+
+    const matchGenre  = selectedGenres.length === 0
+      || selectedGenres.some(g => filmGenres.some(fg => fg.includes(g)));
+    const matchAnnee  = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
+    const matchPlat   = !plat  || providers.some(p => p.includes(plat));
+    const matchPays   = !paysFilter || filmPays.some(p => p === paysFilter);
+    const matchNote   = film.notePresse >= noteMin;
+    const matchListe  = (showAll || (!ud.vu && !ud.nonInteresse))
+                     && (!onlyVoir || !!ud.vouloir);
+
+    let matchType = true;
+    if (typeFilter === 'svod') {
+      matchType = provObjs.some(p => p.type === 'svod');
+    } else if (typeFilter === 'vod') {
+      matchType = provObjs.some(p => p.type === 'location' || p.type === 'achat');
+    }
+
+    const ok = matchGenre && matchAnnee && matchType && matchPlat && matchPays && matchNote && matchListe;
+
+    row.style.display = ok ? '' : 'none';
+    const dr = document.getElementById(`detail-${i}`);
+    if (dr) dr.style.display = ok ? '' : 'none';
+    if (ok) visible++;
+  });
+
+  document.getElementById('filter-count').textContent =
+    `${visible} film${visible > 1 ? 's' : ''} affiché${visible > 1 ? 's' : ''}`;
+  document.getElementById('result-count').textContent =
+    `${_allFilms.length} films · ${visible} affichés`;
+  document.getElementById('empty').style.display = visible === 0 ? 'block' : 'none';
+}
+
+function applySort(critere) {
+  if (critere) _sortBy = critere;
+
+  // Mettre à jour l'apparence des en-têtes
+  const thAnnee = document.getElementById('th-annee');
+  const thPresse = document.getElementById('th-presse');
+  const thSpect  = document.getElementById('th-spect');
+  if (thPresse && thSpect && thAnnee) {
+    thAnnee.classList.toggle('active',  _sortBy === 'annee');
+    thPresse.classList.toggle('active', _sortBy === 'presse');
+    thSpect.classList.toggle('active',  _sortBy === 'spectateurs');
+    thAnnee.textContent  = _sortBy === 'annee'        ? 'Année ↓'        : 'Année';
+    thPresse.textContent = _sortBy === 'presse'       ? 'Presse ↓'       : 'Presse';
+    thSpect.textContent  = _sortBy === 'spectateurs'  ? 'Spectateurs ↓'  : 'Spectateurs';
+  }
+
+  // Trier _allFilms selon le critère choisi
+  _allFilms.sort((a, b) => {
+    if (_sortBy === 'annee') {
+      // Priorité à l'année réelle (chargée depuis les détails), sinon année VOD
+      const ya = parseInt(a.anneeReelle || a.anneeSortie) || 0;
+      const yb = parseInt(b.anneeReelle || b.anneeSortie) || 0;
+      return yb - ya || b.notePresse - a.notePresse;
+    }
+    if (_sortBy === 'spectateurs') {
+      if (a.noteSpect == null && b.noteSpect == null) return 0;
+      if (a.noteSpect == null) return 1;
+      if (b.noteSpect == null) return -1;
+      return b.noteSpect - a.noteSpect || b.notePresse - a.notePresse;
+    }
+    return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
+  });
+
+  // Re-rendre le tableau avec le nouvel ordre
+  renderTable(_allFilms);
+
+  // Réappliquer les plateformes déjà chargées
+  _allFilms.forEach((film, i) => {
+    const det = _details[filmKey(film)];
+    if (!det) return;
+    const platEl = document.getElementById(`plat-${i}`);
+    if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
+  });
+  reapplyUserActions();
+
+  applyFilters();
+}
+
+function resetFilters() {
+  selectAllGenres(false);
+  document.getElementById('fil-annee').value      = '';
+  document.getElementById('fil-type').value       = '';
+  document.getElementById('fil-plat').value       = '';
+  document.getElementById('fil-pays').value       = '';
+  document.getElementById('fil-note').value       = '3.5';
+  document.getElementById('fil-only-voir').checked = false;
+  document.getElementById('fil-show-all').checked  = false;
+  _sortBy = 'presse';
+  applySort();
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Rendu du tableau
+// ─────────────────────────────────────────────────────────────
+function renderTable(films) {
+  const tbody = document.getElementById('tbody');
+  tbody.innerHTML = films.map((f, idx) => `
+    <tr class="film-row" data-idx="${idx}" onclick="window.open('${getFilmUrl(f)}','_blank')">
+      <td class="td-num">${idx + 1}</td>
+      <td class="td-arrow" onclick="event.stopPropagation();toggleDetail(${idx})" title="Voir le résumé"></td>
+      <td class="td-title">
+        ${esc(f.titre)}
+        ${f.titreOriginal ? `<div class="td-orig">${esc(f.titreOriginal)}</div>` : ''}
+      </td>
+      <td class="td-genre">${esc(f.genre || '—')}</td>
+      <td class="td-real">${esc(f.realisateur || '—')}</td>
+      <td class="td-cast">${esc(f.acteurs || '—')}</td>
+      <td class="center" id="annee-cell-${idx}" style="font-size:12px;color:var(--muted)">${f.anneeSortie || '—'}</td>
+      <td class="td-note ${f.notePresse >= 4 ? 'note-green' : 'note-orange'}">${f.notePresse.toFixed(1)}</td>
+      <td class="td-spect">${f.noteSpect != null ? f.noteSpect.toFixed(1) : '—'}</td>
+      <td class="td-plat" id="plat-${idx}"><span class="pb-loading">…</span></td>
+      <td onclick="event.stopPropagation()" id="ua-${idx}">${renderUserActions(f, idx)}</td>
+    </tr>
+    <tr class="detail-row" id="detail-${idx}" style="display:none">
+      <td colspan="11">
+        <div class="detail-panel" id="panel-${idx}">
+          <div class="synopsis-block">
+            <h4>📖 Résumé</h4>
+            <p class="synopsis-text ${f.synopsis ? '' : 'empty'}">
+              ${f.synopsis ? esc(f.synopsis) : 'Résumé non disponible sur la page de liste.'}
+            </p>
+          </div>
+          <div class="meta-block">
+            <div class="meta-item">
+              <h4>🌍 Pays</h4>
+              <p id="pays-${idx}" class="loading">Chargement…</p>
+            </div>
+            <div class="meta-item">
+              <h4>📅 Année</h4>
+              <p id="annee-${idx}" class="loading">Chargement…</p>
+            </div>
+          </div>
+        </div>
+      </td>
+    </tr>
+  `).join('');
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Panneau détail (clic sur ligne)
+// ─────────────────────────────────────────────────────────────
+function toggleDetail(idx) {
+  const filmRow   = document.querySelector(`tr.film-row[data-idx="${idx}"]`);
+  if (!filmRow) return;
+  const detailRow = document.getElementById(`detail-${idx}`);
+  const panel     = document.getElementById(`panel-${idx}`);
+  const isOpen    = filmRow.classList.contains('open');
+
+  if (isOpen) {
+    filmRow.classList.remove('open');
+    if (detailRow) detailRow.style.display = 'none';
+    if (panel)     panel.classList.remove('visible');
+  } else {
+    filmRow.classList.add('open');
+    if (detailRow) detailRow.style.display = '';
+    if (panel)     panel.classList.add('visible');
+    const key = filmKey(_allFilms[idx]);
+    if (_details[key]) updateDetailPanel(idx, _details[key]);
+  }
+}
+
+function updateDetailPanel(idx, data) {
+  const paysEl  = document.getElementById(`pays-${idx}`);
+  const anneeEl = document.getElementById(`annee-${idx}`);
+  if (paysEl) {
+    paysEl.className = '';
+    paysEl.innerHTML = data.pays
+      ? data.pays.split(',').map(p => `<span class="pays-pill">${esc(p.trim())}</span>`).join('')
+      : '<span style="color:var(--muted);font-style:italic">Non trouvé</span>';
+  }
+  if (anneeEl) {
+    anneeEl.className = '';
+    anneeEl.textContent = data.annee || '—';
+  }
+  // Met à jour la cellule de la colonne Année avec la vraie année de production
+  if (data.annee) {
+    const film = _allFilms[idx];
+    if (film) film.anneeReelle = data.annee; // stocke pour le tri
+    const cellEl = document.getElementById(`annee-cell-${idx}`);
+    if (cellEl) cellEl.textContent = data.annee;
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Export CSV / Excel
+// ─────────────────────────────────────────────────────────────
+function downloadCSV() {
+  const BOM  = '\uFEFF';
+  const head = ['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes'];
+  const rows = _allFilms.map((f, i) => {
+    const det = _details[filmKey(f)] || {};
+    const plats = (det.providers || []).map(p => p.name).join(', ');
+    return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
+            f.notePresse.toFixed(1), f.noteSpect != null ? f.noteSpect.toFixed(1) : '',
+            f.synopsis||'', plats];
+  });
+  const csv = BOM + [head,...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
+  dl(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'allocine_vod.csv');
+}
+
+function downloadXLSX() {
+  const wb   = XLSX.utils.book_new();
+  const head = [['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes']];
+  const rows = _allFilms.map((f, i) => {
+    const det = _details[filmKey(f)] || {};
+    const plats = (det.providers || []).map(p => p.name).join(', ');
+    return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
+            f.notePresse, f.noteSpect ?? '', f.synopsis||'', plats];
+  });
+  const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
+  ws['!cols'] = [4,34,24,22,20,34,11,14,50,30].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Films VOD');
+  XLSX.writeFile(wb, 'allocine_vod.xlsx');
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Test de connectivité AlloCiné
+// ─────────────────────────────────────────────────────────────
+async function clearCache() {
+  const btn = document.getElementById('btn-cache');
+  btn.disabled = true;
+  btn.textContent = '⏳ Vidage…';
+  try {
+    const r = await fetch('/api/clear-details-cache', { method: 'POST' });
+    const d = await r.json();
+    btn.textContent = `✅ ${d.cleared} entrée(s) supprimées`;
+    btn.style.background = '#27ae60';
+    setTimeout(() => {
+      btn.disabled = false;
+      btn.textContent = '🗑️ Vider le cache';
+      btn.style.background = '#7f3030';
+    }, 4000);
+  } catch (e) {
+    btn.textContent = '❌ Erreur';
+    btn.disabled = false;
+  }
+}
+
+async function testAllocine() {
+  const btn = document.getElementById('btn-test');
+  btn.disabled = true;
+  btn.textContent = '⏳ Test…';
+  try {
+    const r = await fetch('/api/ping-allocine');
+    const d = await r.json();
+    if (d.ok) {
+      btn.textContent = `✅ AlloCiné OK (${d.status})`;
+      btn.style.background = '#27ae60';
+    } else {
+      btn.textContent = `❌ AlloCiné bloqué (${d.status || d.message})`;
+      btn.style.background = '#c0392b';
+      alert(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}\n\nSi c\'est un 429, attendez 5-10 minutes avant de charger les plateformes.`);
+    }
+  } catch (e) {
+    btn.textContent = '❌ Erreur réseau';
+    btn.style.background = '#c0392b';
+  }
+  setTimeout(() => {
+    btn.disabled = false;
+    btn.textContent = '🔍 Tester AlloCiné';
+    btn.style.background = '#555';
+  }, 8000);
+}
+
+// ─────────────────────────────────────────────────────────────
+//  Utilitaires
+// ─────────────────────────────────────────────────────────────
+function filmKey(film) {
+  return film.allocineId || `${film.titre}::${film.realisateur||''}`;
+}
+function getFilmUrl(film) {
+  return film.allocineId
+    ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`
+    : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(film.titre)}`;
+}
+function esc(str) {
+  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function show(id) { document.getElementById(id).style.display = 'flex'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function dl(blob, name) {
+  const a = document.createElement('a'); const url = URL.createObjectURL(blob);
+  a.href = url; a.download = name; document.body.appendChild(a); a.click();
+  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function showError(msg) { const b=document.getElementById('error-banner'); b.style.display='block'; b.textContent=msg; }
+
+// Chargement des données utilisateur au démarrage
+loadUserdata();
+</script>
+</body>
+</html>

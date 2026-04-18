@@ -116,6 +116,9 @@ body {
 .card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
 .card-orig  { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 1px; }
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card-crew strong { color: var(--text); font-weight: 600; }
+.card-actors { font-size: 10px; color: var(--muted); margin-top: 1px; font-style: italic; }
 .year-pill {
   display: inline-block; font-size: 9px; font-weight: 700;
   background: rgba(240,192,64,.12); color: var(--gold);
@@ -489,7 +492,9 @@ function renderCards(films) {
         ${annee ? `<span class="year-pill" id="card-year-${i}">${esc(annee)}</span>` : `<span class="year-pill" id="card-year-${i}" style="display:none"></span>`}
       </div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
-      <div class="card-meta">${esc(f.genre || '—')} · ${esc(f.realisateur || '—')}</div>
+      <div class="card-meta">${esc(f.genre || '—')}</div>
+      ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong></div>` : ''}
+      ${f.acteurs ? `<div class="card-actors">${esc(f.acteurs.split(',').slice(0,4).map(a=>a.trim()).join(', '))}</div>` : ''}
     </div>
     <div class="card-scores">
       <div class="score-block">

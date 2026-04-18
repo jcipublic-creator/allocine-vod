@@ -704,7 +704,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
@@ -1152,6 +1152,8 @@ async function onAddUserDesktop() {
   input.disabled = true;
   try {
     await createUser(name);
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+    savePrefs();
     _userdata = {};
     await loadUserdata();
     updateProfileBtn();

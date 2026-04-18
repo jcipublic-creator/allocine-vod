@@ -802,7 +802,6 @@ function renderProfiles(list, firstLaunch = false) {
 }
 async function selectProfile(userId) {
   switchUser(userId);
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
   loadPrefs();
   _userdata = {};
   await loadUserdata();
@@ -816,7 +815,7 @@ async function onAddUser() {
   input.disabled = true;
   try {
     await createUser(name);  // met à jour _currentUserId
-    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
     savePrefs();
     _userdata = {};
     await loadUserdata();
@@ -834,7 +833,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
   // 1. localStorage d'abord (instantané)
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   // 2. Serveur ensuite (source de vérité, asynchrone)

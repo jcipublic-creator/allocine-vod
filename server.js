@@ -593,11 +593,11 @@ app.get('/api/userdata', (req, res) => {
 });
 
 app.post('/api/userdata', async (req, res) => {
-  const { userId, id, vu, vouloir, nonInteresse } = req.body;
+  const { userId, id, vu, vouloir, nonInteresse, asuivre } = req.body;
   if (!userId || !id) return res.status(400).json({ error: 'userId et id requis' });
   if (!userdata[userId]) userdata[userId] = {};
-  const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse };
-  if (!entry.vu && !entry.vouloir && !entry.nonInteresse) {
+  const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse, asuivre: !!asuivre };
+  if (!entry.vu && !entry.vouloir && !entry.nonInteresse && !entry.asuivre) {
     delete userdata[userId][id];
   } else {
     userdata[userId][id] = entry;

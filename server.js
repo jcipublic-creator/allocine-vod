@@ -50,6 +50,12 @@ async function loadUserdata() {
         cachedFilms = typeof films === 'string' ? JSON.parse(films) : films;
         console.log(`🎬 Films Redis chargés (${cachedFilms.length} films)`);
       }
+      const details = await redis.get('details');
+      if (details) {
+        const obj = typeof details === 'string' ? JSON.parse(details) : details;
+        Object.entries(obj).forEach(([k, v]) => detailsCache.set(k, v));
+        console.log(`📋 détailsCache Redis chargé (${detailsCache.size} entrées)`);
+      }
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
   // 2. Fallback fichier local si Redis vide ou absent
@@ -193,6 +199,24 @@ function getCachedDetails(key) {
 
 function setCachedDetails(key, value) {
   detailsCache.set(key, { value, cachedAt: Date.now() });
+  scheduleDetailsBackup();
+}
+
+// Sauvegarde différée du cache détails dans Redis (debounce 8s)
+let _detailsBackupTimer = null;
+function scheduleDetailsBackup() {
+  clearTimeout(_detailsBackupTimer);
+  _detailsBackupTimer = setTimeout(saveDetailsCache, 8000);
+}
+
+async function saveDetailsCache() {
+  if (!redis) return;
+  try {
+    const obj = {};
+    detailsCache.forEach((v, k) => { obj[k] = v; });
+    await redis.set('details', JSON.stringify(obj));
+    console.log(`💾 détailsCache sauvegardé (${detailsCache.size} entrées)`);
+  } catch(e) { console.warn('Erreur sauvegarde détailsCache:', e.message); }
 }
 
 function htmlToLines(html) {

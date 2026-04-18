@@ -178,9 +178,10 @@ body {
   flex: 1; background: none; border: 1px solid var(--blue3); color: var(--muted);
   border-radius: 8px; padding: 5px 4px; font-size: 11px; cursor: pointer; text-align: center; transition: all .15s;
 }
-.ua-btn.active-vu   { border-color: #4caf7d; color: #4caf7d; background: rgba(76,175,125,.12); }
-.ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
-.ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
+.ua-btn.active-vu     { border-color: #4caf7d; color: #4caf7d; background: rgba(76,175,125,.12); }
+.ua-btn.active-voir   { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
+.ua-btn.active-suivre { border-color: #f0c040; color: #f0c040; background: rgba(240,192,64,.12); }
+.ua-btn.active-nope   { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
 
 /* Empty */
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
@@ -329,6 +330,7 @@ body {
     <option value="terminee">Terminée</option>
   </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applySeriesFilters()"><span>🔖 À voir</span></label>
+  <label class="filter-toggle"><input type="checkbox" id="fil-only-suivre" onchange="applySeriesFilters()"><span>⏳ À suivre</span></label>
   <select id="fil-sort" onchange="applySeriesSort(this.value)">
     <option value="presse">↓ Note presse</option>
     <option value="spectateurs">↓ Note spectateurs</option>
@@ -593,18 +595,19 @@ function renderSeriesUA(serie, idx) {
   el.outerHTML = `<div class="card-ua" id="ua-${idx}" onclick="event.stopPropagation()">
     <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleSeriesUA('${id}',${idx},'vu')">👁 Vu</button>
     <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleSeriesUA('${id}',${idx},'vouloir')">🔖 À voir</button>
+    <button class="ua-btn ${ud.asuivre ? 'active-suivre' : ''}" onclick="toggleSeriesUA('${id}',${idx},'asuivre')">⏳ À suivre</button>
     <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleSeriesUA('${id}',${idx},'nonInteresse')">✕ Non</button>
   </div>`;
 }
 
-// Appelle toggleUA de shared.js avec l'ID préfixé s:
-function toggleSeriesUA(seriesKey, idx, field) {
-  // seriesKey est déjà "s:XXXXX"
-  // On utilise la logique de shared.js via toggleUA en fabriquant un objet film compatible
+// Toggle indépendant (pas de dépendance sur _allFilms de shared.js)
+function toggleSeriesUA(id, idx, field) {
+  if (!_currentUserId) return;
+  if (!_userdata[id]) _userdata[id] = {};
+  _userdata[id][field] = !_userdata[id][field];
   const serie = _allSeries[idx];
-  if (!serie) return;
-  const fakeFilm = { ...serie, allocineId: seriesKey };
-  toggleUA(seriesKey, idx, field);
+  if (serie) renderSeriesUA(serie, idx);
+  saveUserdata(id);
 }
 
 // ─── Tri ──────────────────────────────────────────────────────────────────────
@@ -634,6 +637,7 @@ function applySeriesFilters() {
   const genreFilter  = document.getElementById('fil-genre').value;
   const statutFilter = document.getElementById('fil-statut').value;
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
+  const onlySuivre   = document.getElementById('fil-only-suivre')?.checked;
   let visible = 0;
   _allSeries.forEach((s, i) => {
     const card = document.getElementById(`card-${i}`);
@@ -647,7 +651,7 @@ function applySeriesFilters() {
       (statutFilter === 'encours'  && det.statut === 'En cours')  ||
       (statutFilter === 'terminee' && det.statut === 'Terminée');
     const matchListe  = (!_prefs.hideVus || !ud.vu) && (!_prefs.hideNonInteresse || !ud.nonInteresse) &&
-                        (!onlyVoir || !!ud.vouloir);
+                        (!onlyVoir || !!ud.vouloir) && (!onlySuivre || !!ud.asuivre);
     const ok = matchGenre && matchStatut && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;

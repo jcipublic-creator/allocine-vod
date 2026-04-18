@@ -502,9 +502,9 @@ function renderSeriesCards(series) {
       ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()">
            <span>${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSyn(${i})">… Lire la suite</span>` : ''}
          </div>` : '';
-        const posterSrc = det.poster || s.poster || '';
+    const posterSrc = det.poster || s.poster || '';
     const posterHtml = posterSrc
-      ? `<div class="card-poster"><img src="${esc(posterSrc)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\"card-poster-ph\\">📺</div>'"></div>`
+      ? `<div class="card-poster"><img src="${esc(posterSrc)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">📺</div></div>`;
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="window.open('${url}','_blank')">
@@ -674,6 +674,9 @@ function applySeriesFilters() {
 }
 
 function applyFilters() { applySeriesFilters(); } // pont pour shared.js
+
+// ─── Poster fallback ──────────────────────────────────────────────────────────
+function posterError(el) { el.parentNode.innerHTML = '<div class="card-poster-ph">📺</div>'; }
 
 // ─── Synopsis toggle ──────────────────────────────────────────────────────────
 function toggleSyn(i) {

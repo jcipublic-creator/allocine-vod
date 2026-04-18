@@ -581,7 +581,7 @@ function startScrape() {
       _allFilms = pendingFilms;
       _allPlats = new Set(); _platsDone = 0;
       _details  = {};
-      _scrapingDone = false; // platform loading va démarrer
+      _scrapingDone = true; // scraping terminé, le worker peut s'arrêter
       populateGenreFilter();
       populatePlatFilter();
       populatePaysFilter();
@@ -1246,6 +1246,8 @@ async function loadFilmsFromServer() {
     reapplyUserActions();
     if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
     console.log(`[server] ${d.films.length} films chargés depuis le serveur`);
+    _scrapingDone = true;
+    startPlatformLoading(); // charge les plateformes en arrière-plan
     return true;
   } catch(e) {
     console.warn('[server] Impossible de charger les films:', e.message);

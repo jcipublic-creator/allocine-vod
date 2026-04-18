@@ -293,7 +293,7 @@ body {
 </div>
 
 <div class="header">
-  <a class="header-back" href="/">← Films</a>
+  <a class="header-back" id="films-link" href="/">← Films</a>
   <div class="header-title">📺 Séries</div>
   <div class="header-status" id="server-status"></div>
   <div id="profile-header-badge" onclick="openProfiles()">
@@ -921,6 +921,9 @@ const UI = {
   hideAutoScrapeBar()    {},
   showUserPicker(users)  { renderProfiles(users, true); document.getElementById('profiles-modal').classList.add('open'); },
 };
+
+// ─── Lien retour Films (mobile → mobile.html, desktop → index.html) ──────────
+document.getElementById('films-link').href = window.innerWidth < 700 ? '/mobile.html' : '/index.html';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {

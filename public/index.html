@@ -976,7 +976,7 @@ function renderTable(films) {
       </td>
       <td class="td-genre">${esc(f.genre || '—')}</td>
       <td class="td-real"><strong>${esc(f.realisateur || '—')}</strong></td>
-      <td class="td-cast">${esc((f.acteurs||'').split(',').slice(0,4).map(a=>a.trim()).filter(Boolean).join(', ') || '—')}</td>
+      <td class="td-cast">${esc((f.acteurs||'').split(',').map(a=>a.trim()).filter(Boolean).slice(0,4).join(', ') || '—')}</td>
       <td class="center" id="annee-cell-${idx}" style="font-size:12px;color:var(--muted)">${f.anneeSortie || '—'}</td>
       <td class="td-note ${f.notePresse >= 4 ? 'note-green' : 'note-orange'}">${f.notePresse.toFixed(1)}</td>
       <td class="td-spect">${f.noteSpect != null ? f.noteSpect.toFixed(1) : '—'}</td>

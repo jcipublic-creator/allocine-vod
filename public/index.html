@@ -378,6 +378,48 @@ let _scrapingDone = true;     // false pendant un scraping actif
 
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+// ─── Cache localStorage ───────────────────────────────────────────
+const LS_FILMS   = 'vod_films';
+const LS_DETAILS = 'vod_details';
+const LS_DATE    = 'vod_updated';
+
+function saveFilmsCache() {
+  try {
+    localStorage.setItem(LS_FILMS,   JSON.stringify(_allFilms));
+    localStorage.setItem(LS_DETAILS, JSON.stringify(_details));
+    localStorage.setItem(LS_DATE,    new Date().toISOString());
+  } catch(e) { console.warn('[cache] Erreur sauvegarde :', e.message); }
+}
+
+function loadFilmsCache() {
+  try {
+    const films   = localStorage.getItem(LS_FILMS);
+    const details = localStorage.getItem(LS_DETAILS);
+    const date    = localStorage.getItem(LS_DATE);
+    if (!films) return false;
+
+    _allFilms = JSON.parse(films);
+    _details  = details ? JSON.parse(details) : {};
+    _allPlats = new Set();
+    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
+
+    const d = date ? new Date(date) : null;
+    const label = d ? `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}` : '—';
+    const lbl = document.getElementById('last-scrape-label');
+    if (lbl) { lbl.textContent = `Cache du ${label}`; lbl.style.color = 'var(--muted)'; }
+
+    populateGenreFilter();
+    populatePlatFilter();
+    populatePaysFilter();
+    applySort();
+    applyFilters();
+    show('filter-bar'); show('results-header'); show('table-wrap');
+    reapplyBadges();
+    reapplyUserActions();
+    return true;
+  } catch(e) { console.warn('[cache] Erreur chargement :', e.message); return false; }
+}
+
 // ─── Base de données utilisateur ─────────────────────────────────
 async function loadUserdata() {
   try {
@@ -617,6 +659,7 @@ async function startPlatformLoading() {
   document.getElementById('plat-fill').style.width = '100%';
   populatePlatFilter();
   populatePaysFilter();
+  saveFilmsCache();
 }
 
 function updatePlatProgress() {
@@ -1129,7 +1172,8 @@ function renderInfo() {
   `;
 }
 
-// Chargement des données utilisateur au démarrage
+// Chargement au démarrage
+loadFilmsCache();  // affiche le dernier scraping instantanément
 loadUserdata();
 loadLastScrape();
 </script>

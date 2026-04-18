@@ -750,6 +750,8 @@ function renderPlatBadges(providers) {
 // ─────────────────────────────────────────────────────────────
 //  Filtres
 // ─────────────────────────────────────────────────────────────
+let _genreDefaultApplied = false;
+
 function populateGenreFilter() {
   const genres = new Set();
   _allFilms.forEach(f => f.genre.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
@@ -761,12 +763,26 @@ function populateGenreFilter() {
     lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="applyFilters()"> ${esc(g)}`;
     dd.appendChild(lbl);
   });
-  // Boutons tout sélect / tout déselect
+  // Boutons actions
   const actions = document.createElement('div');
   actions.className = 'ms-actions';
-  actions.innerHTML = `<button onclick="selectAllGenres(true)">Tout</button><button onclick="selectAllGenres(false)">Aucun</button>`;
+  actions.innerHTML = `
+    <button onclick="selectAllGenres(false)">Tous</button>
+    <button onclick="selectExcludeAnimDoc()">Sauf Anim & Doc</button>
+  `;
   dd.appendChild(actions);
+  // Applique le filtre par défaut une seule fois
+  if (!_genreDefaultApplied) { _genreDefaultApplied = true; selectExcludeAnimDoc(); }
+  else updateGenreBtn();
+}
+
+function selectExcludeAnimDoc() {
+  const EXCLUDED = ['animation', 'documentaire'];
+  document.querySelectorAll('#genre-dropdown input[type=checkbox]').forEach(cb => {
+    cb.checked = !EXCLUDED.includes(cb.value.toLowerCase());
+  });
   updateGenreBtn();
+  applyFilters();
 }
 
 function populatePlatFilter() {

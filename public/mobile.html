@@ -277,6 +277,7 @@ let _platsDone    = 0;
 let _loadGen      = 0;
 let _sortBy       = 'presse';
 let _scrapingDone = true;
+let _genreDefaultApplied = false;
 
 const sleep  = ms => new Promise(r => setTimeout(r, ms));
 const filmKey = f  => `${(f.titre||'').toLowerCase()}|${f.notePresse}`;
@@ -576,9 +577,12 @@ function populateGenreFilter() {
   const genres = new Set();
   _allFilms.forEach(f => (f.genre||'').split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
   const sel = document.getElementById('fil-genre');
-  const cur = sel.value;
+  const cur = _genreDefaultApplied ? sel.value : '__excl__';
+  if (!_genreDefaultApplied) { _genreDefaultApplied = true; }
   sel.innerHTML = '<option value="">Tous genres</option>' +
+    '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Anim &amp; Doc</option>' +
     [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
+  applyFilters();
 }
 
 function populatePaysFilter() {
@@ -645,8 +649,11 @@ function applyFilters() {
     const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const ud       = _userdata[film.allocineId] || {};
 
+    const EXCL_GENRES = ['animation', 'documentaire'];
     const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
-    const matchGenre = !genreFilter || genres.some(g => g.includes(genreFilter));
+    const matchGenre = !genreFilter
+      || (genreFilter === '__excl__' && !genres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))
+      || (genreFilter !== '__excl__' && genres.some(g => g.includes(genreFilter)));
     const matchType  = !typeFilter
       || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
       || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));

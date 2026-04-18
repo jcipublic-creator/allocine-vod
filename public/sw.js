@@ -1,4 +1,5 @@
-const CACHE = 'vod-shell-v1';
+const CACHE = `vod-shell-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}`;
+
 const SHELL = [
   '/mobile.html',
   '/manifest.json',

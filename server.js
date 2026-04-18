@@ -32,6 +32,7 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
 // Cache mémoire local (évite trop d'appels Redis)
 let userdata = {};
 let lastScrape = null; // timestamp ISO du dernier scraping
+let cachedFilms = [];  // derniers films scrapés, persistés dans Redis
 
 async function loadUserdata() {
   // 1. Essayer Redis en priorité
@@ -44,6 +45,11 @@ async function loadUserdata() {
       }
       const ts = await redis.get('lastScrape');
       if (ts) lastScrape = ts;
+      const films = await redis.get('films');
+      if (films) {
+        cachedFilms = typeof films === 'string' ? JSON.parse(films) : films;
+        console.log(`🎬 Films Redis chargés (${cachedFilms.length} films)`);
+      }
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
   // 2. Fallback fichier local si Redis vide ou absent
@@ -424,6 +430,10 @@ function dedupeAndSortFilms(films, noteMin) {
     .sort((a, b) => b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr'));
 }
 
+app.get('/api/films', (_req, res) => {
+  res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length });
+});
+
 app.get('/api/userdata', (_req, res) => {
   res.json(userdata);
 });
@@ -508,6 +518,12 @@ app.get('/api/scrape', async (req, res) => {
   const result = dedupeAndSortFilms(allFilms, noteMin);
   const withId = result.filter(f => f.allocineId).length;
   await saveLastScrape();
+  // Persiste les films pour les nouveaux visiteurs
+  cachedFilms = result;
+  if (redis) {
+    try { await redis.set('films', JSON.stringify(result)); }
+    catch(e) { console.warn('Erreur sauvegarde films Redis:', e.message); }
+  }
   send({ type: 'done', totalFilms: result.length, lastScrape });
   res.end();
   console.log(`✅ ${result.length} films (${withId} avec ID, note >= ${noteMin}) — années: ${annees.join(', ')}`);

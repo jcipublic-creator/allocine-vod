@@ -869,11 +869,42 @@ function renderInfo() {
   `;
 }
 
+// ─── Chargement films depuis le serveur (pour nouveaux visiteurs) ─────────────
+async function loadFilmsFromServer() {
+  try {
+    const r = await fetch('/api/films', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (!d.films || d.films.length === 0) return false;
+    _allFilms = d.films;
+    populateGenreFilter();
+    populatePaysFilter();
+    applySort();
+    applyFilters();
+    document.getElementById('filter-bar').classList.add('show');
+    document.getElementById('stats').classList.add('show');
+    if (d.lastScrape) {
+      const dt = new Date(d.lastScrape);
+      const label = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      document.getElementById('server-status').textContent = `🟢 ${label}`;
+      setTimeout(() => { document.getElementById('server-status').textContent = '🟢'; }, 4000);
+    }
+    console.log(`[server] ${d.films.length} films chargés depuis le serveur`);
+    return true;
+  } catch(e) {
+    console.warn('[server] Impossible de charger les films:', e.message);
+    return false;
+  }
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
-  loadCache();        // affiche les données du cache immédiatement
-  await pingServer(); // vérifie si le serveur est dispo
-  await loadUserdata(); // charge les notes utilisateur depuis le serveur
+  const hadCache = loadCache(); // affiche les données du cache localStorage immédiatement
+  await pingServer();           // vérifie si le serveur est dispo
+  if (!hadCache) {
+    await loadFilmsFromServer(); // nouveau visiteur → charge depuis le serveur
+  }
+  await loadUserdata();          // charge les notes utilisateur
 })();
 </script>
 </body>

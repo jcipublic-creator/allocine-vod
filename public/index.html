@@ -511,24 +511,19 @@ function startScrape() {
   const noteMin = parseFloat(document.getElementById('inp-note').value || '3.5');
   const btn     = document.getElementById('btn-run');
 
-  // On garde _details pour réutiliser les plateformes déjà chargées
-  _allFilms = []; _allPlats = new Set(); _platsDone = 0;
   _scrapingDone = false;
   _loadGen++;  // invalide tous les workers de plateformes en cours
 
   btn.disabled = true;
   btn.textContent = '⏳ Scraping…';
   show('progress-zone');
-  hide('results-header'); hide('table-wrap'); hide('empty'); hide('filter-bar');
-  hide('plat-zone');
   document.getElementById('error-banner').style.display = 'none';
   document.getElementById('prog-fill').style.width = '0%';
-  document.getElementById('prog-label').textContent = 'Connexion à AlloCiné…';
+  document.getElementById('prog-label').textContent = 'Scraping en arrière-plan…';
   document.getElementById('prog-sub').textContent = '';
-  document.getElementById('tbody').innerHTML = '';
 
-  const seen = new Set(); // dédup client-side cross-pages
-  let platformStarted = false;
+  const seen = new Set();
+  const pendingFilms = []; // accumule sans toucher à l'écran
 
   const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023&noteMin=${noteMin}`);
 
@@ -536,50 +531,42 @@ function startScrape() {
     const d = JSON.parse(e.data);
 
     if (d.type === 'films') {
-      // Mise à jour de la barre de progression
       const pct = Math.round(d.page / d.total * 100);
       document.getElementById('prog-fill').style.width = pct + '%';
       const anneeLabel = d.annee ? ` — ${d.annee}` : '';
       document.getElementById('prog-label').textContent =
-        `Page ${d.page} / ${d.total}${anneeLabel} — ${_allFilms.length} films…`;
+        `⏳ ${pct}%${anneeLabel} — ${pendingFilms.length} films`;
 
-      // Ajout des nouveaux films (dédup)
-      const newFilms = d.films.filter(f => {
+      d.films.forEach(f => {
         const key = `${f.titre.toLowerCase()}|${f.notePresse}`;
-        if (seen.has(key)) return false;
-        seen.add(key); return true;
+        if (!seen.has(key)) { seen.add(key); pendingFilms.push(f); }
       });
-
-      if (newFilms.length > 0) {
-        _allFilms.push(...newFilms);
-        // Pas de tri pendant le scraping — les indices doivent rester stables
-        // pour que le worker de plateformes écrive au bon endroit
-        populateGenreFilter();
-        renderTable(_allFilms);
-        reapplyBadges();
-        applyFilters();
-        show('filter-bar'); show('results-header'); show('table-wrap');
-
-        // Démarre le chargement des plateformes dès les premiers films
-        if (!platformStarted) {
-          platformStarted = true;
-          startPlatformLoading();
-        }
-      }
     }
 
     if (d.type === 'error') showError(`⚠ Erreur page ${d.page} : ${d.message}`);
 
     if (d.type === 'done') {
       es.close();
-      _scrapingDone = true;
+      // Mise à jour de l'écran seulement maintenant
+      _allFilms = pendingFilms;
+      _allPlats = new Set(); _platsDone = 0;
+      _details  = {};
+      _scrapingDone = false; // platform loading va démarrer
+      populateGenreFilter();
+      populatePlatFilter();
+      populatePaysFilter();
+      renderTable(_allFilms);
+      applySort();
+      applyFilters();
+      show('filter-bar'); show('results-header'); show('table-wrap');
       document.getElementById('prog-fill').style.width = '100%';
-      document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films trouvés`;
+      document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films récupérés`;
       document.getElementById('prog-sub').textContent = '';
       btn.disabled = false;
       btn.textContent = '▶ Lancer le scraping';
       if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
       if (!_allFilms.length) show('empty');
+      startPlatformLoading();
     }
   };
 
@@ -588,6 +575,7 @@ function startScrape() {
     _scrapingDone = true;
     btn.disabled = false;
     btn.textContent = '▶ Lancer le scraping';
+    document.getElementById('prog-label').textContent = '❌ Connexion perdue';
     showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
   };
 }

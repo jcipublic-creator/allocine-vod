@@ -8,7 +8,9 @@ const { Redis } = require('@upstash/redis');
 const app = express();
 const PORT = Number(process.env.PORT || 3009);
 const TOTAL_PAGES = Number(process.env.TOTAL_PAGES || 25);
-const DETAILS_TTL_MS = 1000 * 60 * 60 * 24; // 24h
+const DETAILS_TTL_MS    = 1000 * 60 * 60 * 24; // 24h
+const AUTO_SCRAPE_DAYS  = 3;                   // re-scraper si cache > 3 jours
+let   isScraping        = false;
 const BUILD = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();
@@ -94,8 +96,6 @@ async function saveUserdataFile() {
     catch(e) { console.warn('Erreur sauvegarde Redis:', e.message); }
   }
 }
-
-loadUserdata();
 
 const detailsCache = new Map();
 
@@ -491,6 +491,8 @@ app.get('/api/health', (_req, res) => {
 });
 
 app.get('/api/scrape', async (req, res) => {
+  if (isScraping) return res.status(429).json({ error: 'Scraping déjà en cours' });
+  isScraping = true;
   // Accepte annees=2023,2024,2025 ou l'ancien param annee=2025 (rétrocompat)
   const anneesParam = String(req.query.annees || req.query.annee || '2025').trim();
   const annees = anneesParam.split(',').map(s => s.trim()).filter(s => /^\d{4}$/.test(s));
@@ -556,6 +558,7 @@ app.get('/api/scrape', async (req, res) => {
   }
   send({ type: 'done', totalFilms: result.length, lastScrape });
   res.end();
+  isScraping = false;
   console.log(`✅ ${result.length} films (${withId} avec ID, note >= ${noteMin}) — années: ${annees.join(', ')}`);
 });
 
@@ -663,8 +666,68 @@ app.post('/api/clear-details-cache', (_req, res) => {
   res.json({ ok: true, cleared: count });
 });
 
+// ─── Auto-scrape si le cache a plus de AUTO_SCRAPE_DAYS jours ────────────────
+async function autoScrapeIfStale() {
+  if (isScraping) return;
+  const ageMs  = lastScrape ? Date.now() - new Date(lastScrape).getTime() : Infinity;
+  const ageDays = ageMs / 86400000;
+
+  if (ageDays < AUTO_SCRAPE_DAYS) {
+    console.log(`⏭️  Auto-scrape ignoré — dernier scraping il y a ${ageDays.toFixed(1)}j`);
+    return;
+  }
+
+  const label = lastScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
+  console.log(`\n🔄 Auto-scrape déclenché — dernier scraping il y a ${label}`);
+  isScraping = true;
+
+  const annees  = ['2026', '2025', '2024', '2023'];
+  const noteMin = 3.5;
+  const allFilms = [];
+  lastScrapeErrors = [];
+
+  try {
+    for (const annee of annees) {
+      const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
+      for (let page = 1; page <= TOTAL_PAGES; page++) {
+        const url = base + page;
+        try {
+          let html = getCachedPage(url);
+          if (!html) {
+            const r = await fetchWithRetry(url);
+            html = r.data;
+            setCachedPage(url, html);
+          }
+          const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
+          allFilms.push(...raw);
+          console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
+        } catch(e) {
+          console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
+          lastScrapeErrors.push({ page, annee, message: e.message });
+        }
+        await sleep(1500 + Math.random() * 500);
+      }
+    }
+
+    const result = dedupeAndSortFilms(allFilms, noteMin);
+    cachedFilms = result;
+    await saveLastScrape();
+    if (redis) {
+      try { await redis.set('films', JSON.stringify(result)); }
+      catch(e) { console.warn('Erreur sauvegarde films Redis (auto-scrape):', e.message); }
+    }
+    console.log(`✅ Auto-scrape terminé — ${result.length} films\n`);
+  } finally {
+    isScraping = false;
+  }
+}
+
 app.listen(PORT, () => {
   console.log('\n🎬 AlloCiné VOD Scraper v9 démarré !');
   console.log(`   ➜ Ouvrez : http://localhost:${PORT}`);
   console.log(`   ➜ Santé  : http://localhost:${PORT}/api/health\n`);
+
+  // Auto-scrape au démarrage (après chargement Redis) + vérification quotidienne
+  loadUserdata().then(() => autoScrapeIfStale());
+  setInterval(() => autoScrapeIfStale(), 24 * 60 * 60 * 1000);
 });

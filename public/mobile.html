@@ -411,7 +411,7 @@ const UI = {
     const cur = _genreDefaultApplied ? sel.value : '__excl__';
     if (!_genreDefaultApplied) { _genreDefaultApplied = true; }
     sel.innerHTML = '<option value="">Tous genres</option>' +
-      '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Animation et Documentaire</option>' +
+      '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Anim et Docu</option>' +
       [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
     this.applyFilters();
   },

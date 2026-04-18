@@ -1,9 +1,12 @@
-const CACHE = `vod-shell-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}`;
+const CACHE = `vod-shell-v31`;
 
 const SHELL = [
   '/manifest.json',
   '/icon-192.svg',
 ];
+
+// Fichiers JS toujours rechargés depuis le réseau (comme les HTML)
+const NETWORK_FIRST = ['/shared.js'];
 
 // Installation : mise en cache des assets statiques (pas mobile.html)
 self.addEventListener('install', e => {
@@ -30,8 +33,8 @@ self.addEventListener('fetch', e => {
   // Les appels API passent toujours par le réseau
   if (url.pathname.startsWith('/api/')) return;
 
-  // Les fichiers HTML : réseau en priorité, cache en fallback (offline)
-  if (url.pathname.endsWith('.html') || url.pathname === '/') {
+  // Les fichiers HTML et JS partagés : réseau en priorité, cache en fallback (offline)
+  if (url.pathname.endsWith('.html') || url.pathname === '/' || NETWORK_FIRST.includes(url.pathname)) {
     e.respondWith(
       fetch(e.request)
         .then(resp => {

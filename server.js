@@ -454,7 +454,7 @@ app.post('/api/userdata', async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true, port: PORT, totalPages: TOTAL_PAGES,
-    cachedDetails: detailsCache.size, lastScrape,
+    cachedDetails: detailsCache.size, cachedFilms: cachedFilms.length, lastScrape,
     version: VERSION, serverStart: SERVER_START,
     lastScrapeErrors,
   });

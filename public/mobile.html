@@ -561,7 +561,6 @@ function updateCardMeta(i, data) {
   const el = document.getElementById(`card-meta-${i}`);
   if (!el) return;
   const parts = [];
-  if (data.annee) parts.push(`📅 ${data.annee}`);
   if (parts.length) el.innerHTML = parts.map(p => `<span>${esc(p)}</span>`).join('');
 
   // Pays affiché à côté du réalisateur

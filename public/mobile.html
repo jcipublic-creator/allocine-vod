@@ -28,7 +28,7 @@ body {
   color: var(--text);
   font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
   padding-top: calc(56px + var(--st));
-  padding-bottom: calc(8px + var(--sb));
+  padding-bottom: calc(62px + var(--sb));
   min-height: 100dvh;
 }
 
@@ -223,6 +223,47 @@ body {
 #error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
   border: 1px solid rgba(200,80,80,.4); border-radius: 10px; font-size: 13px;
   color: #f08080; display: none; }
+
+/* ── Bottom Nav ── */
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 200;
+  height: calc(54px + var(--sb));
+  padding-bottom: var(--sb);
+  background: rgba(13,33,55,.97);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-top: 1px solid var(--blue3);
+  display: flex;
+}
+.nav-item {
+  flex: 1; display: flex; flex-direction: column; align-items: center;
+  justify-content: center; gap: 3px; cursor: pointer;
+  color: var(--muted); font-size: 10px; border: none; background: none;
+  padding: 0; transition: color .15s;
+}
+.nav-item:active { color: var(--gold); }
+.nav-item:disabled { opacity: .4; }
+.nav-icon { font-size: 20px; line-height: 1; }
+
+/* ── Prefs modal ── */
+#prefs-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
+}
+#prefs-modal.open { display: flex; }
+.prefs-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--sb)); width: 100%;
+  max-height: 75vh; overflow-y: auto;
+}
+.prefs-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
+.prefs-section { margin-bottom: 16px; }
+.prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 8px; }
+.pref-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(42,79,112,.3); font-size: 13px; }
+.pref-item:last-child { border-bottom: none; }
+.pref-title { color: var(--text); flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pref-year { font-size: 11px; color: var(--muted); margin-left: 8px; flex-shrink: 0; }
+.prefs-empty { color: var(--muted); font-size: 13px; font-style: italic; }
 </style>
 </head>
 <body>
@@ -249,13 +290,11 @@ body {
 
 <div class="header">
   <div class="header-title">🎬 Films VOD</div>
-  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap"></div>
-  <button onclick="openInfo()" style="background:none;border:1px solid #2a4f70;color:#7090a0;border-radius:50%;width:26px;height:26px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">ℹ</button>
+  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap;flex:1"></div>
   <div style="display:flex;align-items:center;gap:4px" id="note-wrap">
     <span class="note-label">≥</span>
     <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
   </div>
-  <button class="btn-scrape" id="btn-run" onclick="openConfirm()" disabled>▶ Scraper</button>
 </div>
 
 <div class="prog-zone" id="prog-zone">
@@ -301,6 +340,29 @@ body {
 <div class="stats" id="stats"></div>
 <div class="cards" id="cards"></div>
 <div class="empty"  id="empty">Aucun film trouvé avec ces critères.</div>
+
+<nav class="bottom-nav">
+  <button class="nav-item" id="btn-run" onclick="openConfirm()" disabled>
+    <span class="nav-icon">▶</span>
+    <span>Scraper</span>
+  </button>
+  <button class="nav-item" onclick="openPrefs()">
+    <span class="nav-icon">🔖</span>
+    <span>Préférences</span>
+  </button>
+  <button class="nav-item" onclick="openInfo()">
+    <span class="nav-icon">ℹ</span>
+    <span>Info</span>
+  </button>
+</nav>
+
+<div id="prefs-modal" onclick="if(event.target===this)closePrefs()">
+  <div class="prefs-sheet">
+    <h3>🔖 Mes préférences</h3>
+    <div id="prefs-content"></div>
+    <button class="info-close-btn" onclick="closePrefs()">Fermer</button>
+  </div>
+</div>
 
 <script src="/shared.js"></script>
 <script>
@@ -359,7 +421,8 @@ const UI = {
   },
   onScrapeStart(btn) {
     btn.disabled = true;
-    btn.textContent = '⏳';
+    btn.querySelector('.nav-icon').textContent = '⏳';
+    btn.querySelector('span:last-child').textContent = 'En cours…';
     document.getElementById('prog-zone').classList.add('show');
     document.getElementById('plat-zone').classList.remove('show');
     document.getElementById('error-banner').style.display = 'none';
@@ -375,14 +438,16 @@ const UI = {
     document.getElementById('prog-lbl').textContent = `✅ ${_allFilms.length} films récupérés`;
     document.getElementById('server-status').textContent = '🟢';
     btn.disabled = false;
-    btn.textContent = '▶ Scraper';
+    btn.querySelector('.nav-icon').textContent = '▶';
+    btn.querySelector('span:last-child').textContent = 'Scraper';
     document.getElementById('filter-bar').classList.add('show');
     document.getElementById('stats').classList.add('show');
     document.getElementById('empty').classList.toggle('show', _allFilms.length === 0);
   },
   onScrapeError(btn) {
     btn.disabled = false;
-    btn.textContent = '▶ Scraper';
+    btn.querySelector('.nav-icon').textContent = '▶';
+    btn.querySelector('span:last-child').textContent = 'Scraper';
     document.getElementById('prog-lbl').textContent = '❌ Connexion perdue';
     this.showError('❌ Connexion perdue. Le serveur tourne sur le Mac ?');
   },
@@ -599,6 +664,40 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Erreurs scraping</span><span class="val">${errors.length === 0 ? '✅ Aucune' : `⚠️ ${errors.length}`}</span></div>
     ${errors.length > 0 ? `<div class="info-errors">${errors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
   `;
+}
+
+// ─── Préférences ──────────────────────────────────────────────────────────────
+function openPrefs() {
+  renderPrefs();
+  document.getElementById('prefs-modal').classList.add('open');
+}
+
+function closePrefs() {
+  document.getElementById('prefs-modal').classList.remove('open');
+}
+
+function renderPrefs() {
+  const vu   = _allFilms.filter(f => (_userdata[f.allocineId] || {}).vu);
+  const voir = _allFilms.filter(f => (_userdata[f.allocineId] || {}).vouloir);
+  const nope = _allFilms.filter(f => (_userdata[f.allocineId] || {}).nonInteresse);
+
+  const section = (title, films) => {
+    const items = films.length
+      ? films.map(f => `<div class="pref-item">
+          <span class="pref-title">${esc(f.titre)}</span>
+          <span class="pref-year">${f.anneeReelle || f.anneeSortie || ''}</span>
+        </div>`).join('')
+      : `<div class="prefs-empty">Aucun film</div>`;
+    return `<div class="prefs-section">
+      <div class="prefs-section-title">${title}${films.length ? ` · ${films.length}` : ''}</div>
+      ${items}
+    </div>`;
+  };
+
+  document.getElementById('prefs-content').innerHTML =
+    section('👁 Vus', vu) +
+    section('🔖 À voir', voir) +
+    section('✕ Non intéressé', nope);
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

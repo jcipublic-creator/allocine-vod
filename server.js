@@ -1039,6 +1039,18 @@ app.get('/api/series/health', (_req, res) => {
   });
 });
 
+app.get('/api/series/providers', (_req, res) => {
+  const counts = {};
+  for (const [, det] of seriesDetailsCache) {
+    (det.providers || []).forEach(p => {
+      if (!counts[p.name]) counts[p.name] = { name: p.name, type: p.type, count: 0 };
+      counts[p.name].count++;
+    });
+  }
+  const list = Object.values(counts).sort((a, b) => b.count - a.count);
+  res.json({ providers: list, totalDetails: seriesDetailsCache.size });
+});
+
 app.get('/api/series/scrape-status', (_req, res) => {
   const pct = seriesProgress.total
     ? Math.round(seriesProgress.current / seriesProgress.total * 100) : 0;

@@ -343,11 +343,7 @@ function startScrape() {
       document.getElementById('prog-fill').style.width = '100%';
       document.getElementById('prog-lbl').textContent = `✅ ${_allFilms.length} films`;
       btn.disabled = false; btn.textContent = '▶ Scraper';
-      if (d.lastScrape) {
-        const dt = new Date(d.lastScrape);
-        const label = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-        document.getElementById('server-status').textContent = `🟢 Scraped le ${label}`;
-      }
+      document.getElementById('server-status').textContent = '🟢';
       if (!_allFilms.length) document.getElementById('empty').classList.add('show');
     }
   };
@@ -403,7 +399,7 @@ async function startPlatformLoading() {
   document.getElementById('plat-lbl').innerHTML =
     `📺 Plateformes chargées <span id="plat-count" style="color:var(--gold)">${_allFilms.length}</span>`;
   document.getElementById('plat-fill').style.width = '100%';
-  document.getElementById('server-status').textContent = `🟢 Mis à jour`;
+  document.getElementById('server-status').textContent = '🟢';
   populateGenreFilter();
   populatePaysFilter();
 }
@@ -755,7 +751,7 @@ function loadCache() {
       ? `${d.toLocaleDateString('fr-FR')} ${d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}`
       : '—';
 
-    document.getElementById('server-status').textContent = `📦 ${label}`;
+    document.getElementById('server-status').textContent = '📦';
 
     populateGenreFilter();
     populatePaysFilter();
@@ -779,13 +775,7 @@ async function pingServer() {
     if (r.ok) {
       const d = await r.json();
       statusEl.style.color = 'var(--green)';
-      if (d.lastScrape) {
-        const dt = new Date(d.lastScrape);
-        const label = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-        statusEl.textContent = `🟢 Scraped le ${label}`;
-      } else {
-        statusEl.textContent = '🟢 En ligne';
-      }
+      statusEl.textContent = '🟢';
       btnEl.disabled = false;
     } else { throw new Error('non-ok'); }
   } catch {

@@ -284,6 +284,42 @@ let _scrapingDone = true;
 let _genreDefaultApplied = false;
 
 const sleep  = ms => new Promise(r => setTimeout(r, ms));
+
+// ─── Drapeaux pays ────────────────────────────────────────────────────────────
+const FLAGS = {
+  'afghanistan':'🇦🇫','afrique du sud':'🇿🇦','albanie':'🇦🇱','algérie':'🇩🇿',
+  'allemagne':'🇩🇪','angola':'🇦🇴','arabie saoudite':'🇸🇦','argentine':'🇦🇷',
+  'arménie':'🇦🇲','australie':'🇦🇺','autriche':'🇦🇹','azerbaïdjan':'🇦🇿',
+  'belgique':'🇧🇪','bolivie':'🇧🇴','bosnie-herzégovine':'🇧🇦','brésil':'🇧🇷',
+  'bulgarie':'🇧🇬','cambodge':'🇰🇭','cameroun':'🇨🇲','canada':'🇨🇦',
+  'chili':'🇨🇱','chine':'🇨🇳','chypre':'🇨🇾','colombie':'🇨🇴',
+  'corée du nord':'🇰🇵','corée du sud':'🇰🇷','côte d\'ivoire':'🇨🇮','croatie':'🇭🇷',
+  'cuba':'🇨🇺','danemark':'🇩🇰','égypte':'🇪🇬','émirats arabes unis':'🇦🇪',
+  'équateur':'🇪🇨','espagne':'🇪🇸','estonie':'🇪🇪','états-unis':'🇺🇸',
+  'éthiopie':'🇪🇹','finlande':'🇫🇮','france':'🇫🇷','géorgie':'🇬🇪',
+  'ghana':'🇬🇭','grèce':'🇬🇷','guatemala':'🇬🇹','hongrie':'🇭🇺',
+  'hong kong':'🇭🇰','inde':'🇮🇳','indonésie':'🇮🇩','irak':'🇮🇶',
+  'iran':'🇮🇷','irlande':'🇮🇪','islande':'🇮🇸','israël':'🇮🇱',
+  'italie':'🇮🇹','jamaïque':'🇯🇲','japon':'🇯🇵','jordanie':'🇯🇴',
+  'kazakhstan':'🇰🇿','kenya':'🇰🇪','kosovo':'🇽🇰','lettonie':'🇱🇻',
+  'liban':'🇱🇧','lituanie':'🇱🇹','luxembourg':'🇱🇺','macédoine':'🇲🇰',
+  'malaisie':'🇲🇾','mali':'🇲🇱','maroc':'🇲🇦','mexique':'🇲🇽',
+  'moldavie':'🇲🇩','mongolie':'🇲🇳','monténégro':'🇲🇪','mozambique':'🇲🇿',
+  'nigeria':'🇳🇬','norvège':'🇳🇴','nouvelle-zélande':'🇳🇿','pakistan':'🇵🇰',
+  'palestine':'🇵🇸','pays-bas':'🇳🇱','pérou':'🇵🇪','philippines':'🇵🇭',
+  'pologne':'🇵🇱','portugal':'🇵🇹','roumanie':'🇷🇴','royaume-uni':'🇬🇧',
+  'russie':'🇷🇺','sénégal':'🇸🇳','serbie':'🇷🇸','singapour':'🇸🇬',
+  'slovaquie':'🇸🇰','slovénie':'🇸🇮','somalie':'🇸🇴','soudan':'🇸🇩',
+  'suède':'🇸🇪','suisse':'🇨🇭','taiwan':'🇹🇼','thaïlande':'🇹🇭',
+  'tunisie':'🇹🇳','turquie':'🇹🇷','ukraine':'🇺🇦','uruguay':'🇺🇾',
+  'venezuela':'🇻🇪','vietnam':'🇻🇳',
+};
+function flagFor(pays) {
+  if (!pays) return '';
+  // Prend le premier pays si plusieurs (ex: "France, Belgique")
+  const first = pays.split(',')[0].trim().toLowerCase();
+  return FLAGS[first] ? FLAGS[first] + ' ' : '';
+}
 const filmKey = f  => `${(f.titre||'').toLowerCase()}|${f.notePresse}`;
 const esc    = s   => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -566,7 +602,7 @@ function updateCardMeta(i, data) {
   // Pays affiché à côté du réalisateur
   if (data.pays) {
     const paysEl = document.getElementById(`card-pays-${i}`);
-    if (paysEl) paysEl.textContent = ` · ${data.pays}`;
+    if (paysEl) paysEl.textContent = ` · ${flagFor(data.pays)}${data.pays}`;
   }
 
   // Met à jour le badge année dans le titre

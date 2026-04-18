@@ -1114,6 +1114,22 @@ app.get('/api/series/scrape', async (req, res) => {
   console.log(`✅ ${result.length} séries scrapées`);
 });
 
+// Debug : montre les lignes brutes extraites d'une fiche série
+app.get('/api/series/debug-lines', async (req, res) => {
+  const seriesId = String(req.query.seriesId || '').trim();
+  if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
+  try {
+    const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
+    const resp = await rateLimitedFetch(url);
+    const lines = htmlToLines(resp.data);
+    // Filtre les 200 premières lignes non vides qui pourraient contenir des métadonnées
+    const relevant = lines.slice(0, 300).filter(l =>
+      /\d{4}|saison|statut|nationalit|créa|avec|depuis|en cours/i.test(l) || l.length < 60
+    );
+    res.json({ seriesId, url, relevant, total: lines.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 app.get('/api/series/details', async (req, res) => {
   const seriesId = String(req.query.seriesId || '').trim();
   if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });

@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v49'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v50'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -156,6 +156,26 @@ async function createUser(name) {
 function switchUser(userId) {
   _currentUserId = userId;
   localStorage.setItem(LS_USER_ID, userId);
+}
+
+async function loadServerPrefs() {
+  if (!_currentUserId) return null;
+  try {
+    const r = await fetch(`/api/prefs?userId=${encodeURIComponent(_currentUserId)}`);
+    if (!r.ok) return null;
+    return await r.json();
+  } catch(e) { return null; }
+}
+
+async function saveServerPrefs(prefsData) {
+  if (!_currentUserId) return;
+  try {
+    await fetch('/api/prefs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ userId: _currentUserId, ...prefsData })
+    });
+  } catch(e) { console.warn('Erreur sauvegarde prefs serveur:', e.message); }
 }
 
 // ─── Base de données utilisateur ──────────────────────────────────────────────

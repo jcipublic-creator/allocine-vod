@@ -811,12 +811,23 @@ async function onAddUser() {
 let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
+
 function loadPrefs() {
   _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  // 1. localStorage d'abord (instantané)
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
+  // 2. Serveur ensuite (source de vérité, asynchrone)
+  loadServerPrefs().then(serverPrefs => {
+    if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
+    Object.assign(_prefs, serverPrefs);
+    localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+    applyFilters();
+  });
 }
+
 function savePrefs() {
   localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+  saveServerPrefs(_prefs); // fire and forget
 }
 function setPref(key, val) {
   _prefs[key] = val;

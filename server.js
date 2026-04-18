@@ -35,6 +35,7 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
 // Cache mémoire local (évite trop d'appels Redis)
 let users    = {};  // { userId: { id, name, createdAt } }
 let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse } } }
+let prefsDB  = {};  // { userId: { showDocumentaires, showAnimations, hideVus, hideNonInteresse } }
 let lastScrape = null; // timestamp ISO du dernier scraping
 let cachedFilms = [];  // derniers films scrapés, persistés dans Redis
 
@@ -75,6 +76,11 @@ async function loadUserdata() {
           userdata = parsed;
           console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} profils)`);
         }
+      }
+      const prefsRaw = await redis.get('prefs');
+      if (prefsRaw) {
+        prefsDB = typeof prefsRaw === 'string' ? JSON.parse(prefsRaw) : prefsRaw;
+        console.log(`🔖 Prefs Redis chargées (${Object.keys(prefsDB).length} profils)`);
       }
       const ts = await redis.get('lastScrape');
       if (ts) lastScrape = ts;
@@ -126,6 +132,13 @@ async function saveUsers() {
   if (redis) {
     try { await redis.set('users', JSON.stringify(users)); }
     catch(e) { console.warn('Erreur sauvegarde users Redis:', e.message); }
+  }
+}
+
+async function savePrefsData() {
+  if (redis) {
+    try { await redis.set('prefs', JSON.stringify(prefsDB)); }
+    catch(e) { console.warn('Erreur sauvegarde prefs Redis:', e.message); }
   }
 }
 
@@ -525,6 +538,21 @@ app.post('/api/users', async (req, res) => {
   await saveUserdataFile();
   console.log(`👤 Nouveau profil : "${user.name}" (${id})`);
   res.json(user);
+});
+
+// ─── Préférences d'affichage (par profil, serveur comme source de vérité) ────
+app.get('/api/prefs', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId requis' });
+  res.json(prefsDB[userId] || {});
+});
+
+app.post('/api/prefs', async (req, res) => {
+  const { userId, ...userPrefs } = req.body;
+  if (!userId) return res.status(400).json({ error: 'userId requis' });
+  prefsDB[userId] = userPrefs;
+  await savePrefsData();
+  res.json({ ok: true });
 });
 
 // ─── Données utilisateur (Vu / À voir / Non) ─────────────────────────────────

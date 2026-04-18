@@ -515,8 +515,6 @@ function renderCards(films) {
     <span class="pb-loading">…</span>
   </div>
 
-  ${renderUserActions(f, i)}
-
   ${f.synopsis ? (() => {
     const LIMIT = 120;
     const full  = f.synopsis;
@@ -534,6 +532,8 @@ function renderCards(films) {
   })() : `
   <div class="card-synopsis-meta" id="card-meta-${i}" style="margin-top:8px;font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap"></div>
   `}
+
+  ${renderUserActions(f, i)}
 </div>`;
   }).join('');
 }

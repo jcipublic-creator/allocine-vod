@@ -118,6 +118,7 @@ body {
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew strong { color: var(--text); font-weight: 600; }
+.card-pays  { color: var(--muted); font-weight: 400; }
 .card-actors { font-size: 10px; color: var(--muted); margin-top: 1px; font-style: italic; }
 .year-pill {
   display: inline-block; font-size: 9px; font-weight: 700;
@@ -493,7 +494,7 @@ function renderCards(films) {
       </div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
       <div class="card-meta">${esc(f.genre || '—')}</div>
-      ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong></div>` : ''}
+      ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
       ${f.acteurs ? `<div class="card-actors">${esc(f.acteurs.split(',').slice(0,4).map(a=>a.trim()).join(', '))}</div>` : ''}
     </div>
     <div class="card-scores">
@@ -560,9 +561,14 @@ function updateCardMeta(i, data) {
   const el = document.getElementById(`card-meta-${i}`);
   if (!el) return;
   const parts = [];
-  if (data.pays)  parts.push(`🌍 ${data.pays}`);
   if (data.annee) parts.push(`📅 ${data.annee}`);
   if (parts.length) el.innerHTML = parts.map(p => `<span>${esc(p)}</span>`).join('');
+
+  // Pays affiché à côté du réalisateur
+  if (data.pays) {
+    const paysEl = document.getElementById(`card-pays-${i}`);
+    if (paysEl) paysEl.textContent = ` · ${data.pays}`;
+  }
 
   // Met à jour le badge année dans le titre
   if (data.annee) {

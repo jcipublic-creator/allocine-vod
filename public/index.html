@@ -191,6 +191,35 @@
   .ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
   .ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
 
+  /* ── Panneau info ── */
+  .info-btn {
+    background: none; border: 1px solid var(--blue2); color: var(--muted);
+    border-radius: 50%; width: 26px; height: 26px; font-size: 13px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: all .15s;
+  }
+  .info-btn:hover { border-color: var(--gold); color: var(--gold); }
+  #info-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
+  }
+  #info-modal.open { display: flex; }
+  .info-panel {
+    background: var(--blue); border: 1px solid var(--blue2); border-radius: 14px;
+    padding: 28px 32px; min-width: 340px; max-width: 480px; width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
+  }
+  .info-panel h3 { color: var(--gold); font-size: 15px; margin-bottom: 20px; }
+  .info-row { display: flex; justify-content: space-between; align-items: baseline;
+    padding: 8px 0; border-bottom: 1px solid rgba(42,79,112,.4); gap: 16px; }
+  .info-row:last-child { border-bottom: none; }
+  .info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
+  .info-row .val { font-size: 13px; color: var(--text); text-align: right; }
+  .info-errors { margin-top: 12px; font-size: 11px; color: #e74c3c; max-height: 80px; overflow-y: auto; }
+  .info-close { position: absolute; top: 14px; right: 16px; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer; }
+  .info-close:hover { color: var(--gold); }
+
   #empty { margin: 60px 32px; text-align: center; display: none; }
   #empty h2 { color: var(--muted); font-size: 18px; margin-bottom: 8px; }
 
@@ -205,8 +234,19 @@
 
 <header>
   <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
-  <div style="font-size:12px;color:var(--muted)">Cliquez sur un film pour le résumé · <span id="last-scrape-label" style="color:var(--muted)"></span></div>
+  <div style="display:flex;align-items:center;gap:10px">
+  <span id="last-scrape-label" style="font-size:12px;color:var(--muted)"></span>
+  <button class="info-btn" onclick="openInfo()" title="Informations">ℹ</button>
+</div>
 </header>
+
+<div id="info-modal" onclick="if(event.target===this)closeInfo()">
+  <div class="info-panel">
+    <button class="info-close" onclick="closeInfo()">✕</button>
+    <h3>ℹ Informations</h3>
+    <div id="info-content">Chargement…</div>
+  </div>
+</div>
 
 <div class="controls">
   <div class="field">
@@ -1057,6 +1097,37 @@ function dl(blob, name) {
   a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 function showError(msg) { const b=document.getElementById('error-banner'); b.style.display='block'; b.textContent=msg; }
+
+// ── Panneau info ──────────────────────────────────────────────────
+let _infoData = null;
+
+async function openInfo() {
+  document.getElementById('info-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/health');
+    _infoData = await r.json();
+  } catch(e) { _infoData = null; }
+  renderInfo();
+}
+
+function closeInfo() {
+  document.getElementById('info-modal').classList.remove('open');
+}
+
+function renderInfo() {
+  const el = document.getElementById('info-content');
+  if (!_infoData) { el.textContent = 'Impossible de charger les informations.'; return; }
+  const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' à ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
+  const errors = _infoData.lastScrapeErrors || [];
+  el.innerHTML = `
+    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(_infoData.version||'—')}</span></div>
+    <div class="info-row"><span class="lbl">Serveur démarré</span><span class="val">${fmt(_infoData.serverStart)}</span></div>
+    <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(_infoData.lastScrape)}</span></div>
+    <div class="info-row"><span class="lbl">Films en cache</span><span class="val">${_infoData.cachedDetails} fiches</span></div>
+    <div class="info-row"><span class="lbl">Erreurs dernier scraping</span><span class="val">${errors.length === 0 ? '✅ Aucune' : `⚠️ ${errors.length}`}</span></div>
+    ${errors.length > 0 ? `<div class="info-errors">${errors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
+  `;
+}
 
 // Chargement des données utilisateur au démarrage
 loadUserdata();

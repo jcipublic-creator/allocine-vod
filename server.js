@@ -9,6 +9,9 @@ const app = express();
 const PORT = Number(process.env.PORT || 3009);
 const TOTAL_PAGES = Number(process.env.TOTAL_PAGES || 25);
 const DETAILS_TTL_MS = 1000 * 60 * 60 * 6; // 6h
+const VERSION = 'v9.2';
+const SERVER_START = new Date().toISOString();
+let lastScrapeErrors = [];
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -423,7 +426,12 @@ app.post('/api/userdata', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, port: PORT, totalPages: TOTAL_PAGES, cachedDetails: detailsCache.size, lastScrape });
+  res.json({
+    ok: true, port: PORT, totalPages: TOTAL_PAGES,
+    cachedDetails: detailsCache.size, lastScrape,
+    version: VERSION, serverStart: SERVER_START,
+    lastScrapeErrors,
+  });
 });
 
 app.get('/api/scrape', async (req, res) => {
@@ -446,6 +454,7 @@ app.get('/api/scrape', async (req, res) => {
   const allFilms = [];
   const totalPages = annees.length * TOTAL_PAGES;
   let globalPage = 0;
+  lastScrapeErrors = []; // réinitialise les erreurs
 
   for (const annee of annees) {
     const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
@@ -473,6 +482,7 @@ app.get('/api/scrape', async (req, res) => {
       } catch (error) {
         const message = error.response ? `HTTP ${error.response.status}` : error.code || error.message;
         console.error(`[${annee}] Page ${page} erreur: ${message}`);
+        lastScrapeErrors.push({ page: globalPage, annee, message });
         send({ type: 'error', page: globalPage, message });
       }
       await sleep(1500 + Math.random() * 500);

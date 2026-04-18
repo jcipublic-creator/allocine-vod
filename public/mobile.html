@@ -171,6 +171,31 @@ body {
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
 .empty.show { display: block; }
 
+/* Info modal */
+#info-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
+  padding-bottom: var(--sb);
+}
+#info-modal.open { display: flex; }
+.info-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--sb)); width: 100%;
+  max-height: 70vh; overflow-y: auto;
+}
+.info-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
+.info-row { display: flex; justify-content: space-between; padding: 9px 0;
+  border-bottom: 1px solid rgba(42,79,112,.4); gap: 12px; }
+.info-row:last-of-type { border-bottom: none; }
+.info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.info-row .val { font-size: 12px; color: var(--text); text-align: right; }
+.info-errors { margin-top: 10px; font-size: 11px; color: #e74c3c; line-height: 1.6; }
+.info-close-btn {
+  width: 100%; margin-top: 16px; padding: 12px; border-radius: 10px;
+  background: var(--blue3); border: none; color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
+
 /* Error banner */
 #error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
   border: 1px solid rgba(200,80,80,.4); border-radius: 10px; font-size: 13px;
@@ -179,9 +204,17 @@ body {
 </head>
 <body>
 
+<div id="info-modal" onclick="if(event.target===this)closeInfo()">
+  <div class="info-sheet">
+    <h3>ℹ Informations</h3>
+    <div id="info-content">Chargement…</div>
+    <button class="info-close-btn" onclick="closeInfo()">Fermer</button>
+  </div>
+</div>
+
 <div class="header">
   <div class="header-title">🎬 Films VOD</div>
-  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap"></div>
+  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap;cursor:pointer" onclick="openInfo()"></div>
   <div style="display:flex;align-items:center;gap:4px" id="note-wrap">
     <span class="note-label">≥</span>
     <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
@@ -759,6 +792,37 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(e =>
     console.warn('SW non enregistré :', e.message)
   );
+}
+
+// ─── Panneau info ─────────────────────────────────────────────────────────────
+let _infoData = null;
+
+async function openInfo() {
+  document.getElementById('info-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
+    _infoData = await r.json();
+  } catch(e) { _infoData = null; }
+  renderInfo();
+}
+
+function closeInfo() {
+  document.getElementById('info-modal').classList.remove('open');
+}
+
+function renderInfo() {
+  const el = document.getElementById('info-content');
+  if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
+  const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
+  const errors = _infoData.lastScrapeErrors || [];
+  el.innerHTML = `
+    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(_infoData.version||'—')}</span></div>
+    <div class="info-row"><span class="lbl">Serveur démarré</span><span class="val">${fmt(_infoData.serverStart)}</span></div>
+    <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(_infoData.lastScrape)}</span></div>
+    <div class="info-row"><span class="lbl">Films en cache</span><span class="val">${_infoData.cachedDetails} fiches</span></div>
+    <div class="info-row"><span class="lbl">Erreurs scraping</span><span class="val">${errors.length === 0 ? '✅ Aucune' : `⚠️ ${errors.length}`}</span></div>
+    ${errors.length > 0 ? `<div class="info-errors">${errors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
+  `;
 }
 
 // ─── Init ─────────────────────────────────────────────────────────────────────

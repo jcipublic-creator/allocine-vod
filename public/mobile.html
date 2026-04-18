@@ -819,6 +819,8 @@ function loadCache() {
 
     _allFilms = JSON.parse(films);
     _details  = details ? JSON.parse(details) : {};
+    _allPlats = new Set();
+    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
 
     const d = date ? new Date(date) : null;
     const label = d
@@ -942,6 +944,8 @@ async function loadFilmsFromServer() {
       setTimeout(() => { document.getElementById('server-status').textContent = '🟢'; }, 4000);
     }
     console.log(`[server] ${d.films.length} films chargés depuis le serveur`);
+    _scrapingDone = true;
+    startPlatformLoading(); // charge les plateformes depuis le cache Redis
     return true;
   } catch(e) {
     console.warn('[server] Impossible de charger les films:', e.message);

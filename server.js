@@ -33,18 +33,48 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
   : null;
 
 // Cache mémoire local (évite trop d'appels Redis)
-let userdata = {};
+let users    = {};  // { userId: { id, name, createdAt } }
+let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse } } }
 let lastScrape = null; // timestamp ISO du dernier scraping
 let cachedFilms = [];  // derniers films scrapés, persistés dans Redis
+
+// Détecte si userdata est dans l'ancien format plat { allocineId: { vu,... } }
+// (avant multi-utilisateurs) — les valeurs ont directement un champ booléen `vu`
+function isOldUserdataFormat(data) {
+  if (!data || typeof data !== 'object') return false;
+  return Object.values(data).some(v => v && typeof v === 'object' && typeof v.vu === 'boolean');
+}
+
+// Migre l'ancien format vers le nouveau sous un profil "Mon profil"
+function migrateUserdata(old) {
+  const defaultId = 'user_default';
+  users[defaultId] = users[defaultId] || { id: defaultId, name: 'Mon profil', createdAt: new Date().toISOString() };
+  userdata = { [defaultId]: old };
+  console.log(`🔄 Migration userdata → format multi-utilisateurs (${Object.keys(old).length} entrées sous "${users[defaultId].name}")`);
+}
 
 async function loadUserdata() {
   // 1. Essayer Redis en priorité
   if (redis) {
     try {
+      // Charger la liste des profils
+      const usersRaw = await redis.get('users');
+      if (usersRaw) {
+        users = typeof usersRaw === 'string' ? JSON.parse(usersRaw) : usersRaw;
+        console.log(`👤 Profils Redis chargés (${Object.keys(users).length} profils)`);
+      }
+      // Charger les données utilisateur
       const data = await redis.get('userdata');
       if (data) {
-        userdata = typeof data === 'string' ? JSON.parse(data) : data;
-        console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} entrées)`);
+        const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+        if (isOldUserdataFormat(parsed)) {
+          migrateUserdata(parsed);
+          await redis.set('users',    JSON.stringify(users));
+          await redis.set('userdata', JSON.stringify(userdata));
+        } else {
+          userdata = parsed;
+          console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} profils)`);
+        }
       }
       const ts = await redis.get('lastScrape');
       if (ts) lastScrape = ts;
@@ -66,12 +96,18 @@ async function loadUserdata() {
     const file = path.join(DATA_DIR, 'userdata.json');
     try {
       if (fs.existsSync(file)) {
-        userdata = JSON.parse(fs.readFileSync(file, 'utf8'));
-        console.log(`📂 Fallback userdata.json (${Object.keys(userdata).length} entrées)`);
+        const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+        if (isOldUserdataFormat(parsed)) {
+          migrateUserdata(parsed);
+        } else {
+          userdata = parsed;
+        }
+        console.log(`📂 Fallback userdata.json chargé`);
         // Resynchronise vers Redis si possible
-        if (redis && Object.keys(userdata).length > 0) {
+        if (redis) {
+          redis.set('users',    JSON.stringify(users)).catch(() => {});
           redis.set('userdata', JSON.stringify(userdata)).catch(() => {});
-          console.log('🔄 Userdata resynchronisé vers Redis');
+          console.log('🔄 Données resynchronisées vers Redis');
         }
       }
     } catch(e) { console.warn('Impossible de charger userdata.json:', e.message); }
@@ -83,6 +119,13 @@ async function saveLastScrape() {
   if (redis) {
     try { await redis.set('lastScrape', lastScrape); }
     catch(e) { console.warn('Erreur sauvegarde lastScrape:', e.message); }
+  }
+}
+
+async function saveUsers() {
+  if (redis) {
+    try { await redis.set('users', JSON.stringify(users)); }
+    catch(e) { console.warn('Erreur sauvegarde users Redis:', e.message); }
   }
 }
 
@@ -465,18 +508,41 @@ app.get('/api/films', (_req, res) => {
   res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length, details });
 });
 
-app.get('/api/userdata', (_req, res) => {
-  res.json(userdata);
+// ─── Profils utilisateurs ─────────────────────────────────────────────────────
+app.get('/api/users', (_req, res) => {
+  res.json(Object.values(users));
+});
+
+app.post('/api/users', async (req, res) => {
+  const { name } = req.body;
+  if (!name || typeof name !== 'string' || !name.trim())
+    return res.status(400).json({ error: 'name requis' });
+  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const user = { id, name: name.trim(), createdAt: new Date().toISOString() };
+  users[id]    = user;
+  userdata[id] = userdata[id] || {};
+  await saveUsers();
+  await saveUserdataFile();
+  console.log(`👤 Nouveau profil : "${user.name}" (${id})`);
+  res.json(user);
+});
+
+// ─── Données utilisateur (Vu / À voir / Non) ─────────────────────────────────
+app.get('/api/userdata', (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ error: 'userId requis' });
+  res.json(userdata[userId] || {});
 });
 
 app.post('/api/userdata', async (req, res) => {
-  const { id, vu, vouloir, nonInteresse } = req.body;
-  if (!id) return res.status(400).json({ error: 'id requis' });
+  const { userId, id, vu, vouloir, nonInteresse } = req.body;
+  if (!userId || !id) return res.status(400).json({ error: 'userId et id requis' });
+  if (!userdata[userId]) userdata[userId] = {};
   const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse };
   if (!entry.vu && !entry.vouloir && !entry.nonInteresse) {
-    delete userdata[id];
+    delete userdata[userId][id];
   } else {
-    userdata[id] = entry;
+    userdata[userId][id] = entry;
   }
   await saveUserdataFile();
   res.json({ ok: true });

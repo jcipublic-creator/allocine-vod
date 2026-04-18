@@ -291,6 +291,26 @@ body {
 /* Note dans confirm */
 .confirm-note { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 18px; padding: 12px 14px; background: rgba(255,255,255,.04); border-radius: 10px; border: 1px solid var(--blue3); }
 .confirm-note .note-label { font-size: 13px; color: var(--text); }
+
+/* ── Profils ── */
+.profile-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); cursor: pointer;
+}
+.profile-row:last-child { border-bottom: none; }
+.profile-row.active { cursor: default; }
+.profile-name { font-size: 14px; color: var(--text); }
+.profile-badge-active { font-size: 11px; color: var(--gold); }
+.profile-badge-switch { font-size: 11px; color: var(--muted); }
+.add-user-row { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+.add-user-input {
+  flex: 1; background: var(--blue2); border: 1px solid var(--blue3);
+  color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px;
+}
+.add-user-btn {
+  background: var(--gold); color: #000; border: none; border-radius: 8px;
+  padding: 10px 14px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap;
+}
 </style>
 </head>
 <body>
@@ -329,6 +349,7 @@ body {
 
 <div class="menu-dropdown" id="menu-dropdown">
   <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper</button>
+  <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profils</button>
   <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
   <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
 </div>
@@ -376,6 +397,14 @@ body {
 <div class="cards" id="cards"></div>
 <div class="empty"  id="empty">Aucun film trouvé avec ces critères.</div>
 
+
+<div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
+  <div class="prefs-sheet">
+    <h3>👤 Profils</h3>
+    <div id="profiles-content"><p style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</p></div>
+    <button class="info-close-btn" style="margin-top:20px" onclick="closeProfiles()">Fermer</button>
+  </div>
+</div>
 
 <div id="prefs-modal" onclick="if(event.target===this)closePrefs()">
   <div class="prefs-sheet">
@@ -519,6 +548,10 @@ const UI = {
     fill.style.width = '100%';
     setTimeout(() => { fill.style.width = '0%'; }, 1000);
     document.getElementById('server-status').textContent = '🟢';
+  },
+  showUserPicker(users) {
+    renderProfiles(users);
+    document.getElementById('profiles-modal').classList.add('open');
   }
 };
 
@@ -705,15 +738,81 @@ function closeMenu() {
 }
 document.addEventListener('click', () => closeMenu());
 
-// ─── Préférences d'affichage ─────────────────────────────────────────────────
-const PREFS_KEY = 'vod_prefs';
+// ─── Profils ──────────────────────────────────────────────────────────────────
+async function openProfiles() {
+  document.getElementById('profiles-modal').classList.add('open');
+  document.getElementById('profiles-content').innerHTML =
+    '<p style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</p>';
+  try {
+    const list = await loadUsers();
+    renderProfiles(list);
+  } catch(e) {
+    document.getElementById('profiles-content').innerHTML =
+      '<p style="color:#e74c3c;font-size:13px;padding:10px 0">Erreur de chargement</p>';
+  }
+}
+function closeProfiles() {
+  document.getElementById('profiles-modal').classList.remove('open');
+}
+function renderProfiles(list) {
+  const rows = list.map(u => {
+    const isActive = u.id === _currentUserId;
+    return `<div class="profile-row ${isActive ? 'active' : ''}"
+      ${isActive ? '' : `onclick="selectProfile('${u.id}')"`}>
+      <span class="profile-name">${esc(u.name)}</span>
+      ${isActive
+        ? '<span class="profile-badge-active">● Actif</span>'
+        : '<span class="profile-badge-switch">Sélectionner →</span>'}
+    </div>`;
+  }).join('');
+  document.getElementById('profiles-content').innerHTML = `
+    <div class="prefs-section">
+      <div class="prefs-section-title">Mes profils (${list.length})</div>
+      ${rows || '<p style="color:var(--muted);font-size:13px;padding:10px 0">Aucun profil</p>'}
+    </div>
+    <div class="add-user-row">
+      <input type="text" id="new-user-name" class="add-user-input"
+        placeholder="Nouveau profil…" maxlength="30"
+        onkeydown="if(event.key==='Enter')onAddUser()">
+      <button class="add-user-btn" onclick="onAddUser()">+ Ajouter</button>
+    </div>`;
+}
+async function selectProfile(userId) {
+  switchUser(userId);
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  loadPrefs();
+  _userdata = {};
+  await loadUserdata();
+  closeProfiles();
+}
+async function onAddUser() {
+  const input = document.getElementById('new-user-name');
+  const name = input ? input.value.trim() : '';
+  if (!name) { input && input.focus(); return; }
+  input.disabled = true;
+  try {
+    await createUser(name);  // met à jour _currentUserId
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+    savePrefs();
+    _userdata = {};
+    await loadUserdata();
+    closeProfiles();
+  } catch(e) {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+// ─── Préférences d'affichage (par profil) ────────────────────────────────────
 let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
 
+function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 function loadPrefs() {
-  try { Object.assign(_prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch(e) {}
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
 }
 function savePrefs() {
-  localStorage.setItem(PREFS_KEY, JSON.stringify(_prefs));
+  localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
 }
 function setPref(key, val) {
   _prefs[key] = val;
@@ -752,11 +851,25 @@ function renderPrefs() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
+  // 1. Déterminer le profil actif (ou proposer d'en choisir un)
+  const userInit = await initUser();
+  if (userInit.mode === 'pick') {
+    // Ouvre le sélecteur de profil (non bloquant : les films s'affichent quand même)
+    UI.showUserPicker(userInit.users);
+  }
+
+  // 2. Charger les préférences d'affichage du profil actif
   loadPrefs();
+
+  // 3. Charger les films (cache local ou serveur)
   const hadCache = loadCache();
   await pingServer();
   if (!hadCache) await loadFilmsFromServer();
-  await loadUserdata();
+
+  // 4. Charger les données Vu/À voir/Non (seulement si un profil est sélectionné)
+  if (_currentUserId) await loadUserdata();
+
+  // 5. Vérifier si un scraping auto tourne en arrière-plan
   startAutoScrapeMonitoring();
 })();
 </script>

@@ -6,15 +6,18 @@
 function applyFilters() { UI.applyFilters(); }
 
 // ─── État global ──────────────────────────────────────────────────────────────
-let _allFilms     = [];
-let _details      = {};   // filmKey → { pays, annee, providers, ... }
-let _userdata     = {};   // allocineId → { vu, vouloir, nonInteresse }
-let _allPlats     = new Set();
-let _platsDone    = 0;
-let _loadGen      = 0;    // compteur de génération pour annuler les workers
-let _sortBy       = 'presse';
-let _scrapingDone = true;
+let _allFilms       = [];
+let _details        = {};   // filmKey → { pays, annee, providers, ... }
+let _userdata       = {};   // allocineId → { vu, vouloir, nonInteresse }  (propre à _currentUserId)
+let _currentUserId  = null; // profil actif sur ce device
+let _allPlats       = new Set();
+let _platsDone      = 0;
+let _loadGen        = 0;    // compteur de génération pour annuler les workers
+let _sortBy         = 'presse';
+let _scrapingDone   = true;
 let _genreDefaultApplied = false;
+
+const LS_USER_ID = 'vod_user_id';
 
 // ─── Constantes & utilitaires ─────────────────────────────────────────────────
 const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -22,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v45'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v46'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -107,10 +110,63 @@ function loadCache() {
   } catch(e) { console.warn('[cache] Erreur chargement :', e.message); return false; }
 }
 
+// ─── Gestion des profils utilisateurs ────────────────────────────────────────
+
+// Appelé au démarrage. Retourne un objet { mode, users? } :
+//   'existing' → userId déjà en localStorage, prêt à l'emploi
+//   'auto'     → un seul profil serveur, sélectionné automatiquement
+//   'pick'     → plusieurs profils (ou aucun) → l'UI doit proposer de choisir
+async function initUser() {
+  const stored = localStorage.getItem(LS_USER_ID);
+  if (stored) {
+    _currentUserId = stored;
+    return { mode: 'existing' };
+  }
+  try {
+    const r = await fetch('/api/users');
+    if (!r.ok) return { mode: 'error' };
+    const list = await r.json();
+    if (list.length === 1) {
+      _currentUserId = list[0].id;
+      localStorage.setItem(LS_USER_ID, _currentUserId);
+      return { mode: 'auto', user: list[0] };
+    }
+    return { mode: 'pick', users: list };
+  } catch(e) {
+    console.warn('[user] initUser error:', e.message);
+    return { mode: 'error' };
+  }
+}
+
+async function loadUsers() {
+  const r = await fetch('/api/users');
+  if (!r.ok) throw new Error('Erreur /api/users');
+  return r.json();
+}
+
+async function createUser(name) {
+  const r = await fetch('/api/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name: name.trim() })
+  });
+  if (!r.ok) throw new Error('Erreur création profil');
+  const user = await r.json();
+  _currentUserId = user.id;
+  localStorage.setItem(LS_USER_ID, _currentUserId);
+  return user;
+}
+
+function switchUser(userId) {
+  _currentUserId = userId;
+  localStorage.setItem(LS_USER_ID, userId);
+}
+
 // ─── Base de données utilisateur ──────────────────────────────────────────────
 async function loadUserdata() {
+  if (!_currentUserId) return;
   try {
-    const r = await fetch('/api/userdata');
+    const r = await fetch(`/api/userdata?userId=${encodeURIComponent(_currentUserId)}`);
     _userdata = await r.json();
     UI.reapplyUserActions();
     UI.applyFilters();
@@ -118,16 +174,18 @@ async function loadUserdata() {
 }
 
 async function saveUserdata(id) {
+  if (!_currentUserId) return;
   try {
     await fetch('/api/userdata', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...(_userdata[id] || {}) })
+      body: JSON.stringify({ userId: _currentUserId, id, ...(_userdata[id] || {}) })
     });
   } catch(e) { console.warn('Erreur sauvegarde userdata:', e.message); }
 }
 
 function toggleUA(id, idx, field) {
+  if (!_currentUserId) return; // pas de profil sélectionné
   if (!_userdata[id]) _userdata[id] = {};
   _userdata[id][field] = !_userdata[id][field];
   const film = _allFilms[idx];

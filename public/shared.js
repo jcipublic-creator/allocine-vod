@@ -22,7 +22,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v2'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v43'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -80,11 +80,11 @@ function saveCache() {
 function loadCache() {
   try {
     // Si le cache est d'une ancienne version, on le purge pour forcer un rechargement serveur
-    if (localStorage.getItem('vod_cache_version') !== LS_VERSION) {
+    if (localStorage.getItem('vod_cache_v43ersion') !== LS_VERSION) {
       localStorage.removeItem(LS_FILMS);
       localStorage.removeItem(LS_DETAILS);
       localStorage.removeItem(LS_DATE);
-      localStorage.setItem('vod_cache_version', LS_VERSION);
+      localStorage.setItem('vod_cache_v43ersion', LS_VERSION);
       console.log('[cache] Version obsolète — cache purgé');
       return false;
     }

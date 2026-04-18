@@ -1,12 +1,11 @@
 const CACHE = `vod-shell-${new Date().toISOString().slice(0,16).replace(/[-:T]/g,'')}`;
 
 const SHELL = [
-  '/mobile.html',
   '/manifest.json',
   '/icon-192.svg',
 ];
 
-// Installation : mise en cache de l'app shell
+// Installation : mise en cache des assets statiques (pas mobile.html)
 self.addEventListener('install', e => {
   e.waitUntil(
     caches.open(CACHE).then(c => c.addAll(SHELL))
@@ -24,17 +23,33 @@ self.addEventListener('activate', e => {
   self.clients.claim();
 });
 
-// Fetch : app shell depuis le cache, API depuis le réseau
+// Fetch
 self.addEventListener('fetch', e => {
   const url = new URL(e.request.url);
 
   // Les appels API passent toujours par le réseau
   if (url.pathname.startsWith('/api/')) return;
 
+  // Les fichiers HTML : réseau en priorité, cache en fallback (offline)
+  if (url.pathname.endsWith('.html') || url.pathname === '/') {
+    e.respondWith(
+      fetch(e.request)
+        .then(resp => {
+          if (resp.ok) {
+            const clone = resp.clone();
+            caches.open(CACHE).then(c => c.put(e.request, clone));
+          }
+          return resp;
+        })
+        .catch(() => caches.match(e.request))
+    );
+    return;
+  }
+
+  // Autres assets : cache en priorité, réseau en fallback
   e.respondWith(
     caches.match(e.request).then(cached => {
       if (cached) return cached;
-      // Pas en cache → réseau, puis mise en cache
       return fetch(e.request).then(resp => {
         if (resp.ok) {
           const clone = resp.clone();

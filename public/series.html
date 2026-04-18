@@ -136,6 +136,9 @@ body {
 }
 .card:active { border-color: var(--gold); }
 .card-top { display: flex; align-items: flex-start; gap: 10px; }
+.card-poster { width: 64px; flex-shrink: 0; border-radius: 6px; overflow: hidden; background: var(--blue3); aspect-ratio: 2/3; }
+.card-poster img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.card-poster-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--blue3); background: var(--navy); }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
 .card-orig  { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 1px; }
@@ -499,9 +502,14 @@ function renderSeriesCards(series) {
       ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()">
            <span>${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSyn(${i})">… Lire la suite</span>` : ''}
          </div>` : '';
+        const posterSrc = det.poster || s.poster || '';
+    const posterHtml = posterSrc
+      ? `<div class="card-poster"><img src="${esc(posterSrc)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\"card-poster-ph\\">📺</div>'"></div>`
+      : `<div class="card-poster"><div class="card-poster-ph">📺</div></div>`;
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="window.open('${url}','_blank')">
   <div class="card-top">
+    ${posterHtml}
     <div class="card-info">
       <div class="card-title">${esc(s.titre)}</div>
       ${s.titreOriginal ? `<div class="card-orig">${esc(s.titreOriginal)}</div>` : ''}
@@ -587,6 +595,11 @@ function updateSeriesCard(idx, det) {
         genreEl.insertAdjacentElement('afterend', div);
       }
     }
+  }
+  // Poster (og:image des détails remplace le placeholder ou la vignette basse-res)
+  if (det.poster) {
+    const posterEl = card.querySelector('.card-poster');
+    if (posterEl) posterEl.innerHTML = `<img src="${esc(det.poster)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\"card-poster-ph\\">📺</div>'">`;
   }
 }
 

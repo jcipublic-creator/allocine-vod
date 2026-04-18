@@ -968,7 +968,10 @@ function parseSeries(html) {
     const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
     const anneeSortie = yearMatch ? yearMatch[1] : null;
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
-    series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId });
+    const $img = $card.find('img').first();
+    const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('src') || '';
+    const poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
+    series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
   // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
@@ -1190,10 +1193,12 @@ app.get('/api/series/details', async (req, res) => {
     }
 
     const providers = extractProviders(html);
+    const $d = cheerio.load(html);
+    const poster = $d('meta[property="og:image"]').attr('content') || null;
     const data = {
       createur, nbSaisons, statut, derniereAnnee, pays,
       casting: castingArr.slice(0, 5).join(', '),
-      providers, allocineId: seriesId, allocineUrl: url,
+      providers, poster, allocineId: seriesId, allocineUrl: url,
     };
     if (createur || nbSaisons || providers.length > 0 || pays) setCachedSeriesDetails(cacheKey, data);
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';

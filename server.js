@@ -1118,13 +1118,13 @@ app.get('/api/series/scrape', async (req, res) => {
   console.log(`✅ ${result.length} séries scrapées`);
 });
 
-/// Debug : montre les posters du cache series (pour vérifier l'extraction)
+//// Debug : montre les posters du cache series (pour vérifier l'extraction)
 app.get('/api/series/debug-posters', (_req, res) => {
   const sample = cachedSeries.slice(0, 20).map(s => ({ titre: s.titre, poster: s.poster || null }));
   res.json({ total: cachedSeries.length, withPoster: cachedSeries.filter(s => s.poster).length, sample });
 });
 
-// Debug : montre les lignes brutes extraites d'une fiche série
+/// Debug : montre les lignes brutes extraites d'une fiche série
 app.get('/api/series/debug-lines', async (req, res) => {
   const seriesId = String(req.query.seriesId || '').trim();
   if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });

@@ -205,7 +205,7 @@
 
 <header>
   <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
-  <div style="font-size:12px;color:var(--muted)">Cliquez sur un film pour le résumé · <span style="color:var(--gold);font-weight:600">v9.1 — fix scraping multiple</span></div>
+  <div style="font-size:12px;color:var(--muted)">Cliquez sur un film pour le résumé · <span id="last-scrape-label" style="color:var(--muted)"></span></div>
 </header>
 
 <div class="controls">
@@ -348,6 +348,23 @@ async function loadUserdata() {
   } catch(e) { console.warn('Erreur chargement userdata:', e.message); }
 }
 
+async function loadLastScrape() {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
+  } catch(e) {}
+}
+
+function updateLastScrapeLabel(iso) {
+  const el = document.getElementById('last-scrape-label');
+  if (!el || !iso) return;
+  const d = new Date(iso);
+  const label = d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  el.textContent = `Dernier scraping : ${label}`;
+  el.style.color = 'var(--gold)';
+}
+
 async function saveUserdata(id) {
   try {
     await fetch('/api/userdata', {
@@ -479,6 +496,7 @@ function startScrape() {
       document.getElementById('prog-sub').textContent = '';
       btn.disabled = false;
       btn.textContent = '▶ Lancer le scraping';
+      if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
       if (!_allFilms.length) show('empty');
     }
   };
@@ -1042,6 +1060,7 @@ function showError(msg) { const b=document.getElementById('error-banner'); b.sty
 
 // Chargement des données utilisateur au démarrage
 loadUserdata();
+loadLastScrape();
 </script>
 </body>
 </html>

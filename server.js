@@ -26,12 +26,15 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
 
 // Cache mémoire local (évite trop d'appels Redis)
 let userdata = {};
+let lastScrape = null; // timestamp ISO du dernier scraping
 
 async function loadUserdata() {
   if (redis) {
     try {
       const data = await redis.get('userdata');
       if (data) userdata = typeof data === 'string' ? JSON.parse(data) : data;
+      const ts = await redis.get('lastScrape');
+      if (ts) lastScrape = ts;
       console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} entrées)`);
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   } else {
@@ -41,6 +44,14 @@ async function loadUserdata() {
       if (fs.existsSync(file)) userdata = JSON.parse(fs.readFileSync(file, 'utf8'));
       console.log(`📂 userdata.json chargé (${Object.keys(userdata).length} entrées)`);
     } catch(e) { console.warn('Impossible de charger userdata.json:', e.message); }
+  }
+}
+
+async function saveLastScrape() {
+  lastScrape = new Date().toISOString();
+  if (redis) {
+    try { await redis.set('lastScrape', lastScrape); }
+    catch(e) { console.warn('Erreur sauvegarde lastScrape:', e.message); }
   }
 }
 
@@ -412,7 +423,7 @@ app.post('/api/userdata', async (req, res) => {
 });
 
 app.get('/api/health', (_req, res) => {
-  res.json({ ok: true, port: PORT, totalPages: TOTAL_PAGES, cachedDetails: detailsCache.size });
+  res.json({ ok: true, port: PORT, totalPages: TOTAL_PAGES, cachedDetails: detailsCache.size, lastScrape });
 });
 
 app.get('/api/scrape', async (req, res) => {
@@ -470,7 +481,8 @@ app.get('/api/scrape', async (req, res) => {
 
   const result = dedupeAndSortFilms(allFilms, noteMin);
   const withId = result.filter(f => f.allocineId).length;
-  send({ type: 'done', totalFilms: result.length });
+  await saveLastScrape();
+  send({ type: 'done', totalFilms: result.length, lastScrape });
   res.end();
   console.log(`✅ ${result.length} films (${withId} avec ID, note >= ${noteMin}) — années: ${annees.join(', ')}`);
 });

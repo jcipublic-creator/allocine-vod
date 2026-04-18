@@ -89,13 +89,6 @@ body {
   white-space: nowrap; transition: all .15s;
 }
 .filter-toggle input:checked + span { border-color: var(--gold); color: var(--gold); background: rgba(240,192,64,.08); }
-.sort-group { display: flex; gap: 4px; flex-shrink: 0; }
-.sort-btn {
-  background: var(--blue2); border: 1px solid var(--blue3); color: var(--muted);
-  padding: 6px 10px; border-radius: 20px; font-size: 12px; cursor: pointer;
-  white-space: nowrap;
-}
-.sort-btn.active { border-color: var(--gold); color: var(--gold); }
 
 /* ── Stats ── */
 .stats { padding: 6px 14px; font-size: 11px; color: var(--muted); display: none; }
@@ -357,11 +350,11 @@ body {
     <option value="">Tous pays</option>
   </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
-  <div class="sort-group">
-    <button class="sort-btn active" id="sort-presse"      onclick="applySort('presse')">Presse</button>
-    <button class="sort-btn"        id="sort-spectateurs" onclick="applySort('spectateurs')">Spectateurs</button>
-    <button class="sort-btn"        id="sort-annee"       onclick="applySort('annee')">Année</button>
-  </div>
+  <select id="fil-sort" onchange="applySort(this.value)">
+    <option value="presse">↓ Note presse</option>
+    <option value="spectateurs">↓ Note spectateurs</option>
+    <option value="annee">↓ Année</option>
+  </select>
 </div>
 
 <div class="stats" id="stats"></div>
@@ -489,10 +482,8 @@ const UI = {
     this.applyFilters();
   },
   updateSortButtons(sortBy) {
-    ['presse','spectateurs','annee'].forEach(c => {
-      const btn = document.getElementById(`sort-${c}`);
-      if (btn) btn.classList.toggle('active', sortBy === c);
-    });
+    const sel = document.getElementById('fil-sort');
+    if (sel) sel.value = sortBy;
   },
   reapplyUserActions() {
     _allFilms.forEach((film, i) => this.renderUserActions(film, i));

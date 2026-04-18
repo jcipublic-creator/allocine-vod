@@ -214,7 +214,8 @@ body {
 
 <div class="header">
   <div class="header-title">🎬 Films VOD</div>
-  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap;cursor:pointer" onclick="openInfo()"></div>
+  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap"></div>
+  <button onclick="openInfo()" style="background:none;border:1px solid #2a4f70;color:#7090a0;border-radius:50%;width:26px;height:26px;font-size:13px;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0;">ℹ</button>
   <div style="display:flex;align-items:center;gap:4px" id="note-wrap">
     <span class="note-label">≥</span>
     <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">

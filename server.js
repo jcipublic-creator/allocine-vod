@@ -413,6 +413,8 @@ const PROVIDERS_BLACKLIST = new Set([
   'tenk', 'tënk', 'cinemutins', 'cinémutins',
   'capuseen', 'capuseën', 'orange', 'arte boutique',
   'ciné+', 'cine+', 'ocs', 'ciné+ ocs', 'cine+ ocs',
+  'en dvd blu-ray', 'en dvd/blu-ray', 'dvd blu-ray', 'dvd/blu-ray',
+  'blu-ray', 'dvd',
 ]);
 
 // ─────────────────────────────────────────────────────────────────
@@ -1171,9 +1173,10 @@ app.get('/api/series/details', async (req, res) => {
   }
 });
 
-app.post('/api/series/clear-cache', (_req, res) => {
+app.post('/api/series/clear-cache', async (_req, res) => {
   const count = seriesDetailsCache.size;
   seriesDetailsCache.clear();
+  if (redis) { try { await redis.del('series_details'); } catch(e) { console.warn('Redis del series_details:', e.message); } }
   console.log(`🗑️  Cache séries vidé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });

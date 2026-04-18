@@ -707,7 +707,7 @@ document.addEventListener('click', () => closeMenu());
 
 // ─── Préférences d'affichage ─────────────────────────────────────────────────
 const PREFS_KEY = 'vod_prefs';
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
 
 function loadPrefs() {
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(PREFS_KEY) || '{}')); } catch(e) {}

@@ -803,13 +803,21 @@ async function autoScrapeIfStale() {
 
 // Crée les profils par défaut s'ils n'existent pas encore (idempotent)
 async function seedDefaultProfiles() {
+  let changed = false;
+
+  // Renomme le profil migré "Mon profil" → "JC"
+  if (users['user_default'] && users['user_default'].name === 'Mon profil') {
+    users['user_default'].name = 'JC';
+    console.log('👤 Profil renommé : "Mon profil" → "JC"');
+    changed = true;
+  }
+
   const DEFAULTS = [
     { id: 'user_audrey',    name: 'Audrey'    },
     { id: 'user_josephine', name: 'Joséphine' },
     { id: 'user_augustin',  name: 'Augustin'  },
     { id: 'user_leonard',   name: 'Léonard'   },
   ];
-  let changed = false;
   for (const { id, name } of DEFAULTS) {
     if (!users[id]) {
       users[id]    = { id, name, createdAt: new Date().toISOString() };

@@ -1193,12 +1193,10 @@ app.get('/api/series/details', async (req, res) => {
     }
 
     const providers = extractProviders(html);
-    const $d = cheerio.load(html);
-    const poster = $d('meta[property="og:image"]').attr('content') || null;
     const data = {
       createur, nbSaisons, statut, derniereAnnee, pays,
       casting: castingArr.slice(0, 5).join(', '),
-      providers, poster, allocineId: seriesId, allocineUrl: url,
+      providers, allocineId: seriesId, allocineUrl: url,
     };
     if (createur || nbSaisons || providers.length > 0 || pays) setCachedSeriesDetails(cacheKey, data);
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';

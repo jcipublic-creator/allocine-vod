@@ -596,11 +596,6 @@ function updateSeriesCard(idx, det) {
       }
     }
   }
-  // Poster (og:image des détails remplace le placeholder ou la vignette basse-res)
-  if (det.poster) {
-    const posterEl = card.querySelector('.card-poster');
-    if (posterEl) posterEl.innerHTML = `<img src="${esc(det.poster)}" alt="" loading="lazy" onerror="this.parentNode.innerHTML='<div class=\\"card-poster-ph\\">📺</div>'">`;
-  }
 }
 
 function renderSeriesUA(serie, idx) {

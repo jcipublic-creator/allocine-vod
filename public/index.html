@@ -288,10 +288,61 @@
   .profile-close:hover { color: var(--gold); }
 
   @media (max-width: 750px) {
-    .controls, #filter-bar, #progress-zone, #plat-zone, #results-header, #table-wrap, #empty, #error-banner { margin-left: 12px; margin-right: 12px; }
+    #filter-bar, #progress-zone, #plat-zone, #results-header, #table-wrap, #empty, #error-banner { margin-left: 12px; margin-right: 12px; }
     header { padding: 14px; }
     .td-cast, .td-spect, .td-plat { display: none; }
   }
+
+  /* ── Menu desktop ── */
+  .menu-btn-d {
+    background: none; border: 1px solid var(--blue2); color: var(--muted);
+    border-radius: 8px; width: 36px; height: 36px; font-size: 16px; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    transition: all .15s;
+  }
+  .menu-btn-d:hover { border-color: var(--gold); color: var(--gold); }
+  .menu-btn-d.open  { border-color: var(--gold); color: var(--gold); }
+  .menu-dropdown-d {
+    display: none; position: fixed; top: 70px; right: 24px; z-index: 600;
+    background: var(--blue); border: 1px solid var(--blue2); border-radius: 12px;
+    min-width: 215px; box-shadow: 0 8px 32px rgba(0,0,0,.6); overflow: hidden;
+  }
+  .menu-dropdown-d.open { display: block; }
+  .menu-item-d {
+    display: flex; align-items: center; gap: 10px;
+    width: 100%; padding: 13px 18px;
+    background: none; border: none; border-bottom: 1px solid rgba(42,79,112,.3);
+    color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
+    transition: background .1s;
+  }
+  .menu-item-d:last-child { border-bottom: none; }
+  .menu-item-d:hover:not(:disabled) { background: rgba(240,192,64,.08); color: var(--gold); }
+  .menu-item-d:disabled { opacity: .4; cursor: default; }
+  .menu-separator-d { height: 1px; background: rgba(42,79,112,.5); }
+
+  /* Badge profil actif (header) */
+  .active-profile-badge {
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(240,192,64,.1); border: 1px solid rgba(240,192,64,.3);
+    border-radius: 20px; padding: 5px 14px; font-size: 13px; color: var(--gold);
+    white-space: nowrap; user-select: none;
+  }
+
+  /* Modale préférences desktop */
+  #prefs-modal-d {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
+  }
+  #prefs-modal-d.open { display: flex; }
+  .pref-row-d {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid rgba(42,79,112,.4);
+  }
+  .pref-row-d:last-child { border-bottom: none; }
+  .pref-row-d .pref-lbl { font-size: 13px; color: var(--text); }
+  .pref-row-d input[type=checkbox] { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
+  .pref-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin: 14px 0 4px; }
+  .pref-section-title:first-child { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -301,16 +352,30 @@
   <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
   <div style="display:flex;align-items:center;gap:10px">
     <span id="last-scrape-label" style="font-size:12px;color:var(--muted)"></span>
-    <button class="profile-btn" onclick="openProfiles()" title="Changer de profil">👤 <span id="profile-name">—</span></button>
-    <button class="info-btn" onclick="openInfo()" title="Informations">ℹ</button>
+    <div class="active-profile-badge">👤 <span id="profile-name">—</span></div>
+    <button class="menu-btn-d" id="menu-btn-d" onclick="toggleMenuDesktop(event)" title="Menu">☰</button>
   </div>
 </header>
+
+<div class="menu-dropdown-d" id="menu-dropdown-d">
+  <button class="menu-item-d" id="btn-run" onclick="closeMenuDesktop();openConfirm()" disabled>▶ Scraper</button>
+  <button class="menu-item-d" onclick="closeMenuDesktop();openPrefsDesktop()">🔖 Préférences</button>
+  <button class="menu-item-d" onclick="closeMenuDesktop();openProfiles()">👤 Profil</button>
+  <button class="menu-item-d" onclick="closeMenuDesktop();openInfo()">ℹ Info</button>
+  <div class="menu-separator-d"></div>
+  <button class="menu-item-d" style="font-size:12px;color:var(--muted)" id="btn-test" onclick="closeMenuDesktop();testAllocine()">🔍 Tester AlloCiné</button>
+  <button class="menu-item-d" style="font-size:12px;color:var(--muted)" id="btn-cache" onclick="closeMenuDesktop();clearCache()">🗑️ Vider le cache</button>
+</div>
 
 <div id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
   <div class="confirm-panel">
     <h3>🔄 Relancer le scraping ?</h3>
     <p>La liste sera mise à jour en arrière-plan.</p>
     <div class="last-scrape" id="confirm-last-scrape"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px;padding:10px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--blue2)">
+      <label style="font-size:13px;color:var(--text)">Note presse minimum</label>
+      <input type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
+    </div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
       <button class="btn-confirm" onclick="closeConfirm();startScrape()">Confirmer</button>
@@ -334,15 +399,6 @@
   </div>
 </div>
 
-<div class="controls">
-  <div class="field">
-    <label>Note presse min.</label>
-    <input type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
-  </div>
-  <button class="btn-run" id="btn-run" onclick="openConfirm()">▶ Lancer le scraping</button>
-  <button class="btn-run" style="background:#555;font-size:12px;padding:6px 12px;margin-left:8px;" onclick="testAllocine()" id="btn-test">🔍 Tester AlloCiné</button>
-  <button class="btn-run" style="background:#7f3030;font-size:12px;padding:6px 12px;margin-left:8px;" onclick="clearCache()" id="btn-cache">🗑️ Vider le cache</button>
-</div>
 
 <div id="filter-bar">
   <div class="field">
@@ -452,6 +508,14 @@
 
 <div id="empty"><h2>Aucun film trouvé</h2><p style="color:var(--muted);font-size:13px">Essayez de modifier les filtres.</p></div>
 
+<div id="prefs-modal-d" onclick="if(event.target===this)closePrefsDesktop()">
+  <div class="info-panel">
+    <button class="info-close" onclick="closePrefsDesktop()">✕</button>
+    <h3>🔖 Préférences</h3>
+    <div id="prefs-content-d"></div>
+  </div>
+</div>
+
 <script src="/shared.js"></script>
 <script>
 // ─── Objet UI desktop ─────────────────────────────────────────────────────────
@@ -525,7 +589,7 @@ const UI = {
     document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films récupérés`;
     document.getElementById('prog-sub').textContent = '';
     btn.disabled = false;
-    btn.textContent = '▶ Lancer le scraping';
+    btn.textContent = '▶ Scraper';
     if (lastScrape) updateLastScrapeLabel(lastScrape);
     if (!_allFilms.length) show('empty');
     show('filter-bar');
@@ -534,7 +598,7 @@ const UI = {
   },
   onScrapeError(btn) {
     btn.disabled = false;
-    btn.textContent = '▶ Lancer le scraping';
+    btn.textContent = '▶ Scraper';
     document.getElementById('prog-label').textContent = '❌ Connexion perdue';
     this.showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
   },
@@ -619,6 +683,70 @@ const UI = {
     document.getElementById('profiles-modal').classList.add('open');
   }
 };
+
+// ─── Menu desktop ─────────────────────────────────────────────────────────────
+function toggleMenuDesktop(e) {
+  e.stopPropagation();
+  const dd = document.getElementById('menu-dropdown-d');
+  const btn = document.getElementById('menu-btn-d');
+  const isOpen = dd.classList.toggle('open');
+  btn.classList.toggle('open', isOpen);
+}
+function closeMenuDesktop() {
+  document.getElementById('menu-dropdown-d').classList.remove('open');
+  document.getElementById('menu-btn-d').classList.remove('open');
+}
+document.addEventListener('click', () => closeMenuDesktop());
+
+// ─── Préférences desktop ──────────────────────────────────────────────────────
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+
+function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
+
+function loadPrefs() {
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
+  loadServerPrefs().then(serverPrefs => {
+    if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
+    Object.assign(_prefs, serverPrefs);
+    localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+    applySort();
+  });
+}
+
+function savePrefs() {
+  localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+  saveServerPrefs(_prefs);
+}
+
+function setPrefDesktop(key, val) {
+  _prefs[key] = val;
+  savePrefs();
+  applyFiltersDesktop();
+}
+
+function openPrefsDesktop() {
+  renderPrefsDesktop();
+  document.getElementById('prefs-modal-d').classList.add('open');
+}
+function closePrefsDesktop() {
+  document.getElementById('prefs-modal-d').classList.remove('open');
+}
+function renderPrefsDesktop() {
+  const row = (key, label) => `
+    <div class="pref-row-d">
+      <span class="pref-lbl">${label}</span>
+      <input type="checkbox" ${_prefs[key] ? 'checked' : ''} onchange="setPrefDesktop('${key}', this.checked)">
+    </div>`;
+  document.getElementById('prefs-content-d').innerHTML = `
+    <div class="pref-section-title">Genres</div>
+    ${row('showDocumentaires', 'Afficher les documentaires')}
+    ${row('showAnimations',    'Afficher les animations')}
+    <div class="pref-section-title">Ma liste</div>
+    ${row('hideVus',           'Masquer les films déjà vus')}
+    ${row('hideNonInteresse',  'Masquer les "Non intéressé"')}
+  `;
+}
 
 // ─── Mini-console de debug ────────────────────────────────────────────────────
 const _dbgLines = [];
@@ -722,14 +850,20 @@ function applyFiltersDesktop() {
     const ud = _userdata[film.allocineId] || {};
 
     const EXCL_GENRES = ['animation', 'documentaire'];
-    const matchGenre = selectedGenres.length === 0
+    const matchGenreMulti = selectedGenres.length === 0
       || (_exclMode && !filmGenres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))
       || (!_exclMode && selectedGenres.some(g => filmGenres.some(fg => fg.includes(g))));
+    const matchDocu = _prefs.showDocumentaires || !filmGenres.some(g => g.includes('documentaire'));
+    const matchAnim = _prefs.showAnimations    || !filmGenres.some(g => g.includes('animation'));
+    const matchGenre = matchGenreMulti && matchDocu && matchAnim;
     const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
     const matchPlat = !plat || providers.some(p => p.includes(plat));
     const matchPays = !paysFilter || filmPays.some(p => p === paysFilter);
     const matchNote = film.notePresse >= noteMin;
-    const matchListe = (showAll || (!ud.vu && !ud.nonInteresse)) && (!onlyVoir || !!ud.vouloir);
+    const hideVu  = _prefs.hideVus           && !showAll;
+    const hideNon = _prefs.hideNonInteresse   && !showAll;
+    const matchListe = (!hideVu || !ud.vu) && (!hideNon || !ud.nonInteresse) &&
+                       (!onlyVoir || !!ud.vouloir);
 
     let matchType = true;
     if (typeFilter === 'svod') {
@@ -922,6 +1056,8 @@ async function loadLastScrape() {
     const r = await fetch('/api/health');
     const d = await r.json();
     if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
+    const btn = document.getElementById('btn-run');
+    if (btn) btn.disabled = false;
   } catch(e) {}
 }
 
@@ -1003,6 +1139,7 @@ function renderProfilesDesktop(list, firstLaunch = false) {
 async function selectProfileDesktop(userId) {
   switchUser(userId);
   _userdata = {};
+  loadPrefs();
   await loadUserdata();
   updateProfileBtn();
   closeProfiles();
@@ -1042,6 +1179,7 @@ function updateProfileBtn() {
   } else if (_currentUserId) {
     updateProfileBtn();
   }
+  loadPrefs();
   const hadCache = loadCache();
   if (_currentUserId) await loadUserdata();
   await loadLastScrape();

@@ -931,6 +931,15 @@ async function loadFilmsFromServer() {
     const d = await r.json();
     if (!d.films || d.films.length === 0) return false;
     _allFilms = d.films;
+    // Injecter les détails en cache (plateformes, pays, année) — 1 seule requête
+    if (d.details) {
+      d.films.forEach((film, i) => {
+        if (d.details[i]) {
+          _details[filmKey(film)] = d.details[i];
+          (d.details[i].providers || []).forEach(p => _allPlats.add(p.name));
+        }
+      });
+    }
     populateGenreFilter();
     populatePaysFilter();
     applySort();
@@ -943,9 +952,9 @@ async function loadFilmsFromServer() {
       document.getElementById('server-status').textContent = `🟢 ${label}`;
       setTimeout(() => { document.getElementById('server-status').textContent = '🟢'; }, 4000);
     }
-    console.log(`[server] ${d.films.length} films chargés depuis le serveur`);
+    console.log(`[server] ${d.films.length} films + ${Object.keys(_details).length} détails chargés`);
     _scrapingDone = true;
-    startPlatformLoading(); // charge les plateformes depuis le cache Redis
+    startPlatformLoading(); // charge les films sans détails (nouveaux films sans cache)
     return true;
   } catch(e) {
     console.warn('[server] Impossible de charger les films:', e.message);

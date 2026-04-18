@@ -455,7 +455,13 @@ function dedupeAndSortFilms(films, noteMin) {
 }
 
 app.get('/api/films', (_req, res) => {
-  res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length });
+  // Inclure les détails en cache (plateformes, pays, année) indexés par position
+  // → le client n'a plus besoin de 500 requêtes individuelles /api/details
+  const details = cachedFilms.map(film => {
+    const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
+    return getCachedDetails(key) || null;
+  });
+  res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length, details });
 });
 
 app.get('/api/userdata', (_req, res) => {

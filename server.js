@@ -16,7 +16,8 @@ app.use(express.json());
 //  Base de données utilisateur (vu / vouloir / nonInteresse)
 //  Stockée dans userdata.json, persistante entre les sessions
 // ─────────────────────────────────────────────────────────────────
-const USERDATA_FILE = path.join(__dirname, 'userdata.json');
+const DATA_DIR = process.env.DATA_DIR || __dirname;
+const USERDATA_FILE = path.join(DATA_DIR, 'userdata.json');
 let userdata = {};
 try {
   if (fs.existsSync(USERDATA_FILE))

@@ -801,12 +801,37 @@ async function autoScrapeIfStale() {
   }
 }
 
+// Crée les profils par défaut s'ils n'existent pas encore (idempotent)
+async function seedDefaultProfiles() {
+  const DEFAULTS = [
+    { id: 'user_audrey',    name: 'Audrey'    },
+    { id: 'user_josephine', name: 'Joséphine' },
+    { id: 'user_augustin',  name: 'Augustin'  },
+    { id: 'user_leonard',   name: 'Léonard'   },
+  ];
+  let changed = false;
+  for (const { id, name } of DEFAULTS) {
+    if (!users[id]) {
+      users[id]    = { id, name, createdAt: new Date().toISOString() };
+      userdata[id] = userdata[id] || {};
+      console.log(`👤 Profil créé : "${name}"`);
+      changed = true;
+    }
+  }
+  if (changed) {
+    await saveUsers();
+    await saveUserdataFile();
+  }
+}
+
 app.listen(PORT, () => {
   console.log('\n🎬 AlloCiné VOD Scraper v9 démarré !');
   console.log(`   ➜ Ouvrez : http://localhost:${PORT}`);
   console.log(`   ➜ Santé  : http://localhost:${PORT}/api/health\n`);
 
-  // Auto-scrape au démarrage (après chargement Redis) + vérification quotidienne
-  loadUserdata().then(() => autoScrapeIfStale());
+  // Chargement Redis → profils par défaut → auto-scrape si besoin
+  loadUserdata()
+    .then(() => seedDefaultProfiles())
+    .then(() => autoScrapeIfStale());
   setInterval(() => autoScrapeIfStale(), 24 * 60 * 60 * 1000);
 });

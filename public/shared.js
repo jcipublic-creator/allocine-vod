@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v46'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v47'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -122,19 +122,15 @@ async function initUser() {
     _currentUserId = stored;
     return { mode: 'existing' };
   }
+  // Pas de profil en localStorage → toujours proposer le choix
   try {
     const r = await fetch('/api/users');
-    if (!r.ok) return { mode: 'error' };
+    if (!r.ok) return { mode: 'pick', users: [] };
     const list = await r.json();
-    if (list.length === 1) {
-      _currentUserId = list[0].id;
-      localStorage.setItem(LS_USER_ID, _currentUserId);
-      return { mode: 'auto', user: list[0] };
-    }
     return { mode: 'pick', users: list };
   } catch(e) {
     console.warn('[user] initUser error:', e.message);
-    return { mode: 'error' };
+    return { mode: 'pick', users: [] };
   }
 }
 

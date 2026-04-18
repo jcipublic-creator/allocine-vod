@@ -550,7 +550,7 @@ const UI = {
     document.getElementById('server-status').textContent = '🟢';
   },
   showUserPicker(users) {
-    renderProfiles(users);
+    renderProfiles(users, true); // true = premier lancement
     document.getElementById('profiles-modal').classList.add('open');
   }
 };
@@ -754,7 +754,10 @@ async function openProfiles() {
 function closeProfiles() {
   document.getElementById('profiles-modal').classList.remove('open');
 }
-function renderProfiles(list) {
+function renderProfiles(list, firstLaunch = false) {
+  const intro = firstLaunch
+    ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">C\'est ton premier lancement.<br>Choisis ton profil ou crée-en un nouveau.</p>'
+    : '';
   const rows = list.map(u => {
     const isActive = u.id === _currentUserId;
     return `<div class="profile-row ${isActive ? 'active' : ''}"
@@ -766,8 +769,9 @@ function renderProfiles(list) {
     </div>`;
   }).join('');
   document.getElementById('profiles-content').innerHTML = `
+    ${intro}
     <div class="prefs-section">
-      <div class="prefs-section-title">Mes profils (${list.length})</div>
+      <div class="prefs-section-title">Profils disponibles</div>
       ${rows || '<p style="color:var(--muted);font-size:13px;padding:10px 0">Aucun profil</p>'}
     </div>
     <div class="add-user-row">

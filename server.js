@@ -969,8 +969,9 @@ function parseSeries(html) {
     const anneeSortie = yearMatch ? yearMatch[1] : null;
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
     const $img = $card.find('img').first();
-    const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('src') || '';
-    const poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
+    const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
+    let poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
+    if (poster && poster.startsWith('/')) poster = 'https://www.allocine.fr' + poster;
     series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
@@ -1115,6 +1116,12 @@ app.get('/api/series/scrape', async (req, res) => {
   res.end();
   isScrapingSeries = false;
   console.log(`✅ ${result.length} séries scrapées`);
+});
+
+/// Debug : montre les posters du cache series (pour vérifier l'extraction)
+app.get('/api/series/debug-posters', (_req, res) => {
+  const sample = cachedSeries.slice(0, 20).map(s => ({ titre: s.titre, poster: s.poster || null }));
+  res.json({ total: cachedSeries.length, withPoster: cachedSeries.filter(s => s.poster).length, sample });
 });
 
 // Debug : montre les lignes brutes extraites d'une fiche série

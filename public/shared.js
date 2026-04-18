@@ -22,7 +22,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v44'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v45'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -216,7 +216,9 @@ async function startPlatformLoading() {
   _platsDone = 0;
   let errors = 0;
 
-  UI.onPlatStart();
+  // N'affiche la barre que s'il y a vraiment des détails à fetcher
+  const needsFetch = _allFilms.some(f => !_details[filmKey(f)]);
+  if (needsFetch) UI.onPlatStart();
 
   let idx = 0;
 
@@ -253,7 +255,7 @@ async function startPlatformLoading() {
   if (_loadGen !== gen) return;
   applySort();
   saveCache();
-  UI.onPlatDone(errors);
+  if (needsFetch) UI.onPlatDone(errors);
 }
 
 async function fetchDetails(idx, gen) {

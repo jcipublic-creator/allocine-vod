@@ -396,134 +396,160 @@
 
 <div id="empty"><h2>Aucun film trouvé</h2><p style="color:var(--muted);font-size:13px">Essayez de modifier les filtres.</p></div>
 
+<script src="/shared.js"></script>
 <script>
-let _allFilms     = [];
-let _details      = {};   // filmKey → { pays, annee, providers, ... } — persisté entre scrapes
-let _userdata     = {};   // allocineId → { vu, vouloir, nonInteresse }
-let _allPlats     = new Set();
-let _platsDone    = 0;
-let _loadGen      = 0;    // compteur de génération — annule les workers de l'ancien scraping
-let _sortBy       = 'presse'; // 'presse' | 'spectateurs'
-let _scrapingDone = true;     // false pendant un scraping actif
-
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-
-// ─── Cache localStorage ───────────────────────────────────────────
-const LS_FILMS   = 'vod_films';
-const LS_DETAILS = 'vod_details';
-const LS_DATE    = 'vod_updated';
-
-function saveFilmsCache() {
-  try {
-    localStorage.setItem(LS_FILMS,   JSON.stringify(_allFilms));
-    localStorage.setItem(LS_DETAILS, JSON.stringify(_details));
-    localStorage.setItem(LS_DATE,    new Date().toISOString());
-  } catch(e) { console.warn('[cache] Erreur sauvegarde :', e.message); }
-}
-
-function loadFilmsCache() {
-  try {
-    const films   = localStorage.getItem(LS_FILMS);
-    const details = localStorage.getItem(LS_DETAILS);
-    const date    = localStorage.getItem(LS_DATE);
-    if (!films) return false;
-
-    _allFilms = JSON.parse(films);
-    _details  = details ? JSON.parse(details) : {};
-    _allPlats = new Set();
-    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
-
-    const d = date ? new Date(date) : null;
-    const label = d ? `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}` : '—';
+// ─── Objet UI desktop ─────────────────────────────────────────────────────────
+const UI = {
+  renderFilms(films) { renderTable(films); },
+  reapplyAfterSort(films) {
+    films.forEach((film, i) => {
+      const det = _details[filmKey(film)];
+      if (!det) return;
+      const platEl = document.getElementById(`plat-${i}`);
+      if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
+    });
+    reapplyUserActions(); // re-remplit les cellules UA vides après re-rendu
+  },
+  renderUserActions(film, idx) {
+    const el = document.getElementById(`ua-${idx}`);
+    if (!el) return;
+    const id = film.allocineId;
+    if (!id) {
+      el.innerHTML = '<span style="color:var(--muted);font-size:10px">—</span>';
+      return;
+    }
+    const ud = _userdata[id] || {};
+    el.innerHTML = `<div class="user-actions">
+      <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')" title="J'ai vu ce film">👁</button>
+      <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')" title="Je veux le voir">🔖</button>
+      <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')" title="Pas intéressé">✕</button>
+    </div>`;
+  },
+  getPlatEl(film) {
+    const cur = _allFilms.indexOf(film);
+    return cur >= 0 ? document.getElementById(`plat-${cur}`) : null;
+  },
+  onPlatStart() {
+    show('plat-zone');
+    document.getElementById('plat-fill').style.width = '0%';
+    const dbgEl = document.getElementById('plat-debug');
+    if (dbgEl) { dbgEl.style.display = 'none'; dbgEl.textContent = ''; }
+  },
+  onPlatProgress(done, total) {
+    const pct = total ? Math.round(done / total * 100) : 0;
+    document.getElementById('plat-fill').style.width = pct + '%';
+    document.getElementById('plat-count').textContent = `${done} / ${total}`;
+  },
+  onPlatDone(errors) {
+    const labelTxt = errors > 0 ? `📺 Plateformes chargées (${errors} échec(s))` : '📺 Plateformes chargées';
+    document.getElementById('plat-label').innerHTML = `${labelTxt} <span id="plat-count" style="color:var(--gold)"></span>`;
+    document.getElementById('plat-fill').style.width = '100%';
+    this.populatePlatFilter();
+    populatePaysFilter();
+  },
+  onDetailFetched(idx, data) {
+    updateDetailPanel(idx, data);
+  },
+  onScrapeStart(btn) {
+    btn.disabled = true;
+    btn.textContent = '⏳ Scraping…';
+    show('progress-zone');
+    document.getElementById('error-banner').style.display = 'none';
+    document.getElementById('prog-fill').style.width = '0%';
+    document.getElementById('prog-label').textContent = 'Scraping en arrière-plan…';
+    document.getElementById('prog-sub').textContent = '';
+  },
+  onScrapeProgress(pct, annee, count) {
+    document.getElementById('prog-fill').style.width = pct + '%';
+    const anneeLabel = annee ? ` — ${annee}` : '';
+    document.getElementById('prog-label').textContent = `⏳ ${pct}%${anneeLabel} — ${count} films`;
+  },
+  onScrapeDone(btn, lastScrape) {
+    document.getElementById('prog-fill').style.width = '100%';
+    document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films récupérés`;
+    document.getElementById('prog-sub').textContent = '';
+    btn.disabled = false;
+    btn.textContent = '▶ Lancer le scraping';
+    if (lastScrape) updateLastScrapeLabel(lastScrape);
+    if (!_allFilms.length) show('empty');
+    show('filter-bar');
+    show('results-header');
+    show('table-wrap');
+  },
+  onScrapeError(btn) {
+    btn.disabled = false;
+    btn.textContent = '▶ Lancer le scraping';
+    document.getElementById('prog-label').textContent = '❌ Connexion perdue';
+    this.showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
+  },
+  onCacheLoaded(label) {
     const lbl = document.getElementById('last-scrape-label');
     if (lbl) { lbl.textContent = `Cache du ${label}`; lbl.style.color = 'var(--muted)'; }
-
-    populateGenreFilter();
-    populatePlatFilter();
+    this.populateGenreFilter();
+    this.populatePlatFilter();
     populatePaysFilter();
-    applySort();
-    applyFilters();
-    show('filter-bar'); show('results-header'); show('table-wrap');
-    reapplyBadges();
-    reapplyUserActions();
-    return true;
-  } catch(e) { console.warn('[cache] Erreur chargement :', e.message); return false; }
-}
-
-// ─── Base de données utilisateur ─────────────────────────────────
-async function loadUserdata() {
-  try {
-    const r = await fetch('/api/userdata');
-    _userdata = await r.json();
-    reapplyUserActions();
-    applyFilters();
-  } catch(e) { console.warn('Erreur chargement userdata:', e.message); }
-}
-
-async function loadLastScrape() {
-  try {
-    const r = await fetch('/api/health');
-    const d = await r.json();
+    applySort(); // rend le tableau + applique les filtres
+    show('filter-bar');
+    show('results-header');
+    show('table-wrap');
+  },
+  onFilmsFromServer(d) {
     if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
-  } catch(e) {}
-}
-
-function updateLastScrapeLabel(iso) {
-  const el = document.getElementById('last-scrape-label');
-  if (!el || !iso) return;
-  const d = new Date(iso);
-  const label = d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-  el.textContent = `Dernier scraping : ${label}`;
-  el.style.color = 'var(--gold)';
-}
-
-async function saveUserdata(id) {
-  try {
-    await fetch('/api/userdata', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, ...(_userdata[id] || {}) })
+    show('filter-bar');
+    show('results-header');
+    show('table-wrap');
+  },
+  populateGenreFilter() {
+    const genres = new Set();
+    _allFilms.forEach(f => f.genre.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
+    const dd = document.getElementById('genre-dropdown');
+    dd.innerHTML = '';
+    [...genres].sort().forEach(g => {
+      const id = `genre-cb-${g.replace(/\s+/g, '_')}`;
+      const lbl = document.createElement('label');
+      lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="applyFilters()"> ${esc(g)}`;
+      dd.appendChild(lbl);
     });
-  } catch(e) { console.warn('Erreur sauvegarde userdata:', e.message); }
-}
+    const actions = document.createElement('div');
+    actions.className = 'ms-actions';
+    actions.innerHTML = `<button onclick="selectAllGenres(false)">Tous</button><button onclick="selectExcludeAnimDoc()">Sauf Animation et Documentaire</button>`;
+    dd.appendChild(actions);
+    if (!_genreDefaultApplied) { _genreDefaultApplied = true; selectExcludeAnimDoc(); }
+    else updateGenreBtn();
+  },
+  populatePlatFilter() {
+    const sel = document.getElementById('fil-plat');
+    if (!sel) return;
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Toutes les plateformes</option>';
+    [..._allPlats].sort().forEach(p =>
+      sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
+    );
+  },
+  updateSortButtons(sortBy) {
+    const thAnnee = document.getElementById('th-annee');
+    const thPresse = document.getElementById('th-presse');
+    const thSpect = document.getElementById('th-spect');
+    if (!thPresse || !thSpect || !thAnnee) return;
+    thAnnee.classList.toggle('active', sortBy === 'annee');
+    thPresse.classList.toggle('active', sortBy === 'presse');
+    thSpect.classList.toggle('active', sortBy === 'spectateurs');
+    thAnnee.textContent = sortBy === 'annee' ? 'Année ↓' : 'Année';
+    thPresse.textContent = sortBy === 'presse' ? 'Presse ↓' : 'Presse';
+    thSpect.textContent = sortBy === 'spectateurs' ? 'Spectateurs ↓' : 'Spectateurs';
+  },
+  reapplyUserActions() {
+    _allFilms.forEach((film, i) => this.renderUserActions(film, i));
+  },
+  applyFilters() { applyFiltersDesktop(); },
+  showError(msg) {
+    const b = document.getElementById('error-banner');
+    b.style.display = 'block';
+    b.textContent = msg;
+  }
+};
 
-function renderUserActions(film, idx) {
-  const id = film.allocineId;
-  if (!id) return '<span style="color:var(--muted);font-size:10px">—</span>';
-  const ud = _userdata[id] || {};
-  return `<div class="user-actions">
-    <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')" title="J'ai vu ce film">👁</button>
-    <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')" title="Je veux le voir">🔖</button>
-    <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')" title="Pas intéressé">✕</button>
-  </div>`;
-}
-
-function toggleUA(id, idx, field) {
-  if (!_userdata[id]) _userdata[id] = {};
-  _userdata[id][field] = !_userdata[id][field];
-  const el = document.getElementById(`ua-${idx}`);
-  const film = _allFilms[idx];
-  if (el && film) el.innerHTML = renderUserActions(film, idx);
-  saveUserdata(id);
-}
-
-function reapplyUserActions() {
-  _allFilms.forEach((film, i) => {
-    const el = document.getElementById(`ua-${i}`);
-    if (el) el.innerHTML = renderUserActions(film, i);
-  });
-}
-
-function reapplyBadges() {
-  _allFilms.forEach((film, i) => {
-    const det = _details[filmKey(film)];
-    if (!det) return;
-    const el = document.getElementById(`plat-${i}`);
-    if (el) el.innerHTML = renderPlatBadges(det.providers || []);
-  });
-}
-
-// ── Mini-console de debug visible dans la page ──
+// ─── Mini-console de debug ────────────────────────────────────────────────────
 const _dbgLines = [];
 function dbgLog(msg) {
   const ts = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
@@ -534,298 +560,33 @@ function dbgLog(msg) {
   console.log('[DBG]', msg);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Scraping principal
-// ─────────────────────────────────────────────────────────────
-function startScrape() {
-  const noteMin = parseFloat(document.getElementById('inp-note').value || '3.5');
-  const btn     = document.getElementById('btn-run');
-
-  _scrapingDone = false;
-  _loadGen++;  // invalide tous les workers de plateformes en cours
-
-  btn.disabled = true;
-  btn.textContent = '⏳ Scraping…';
-  show('progress-zone');
-  document.getElementById('error-banner').style.display = 'none';
-  document.getElementById('prog-fill').style.width = '0%';
-  document.getElementById('prog-label').textContent = 'Scraping en arrière-plan…';
-  document.getElementById('prog-sub').textContent = '';
-
-  const seen = new Set();
-  const pendingFilms = []; // accumule sans toucher à l'écran
-
-  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023&noteMin=${noteMin}`);
-
-  es.onmessage = e => {
-    const d = JSON.parse(e.data);
-
-    if (d.type === 'films') {
-      const pct = Math.round(d.page / d.total * 100);
-      document.getElementById('prog-fill').style.width = pct + '%';
-      const anneeLabel = d.annee ? ` — ${d.annee}` : '';
-      document.getElementById('prog-label').textContent =
-        `⏳ ${pct}%${anneeLabel} — ${pendingFilms.length} films`;
-
-      d.films.forEach(f => {
-        const key = `${f.titre.toLowerCase()}|${f.notePresse}`;
-        if (!seen.has(key)) { seen.add(key); pendingFilms.push(f); }
-      });
-    }
-
-    if (d.type === 'error') showError(`⚠ Erreur page ${d.page} : ${d.message}`);
-
-    if (d.type === 'done') {
-      es.close();
-      // Mise à jour de l'écran seulement maintenant
-      _allFilms = pendingFilms;
-      _allPlats = new Set(); _platsDone = 0;
-      // _details conservé : on ne re-scrappe que si > 24h (TTL serveur)
-      _scrapingDone = true; // scraping terminé, le worker peut s'arrêter
-      populateGenreFilter();
-      populatePlatFilter();
-      populatePaysFilter();
-      renderTable(_allFilms);
-      applySort();
-      applyFilters();
-      show('filter-bar'); show('results-header'); show('table-wrap');
-      document.getElementById('prog-fill').style.width = '100%';
-      document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films récupérés`;
-      document.getElementById('prog-sub').textContent = '';
-      btn.disabled = false;
-      btn.textContent = '▶ Lancer le scraping';
-      if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
-      if (!_allFilms.length) show('empty');
-      startPlatformLoading();
-    }
-  };
-
-  es.onerror = () => {
-    es.close();
-    _scrapingDone = true;
-    btn.disabled = false;
-    btn.textContent = '▶ Lancer le scraping';
-    document.getElementById('prog-label').textContent = '❌ Connexion perdue';
-    showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
-  };
+// ─── Utilitaires ──────────────────────────────────────────────────────────────
+function show(id) { document.getElementById(id).style.display = 'flex'; }
+function hide(id) { document.getElementById(id).style.display = 'none'; }
+function dl(blob, name) {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url;
+  a.download = name;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function getFilmUrl(film) {
+  return film.allocineId
+    ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`
+    : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(film.titre)}`;
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Chargement automatique des plateformes (4 en parallèle)
-// ─────────────────────────────────────────────────────────────
-async function startPlatformLoading() {
-  const gen = _loadGen;
-  _platsDone = 0;
-  let _platErrors = 0;
-
-  show('plat-zone');
-  document.getElementById('plat-fill').style.width = '0%';
-  const dbgEl = document.getElementById('plat-debug');
-  if (dbgEl) { dbgEl.style.display = 'none'; dbgEl.textContent = ''; }
-  updatePlatProgress();
-
-  let idx = 0;
-
-  async function worker() {
-    while (true) {
-      if (_loadGen !== gen) return;
-
-      if (idx < _allFilms.length) {
-        const i = idx++;
-        const key = filmKey(_allFilms[i]);
-
-        if (_details[key]) {
-          // Film déjà connu — badge instantané, pas de requête réseau
-          _platsDone++;
-          const el = document.getElementById(`plat-${i}`);
-          if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
-          (_details[key].providers || []).forEach(p => _allPlats.add(p.name));
-          updatePlatProgress();
-          continue;
-        }
-
-        const err = await fetchDetails(i, gen);
-        if (_loadGen !== gen) return;
-        _platsDone++;
-        if (err) {
-          _platErrors++;
-          const d = document.getElementById('plat-debug');
-          if (d) { d.style.display = 'block'; d.textContent = `⚠️ ${_platErrors} erreur(s) — ${err}`; }
-        }
-        updatePlatProgress();
-
-      } else if (_scrapingDone) {
-        break; // scraping terminé et tous les films traités
-      } else {
-        await sleep(300); // attend de nouveaux films du scraper
-      }
-    }
-  }
-
-  await worker();
-
-  if (_loadGen !== gen) return;
-
-  // Tri final une fois TOUTES les plateformes chargées
-  // (on ne trie pas avant pour que les indices restent stables pendant le worker)
-  applySort();
-
-  const labelTxt = _platErrors > 0
-    ? `📺 Plateformes chargées (${_platErrors} échec(s))`
-    : '📺 Plateformes chargées';
-  document.getElementById('plat-label').innerHTML = `${labelTxt} <span id="plat-count" style="color:var(--gold)"></span>`;
-  document.getElementById('plat-fill').style.width = '100%';
-  populatePlatFilter();
-  populatePaysFilter();
-  saveFilmsCache();
-}
-
-function updatePlatProgress() {
-  const total = _allFilms.length;
-  const pct   = total ? Math.round(_platsDone / total * 100) : 0;
-  document.getElementById('plat-fill').style.width = pct + '%';
-  document.getElementById('plat-count').textContent = `${_platsDone} / ${total}`;
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Fetch d'un film individuel
-// ─────────────────────────────────────────────────────────────
-// Retourne null si ok, ou un message d'erreur si échec
-async function fetchDetails(idx, gen) {
-  if (_loadGen !== gen) return null;
-
-  // Capture la référence AVANT tout await — _allFilms peut être re-trié entre temps
-  const film = _allFilms[idx];
-  if (!film) return null;
-  const key  = filmKey(film);
-  if (_details[key]) return null; // déjà chargé
-
-  // Retrouve la position courante du film dans _allFilms (après un éventuel re-tri)
-  const platEl = () => {
-    const cur = _allFilms.indexOf(film);
-    return cur >= 0 ? document.getElementById(`plat-${cur}`) : null;
-  };
-
-  try {
-    const params = new URLSearchParams();
-    if (film.allocineId) params.set('allocineId', film.allocineId);
-    else params.set('q', film.titre);
-
-    const resp = await fetch(`/api/details?${params}`);
-    if (_loadGen !== gen) return null;
-
-    if (!resp.ok) {
-      const errMsg = `HTTP ${resp.status} pour "${film.titre}"`;
-      console.error('[plateformes]', errMsg);
-      _details[key] = { providers: [] };
-      const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
-      return errMsg;
-    }
-
-    const data = await resp.json();
-    if (_loadGen !== gen) return null;
-
-    if (data.error) {
-      console.warn(`[plateformes] "${film.titre}" → erreur serveur: ${data.error}`);
-      _details[key] = { providers: [] };
-      const el = platEl(); if (el) el.innerHTML = `<span class="pb-none" title="${data.error}">⚠</span>`;
-      return data.error;
-    }
-
-    _details[key] = data;
-    if (data.allocineId && !film.allocineId) film.allocineId = data.allocineId;
-
-    const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
-    (data.providers || []).forEach(p => _allPlats.add(p.name));
-    // Mise à jour progressive du filtre pays
-    if (data.pays) populatePaysFilter();
-    // Met à jour le panneau détail si ouvert
-    const curIdx = _allFilms.indexOf(film);
-    if (curIdx >= 0) updateDetailPanel(curIdx, data);
-
-    if (!data.providers || data.providers.length === 0)
-      console.log(`[plateformes] "${film.titre}" → aucune plateforme`);
-
-    return null;
-
-  } catch (e) {
-    if (_loadGen !== gen) return null;
-    const errMsg = `Réseau: ${e.message}`;
-    console.error('[plateformes]', film.titre, e);
-    _details[key] = { providers: [] };
-    const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
-    return errMsg;
-  }
-}
-
-function renderPlatBadges(providers) {
-  if (!providers || providers.length === 0) return '<span class="pb-none">—</span>';
-  return '<div class="plat-badges">' +
-    providers.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('') +
-    '</div>';
-}
-
-// ─────────────────────────────────────────────────────────────
-//  Filtres
-// ─────────────────────────────────────────────────────────────
-let _genreDefaultApplied = false;
-
-function populateGenreFilter() {
-  const genres = new Set();
-  _allFilms.forEach(f => f.genre.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
-  const dd = document.getElementById('genre-dropdown');
-  dd.innerHTML = '';
-  [...genres].sort().forEach(g => {
-    const id = `genre-cb-${g.replace(/\s+/g, '_')}`;
-    const lbl = document.createElement('label');
-    lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="applyFilters()"> ${esc(g)}`;
-    dd.appendChild(lbl);
-  });
-  // Boutons actions
-  const actions = document.createElement('div');
-  actions.className = 'ms-actions';
-  actions.innerHTML = `
-    <button onclick="selectAllGenres(false)">Tous</button>
-    <button onclick="selectExcludeAnimDoc()">Sauf Animation et Documentaire</button>
-  `;
-  dd.appendChild(actions);
-  // Applique le filtre par défaut une seule fois
-  if (!_genreDefaultApplied) { _genreDefaultApplied = true; selectExcludeAnimDoc(); }
-  else updateGenreBtn();
-}
-
+// ─── Filtres desktop ──────────────────────────────────────────────────────────
 function selectExcludeAnimDoc() {
   const EXCLUDED = ['animation', 'documentaire'];
   document.querySelectorAll('#genre-dropdown input[type=checkbox]').forEach(cb => {
     cb.checked = !EXCLUDED.includes(cb.value.toLowerCase());
   });
   updateGenreBtn();
-  applyFilters();
-}
-
-function populatePlatFilter() {
-  const sel = document.getElementById('fil-plat');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Toutes les plateformes</option>';
-  [..._allPlats].sort().forEach(p =>
-    sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
-  );
-}
-
-function populatePaysFilter() {
-  const paysSet = new Set();
-  Object.values(_details).forEach(det => {
-    if (!det || !det.pays) return;
-    det.pays.split(',').map(p => p.trim()).filter(Boolean).forEach(p => paysSet.add(p));
-  });
-  const sel = document.getElementById('fil-pays');
-  const cur = sel.value;
-  sel.innerHTML = '<option value="">Tous les pays</option>';
-  [...paysSet].sort((a, b) => a.localeCompare(b, 'fr')).forEach(p =>
-    sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
-  );
-  // Restaure la sélection si le pays est toujours dans la liste
-  if (cur && [...paysSet].includes(cur)) sel.value = cur;
+  applyFiltersDesktop();
 }
 
 function getSelectedGenres() {
@@ -855,46 +616,42 @@ function selectAllGenres(checked) {
   document.querySelectorAll('#genre-dropdown input[type=checkbox]')
     .forEach(cb => cb.checked = checked);
   updateGenreBtn();
-  applyFilters();
+  applyFiltersDesktop();
 }
 
-// Fermer le dropdown si on clique ailleurs
 document.addEventListener('click', () => {
   document.getElementById('genre-dropdown')?.classList.remove('open');
 });
 
-function applyFilters() {
+function applyFiltersDesktop() {
   updateGenreBtn();
-  const selectedGenres = getSelectedGenres(); // [] = tous
-  const anneeFilter = document.getElementById('fil-annee').value;          // '' | '2025' | …
-  const typeFilter  = document.getElementById('fil-type').value;            // '' | 'svod' | 'vod'
-  const plat    = document.getElementById('fil-plat').value.toLowerCase();
+  const selectedGenres = getSelectedGenres();
+  const anneeFilter = document.getElementById('fil-annee').value;
+  const typeFilter = document.getElementById('fil-type').value;
+  const plat = document.getElementById('fil-plat').value.toLowerCase();
   const paysFilter = document.getElementById('fil-pays').value;
   const noteMin = parseFloat(document.getElementById('fil-note').value || '0');
-  const onlyVoir  = document.getElementById('fil-only-voir')?.checked;
-  const showAll   = document.getElementById('fil-show-all')?.checked;
+  const onlyVoir = document.getElementById('fil-only-voir')?.checked;
+  const showAll = document.getElementById('fil-show-all')?.checked;
 
   const rows = document.querySelectorAll('tr.film-row');
   let visible = 0;
   rows.forEach(row => {
-    const i    = parseInt(row.dataset.idx);
+    const i = parseInt(row.dataset.idx);
     const film = _allFilms[i];
-    const det  = _details[filmKey(film)] || {};
-    const provObjs  = det.providers || [];
+    const det = _details[filmKey(film)] || {};
+    const provObjs = det.providers || [];
     const providers = provObjs.map(p => p.name.toLowerCase());
     const filmGenres = film.genre.split(',').map(g => g.trim().toLowerCase());
-    const filmPays   = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
-
+    const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const ud = _userdata[film.allocineId] || {};
 
-    const matchGenre  = selectedGenres.length === 0
-      || selectedGenres.some(g => filmGenres.some(fg => fg.includes(g)));
-    const matchAnnee  = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
-    const matchPlat   = !plat  || providers.some(p => p.includes(plat));
-    const matchPays   = !paysFilter || filmPays.some(p => p === paysFilter);
-    const matchNote   = film.notePresse >= noteMin;
-    const matchListe  = (showAll || (!ud.vu && !ud.nonInteresse))
-                     && (!onlyVoir || !!ud.vouloir);
+    const matchGenre = selectedGenres.length === 0 || selectedGenres.some(g => filmGenres.some(fg => fg.includes(g)));
+    const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
+    const matchPlat = !plat || providers.some(p => p.includes(plat));
+    const matchPays = !paysFilter || filmPays.some(p => p === paysFilter);
+    const matchNote = film.notePresse >= noteMin;
+    const matchListe = (showAll || (!ud.vu && !ud.nonInteresse)) && (!onlyVoir || !!ud.vouloir);
 
     let matchType = true;
     if (typeFilter === 'svod') {
@@ -904,94 +661,38 @@ function applyFilters() {
     }
 
     const ok = matchGenre && matchAnnee && matchType && matchPlat && matchPays && matchNote && matchListe;
-
     row.style.display = ok ? '' : 'none';
     const dr = document.getElementById(`detail-${i}`);
     if (dr) dr.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });
 
-  document.getElementById('filter-count').textContent =
-    `${visible} film${visible > 1 ? 's' : ''} affiché${visible > 1 ? 's' : ''}`;
-  document.getElementById('result-count').textContent =
-    `${_allFilms.length} films · ${visible} affichés`;
+  document.getElementById('filter-count').textContent = `${visible} film${visible > 1 ? 's' : ''} affiché${visible > 1 ? 's' : ''}`;
+  document.getElementById('result-count').textContent = `${_allFilms.length} films · ${visible} affichés`;
   document.getElementById('empty').style.display = visible === 0 ? 'block' : 'none';
-}
-
-function applySort(critere) {
-  if (critere) _sortBy = critere;
-
-  // Mettre à jour l'apparence des en-têtes
-  const thAnnee = document.getElementById('th-annee');
-  const thPresse = document.getElementById('th-presse');
-  const thSpect  = document.getElementById('th-spect');
-  if (thPresse && thSpect && thAnnee) {
-    thAnnee.classList.toggle('active',  _sortBy === 'annee');
-    thPresse.classList.toggle('active', _sortBy === 'presse');
-    thSpect.classList.toggle('active',  _sortBy === 'spectateurs');
-    thAnnee.textContent  = _sortBy === 'annee'        ? 'Année ↓'        : 'Année';
-    thPresse.textContent = _sortBy === 'presse'       ? 'Presse ↓'       : 'Presse';
-    thSpect.textContent  = _sortBy === 'spectateurs'  ? 'Spectateurs ↓'  : 'Spectateurs';
-  }
-
-  // Trier _allFilms selon le critère choisi
-  _allFilms.sort((a, b) => {
-    if (_sortBy === 'annee') {
-      // Priorité à l'année réelle (chargée depuis les détails), sinon année VOD
-      const ya = parseInt(a.anneeReelle || a.anneeSortie) || 0;
-      const yb = parseInt(b.anneeReelle || b.anneeSortie) || 0;
-      return yb - ya || b.notePresse - a.notePresse;
-    }
-    if (_sortBy === 'spectateurs') {
-      if (a.noteSpect == null && b.noteSpect == null) return 0;
-      if (a.noteSpect == null) return 1;
-      if (b.noteSpect == null) return -1;
-      return b.noteSpect - a.noteSpect || b.notePresse - a.notePresse;
-    }
-    return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
-  });
-
-  // Re-rendre le tableau avec le nouvel ordre
-  renderTable(_allFilms);
-
-  // Réappliquer les plateformes déjà chargées
-  _allFilms.forEach((film, i) => {
-    const det = _details[filmKey(film)];
-    if (!det) return;
-    const platEl = document.getElementById(`plat-${i}`);
-    if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
-  });
-  reapplyUserActions();
-
-  applyFilters();
 }
 
 function resetFilters() {
   selectAllGenres(false);
-  document.getElementById('fil-annee').value      = '';
-  document.getElementById('fil-type').value       = '';
-  document.getElementById('fil-plat').value       = '';
-  document.getElementById('fil-pays').value       = '';
-  document.getElementById('fil-note').value       = '3.5';
+  document.getElementById('fil-annee').value = '';
+  document.getElementById('fil-type').value = '';
+  document.getElementById('fil-plat').value = '';
+  document.getElementById('fil-pays').value = '';
+  document.getElementById('fil-note').value = '3.5';
   document.getElementById('fil-only-voir').checked = false;
-  document.getElementById('fil-show-all').checked  = false;
+  document.getElementById('fil-show-all').checked = false;
   _sortBy = 'presse';
   applySort();
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Rendu du tableau
-// ─────────────────────────────────────────────────────────────
+// ─── Rendu du tableau ─────────────────────────────────────────────────────────
 function renderTable(films) {
   const tbody = document.getElementById('tbody');
   tbody.innerHTML = films.map((f, idx) => `
     <tr class="film-row" data-idx="${idx}" onclick="window.open('${getFilmUrl(f)}','_blank')">
       <td class="td-num">${idx + 1}</td>
       <td class="td-arrow" onclick="event.stopPropagation();toggleDetail(${idx})" title="Voir le résumé"></td>
-      <td class="td-title">
-        ${esc(f.titre)}
-        ${f.titreOriginal ? `<div class="td-orig">${esc(f.titreOriginal)}</div>` : ''}
-      </td>
+      <td class="td-title">${esc(f.titre)}${f.titreOriginal ? `<div class="td-orig">${esc(f.titreOriginal)}</div>` : ''}</td>
       <td class="td-genre">${esc(f.genre || '—')}</td>
       <td class="td-real"><strong>${esc(f.realisateur || '—')}</strong></td>
       <td class="td-cast">${esc((f.acteurs||'').split(',').map(a=>a.trim()).filter(Boolean).slice(0,4).join(', ') || '—')}</td>
@@ -999,58 +700,42 @@ function renderTable(films) {
       <td class="td-note ${f.notePresse >= 4 ? 'note-green' : 'note-orange'}">${f.notePresse.toFixed(1)}</td>
       <td class="td-spect">${f.noteSpect != null ? f.noteSpect.toFixed(1) : '—'}</td>
       <td class="td-plat" id="plat-${idx}"><span class="pb-loading">…</span></td>
-      <td onclick="event.stopPropagation()" id="ua-${idx}">${renderUserActions(f, idx)}</td>
+      <td onclick="event.stopPropagation()" id="ua-${idx}"></td>
     </tr>
     <tr class="detail-row" id="detail-${idx}" style="display:none">
-      <td colspan="11">
-        <div class="detail-panel" id="panel-${idx}">
-          <div class="synopsis-block">
-            <h4>📖 Résumé</h4>
-            <p class="synopsis-text ${f.synopsis ? '' : 'empty'}">
-              ${f.synopsis ? esc(f.synopsis) : 'Résumé non disponible sur la page de liste.'}
-            </p>
-          </div>
-          <div class="meta-block">
-            <div class="meta-item">
-              <h4>🌍 Pays</h4>
-              <p id="pays-${idx}" class="loading">Chargement…</p>
-            </div>
-            <div class="meta-item">
-              <h4>📅 Année</h4>
-              <p id="annee-${idx}" class="loading">Chargement…</p>
-            </div>
-          </div>
+      <td colspan="11"><div class="detail-panel" id="panel-${idx}">
+        <div class="synopsis-block"><h4>📖 Résumé</h4><p class="synopsis-text ${f.synopsis ? '' : 'empty'}">${f.synopsis ? esc(f.synopsis) : 'Résumé non disponible sur la page de liste.'}</p></div>
+        <div class="meta-block">
+          <div class="meta-item"><h4>🌍 Pays</h4><p id="pays-${idx}" class="loading">Chargement…</p></div>
+          <div class="meta-item"><h4>📅 Année</h4><p id="annee-${idx}" class="loading">Chargement…</p></div>
         </div>
-      </td>
+      </div></td>
     </tr>
   `).join('');
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Panneau détail (clic sur ligne)
-// ─────────────────────────────────────────────────────────────
 function toggleDetail(idx) {
-  const filmRow   = document.querySelector(`tr.film-row[data-idx="${idx}"]`);
+  const filmRow = document.querySelector(`tr.film-row[data-idx="${idx}"]`);
   if (!filmRow) return;
   const detailRow = document.getElementById(`detail-${idx}`);
-  const panel     = document.getElementById(`panel-${idx}`);
-  const isOpen    = filmRow.classList.contains('open');
+  const panel = document.getElementById(`panel-${idx}`);
+  const isOpen = filmRow.classList.contains('open');
 
   if (isOpen) {
     filmRow.classList.remove('open');
     if (detailRow) detailRow.style.display = 'none';
-    if (panel)     panel.classList.remove('visible');
+    if (panel) panel.classList.remove('visible');
   } else {
     filmRow.classList.add('open');
     if (detailRow) detailRow.style.display = '';
-    if (panel)     panel.classList.add('visible');
+    if (panel) panel.classList.add('visible');
     const key = filmKey(_allFilms[idx]);
     if (_details[key]) updateDetailPanel(idx, _details[key]);
   }
 }
 
 function updateDetailPanel(idx, data) {
-  const paysEl  = document.getElementById(`pays-${idx}`);
+  const paysEl = document.getElementById(`pays-${idx}`);
   const anneeEl = document.getElementById(`annee-${idx}`);
   if (paysEl) {
     paysEl.className = '';
@@ -1062,34 +747,30 @@ function updateDetailPanel(idx, data) {
     anneeEl.className = '';
     anneeEl.textContent = data.annee || '—';
   }
-  // Met à jour la cellule de la colonne Année avec la vraie année de production
   if (data.annee) {
     const film = _allFilms[idx];
-    if (film) film.anneeReelle = data.annee; // stocke pour le tri
+    if (film) film.anneeReelle = data.annee;
     const cellEl = document.getElementById(`annee-cell-${idx}`);
     if (cellEl) cellEl.textContent = data.annee;
   }
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Export CSV / Excel
-// ─────────────────────────────────────────────────────────────
+// ─── Export CSV / Excel ───────────────────────────────────────────────────────
 function downloadCSV() {
-  const BOM  = '\uFEFF';
+  const BOM = '\uFEFF';
   const head = ['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes'];
   const rows = _allFilms.map((f, i) => {
     const det = _details[filmKey(f)] || {};
     const plats = (det.providers || []).map(p => p.name).join(', ');
     return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
-            f.notePresse.toFixed(1), f.noteSpect != null ? f.noteSpect.toFixed(1) : '',
-            f.synopsis||'', plats];
+            f.notePresse.toFixed(1), f.noteSpect != null ? f.noteSpect.toFixed(1) : '', f.synopsis||'', plats];
   });
   const csv = BOM + [head,...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
   dl(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'allocine_vod.csv');
 }
 
 function downloadXLSX() {
-  const wb   = XLSX.utils.book_new();
+  const wb = XLSX.utils.book_new();
   const head = [['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes']];
   const rows = _allFilms.map((f, i) => {
     const det = _details[filmKey(f)] || {};
@@ -1103,9 +784,6 @@ function downloadXLSX() {
   XLSX.writeFile(wb, 'allocine_vod.xlsx');
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Test de connectivité AlloCiné
-// ─────────────────────────────────────────────────────────────
 async function clearCache() {
   const btn = document.getElementById('btn-cache');
   btn.disabled = true;
@@ -1139,7 +817,7 @@ async function testAllocine() {
     } else {
       btn.textContent = `❌ AlloCiné bloqué (${d.status || d.message})`;
       btn.style.background = '#c0392b';
-      alert(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}\n\nSi c\'est un 429, attendez 5-10 minutes avant de charger les plateformes.`);
+      alert(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}\n\nSi c'est un 429, attendez 5-10 minutes avant de charger les plateformes.`);
     }
   } catch (e) {
     btn.textContent = '❌ Erreur réseau';
@@ -1152,51 +830,24 @@ async function testAllocine() {
   }, 8000);
 }
 
-// ─────────────────────────────────────────────────────────────
-//  Utilitaires
-// ─────────────────────────────────────────────────────────────
-function filmKey(film) {
-  return film.allocineId || `${film.titre}::${film.realisateur||''}`;
-}
-function getFilmUrl(film) {
-  return film.allocineId
-    ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`
-    : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(film.titre)}`;
-}
-function esc(str) {
-  return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
-function show(id) { document.getElementById(id).style.display = 'flex'; }
-function hide(id) { document.getElementById(id).style.display = 'none'; }
-function dl(blob, name) {
-  const a = document.createElement('a'); const url = URL.createObjectURL(blob);
-  a.href = url; a.download = name; document.body.appendChild(a); a.click();
-  a.remove(); setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function showError(msg) { const b=document.getElementById('error-banner'); b.style.display='block'; b.textContent=msg; }
-
-// ── Confirmation scraping ─────────────────────────────────────────
-function openConfirm() {
-  const el = document.getElementById('confirm-last-scrape');
-  fetch('/api/health', { signal: AbortSignal.timeout(3000) })
-    .then(r => r.json())
-    .then(d => {
-      if (d.lastScrape) {
-        const dt = new Date(d.lastScrape);
-        const label = dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-        el.textContent = `Dernier scraping : ${label}`;
-      } else {
-        el.textContent = 'Aucun scraping effectué.';
-      }
-    })
-    .catch(() => { el.textContent = ''; });
-  document.getElementById('confirm-modal').classList.add('open');
-}
-function closeConfirm() {
-  document.getElementById('confirm-modal').classList.remove('open');
+function updateLastScrapeLabel(iso) {
+  const el = document.getElementById('last-scrape-label');
+  if (!el || !iso) return;
+  const d = new Date(iso);
+  const label = d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  el.textContent = `Dernier scraping : ${label}`;
+  el.style.color = 'var(--gold)';
 }
 
-// ── Panneau info ──────────────────────────────────────────────────
+async function loadLastScrape() {
+  try {
+    const r = await fetch('/api/health');
+    const d = await r.json();
+    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
+  } catch(e) {}
+}
+
+// ─── Panneau info ─────────────────────────────────────────────────────────────
 let _infoData = null;
 
 async function openInfo() {
@@ -1228,49 +879,13 @@ function renderInfo() {
   `;
 }
 
-// ─── Chargement films depuis le serveur (pour nouveaux visiteurs) ────────────
-async function loadFilmsFromServer() {
-  try {
-    const r = await fetch('/api/films', { signal: AbortSignal.timeout(8000) });
-    if (!r.ok) return false;
-    const d = await r.json();
-    if (!d.films || d.films.length === 0) return false;
-    _allFilms = d.films;
-    // Injecter les détails en cache (plateformes, pays, année) — 1 seule requête
-    if (d.details) {
-      d.films.forEach((film, i) => {
-        if (d.details[i]) {
-          _details[filmKey(film)] = d.details[i];
-          (d.details[i].providers || []).forEach(p => _allPlats.add(p.name));
-        }
-      });
-    }
-    populateGenreFilter();
-    populatePlatFilter();
-    populatePaysFilter();
-    applySort();
-    applyFilters();
-    show('filter-bar'); show('results-header'); show('table-wrap');
-    reapplyBadges();
-    reapplyUserActions();
-    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
-    console.log(`[server] ${d.films.length} films + ${Object.keys(_details).length} détails chargés`);
-    _scrapingDone = true;
-    startPlatformLoading(); // charge les films sans détails (nouveaux films sans cache)
-    return true;
-  } catch(e) {
-    console.warn('[server] Impossible de charger les films:', e.message);
-    return false;
-  }
-}
-
-// Chargement au démarrage
+// ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
-  const hadCache = loadFilmsCache(); // affiche le dernier scraping instantanément
+  const hadCache = loadCache();
   await loadUserdata();
   await loadLastScrape();
   if (!hadCache) {
-    await loadFilmsFromServer(); // nouveau visiteur → charge depuis le serveur
+    await loadFilmsFromServer();
   }
 })();
 </script>

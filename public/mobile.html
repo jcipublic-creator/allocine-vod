@@ -576,7 +576,7 @@ function populateGenreFilter() {
   const cur = _genreDefaultApplied ? sel.value : '__excl__';
   if (!_genreDefaultApplied) { _genreDefaultApplied = true; }
   sel.innerHTML = '<option value="">Tous genres</option>' +
-    '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Animation</option>' +
+    '<option value="__excl__"' + (cur === '__excl__' ? ' selected' : '') + '>Sauf Animation et Documentaire</option>' +
     [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
   applyFilters();
 }
@@ -645,7 +645,7 @@ function applyFilters() {
     const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const ud       = _userdata[film.allocineId] || {};
 
-    const EXCL_GENRES = ['animation'];
+    const EXCL_GENRES = ['animation', 'documentaire'];
     const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
     const matchGenre = !genreFilter
       || (genreFilter === '__excl__' && !genres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))

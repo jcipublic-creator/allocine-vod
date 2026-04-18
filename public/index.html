@@ -768,7 +768,7 @@ function populateGenreFilter() {
   actions.className = 'ms-actions';
   actions.innerHTML = `
     <button onclick="selectAllGenres(false)">Tous</button>
-    <button onclick="selectExcludeAnimDoc()">Sauf Animation</button>
+    <button onclick="selectExcludeAnimDoc()">Sauf Animation et Documentaire</button>
   `;
   dd.appendChild(actions);
   // Applique le filtre par défaut une seule fois
@@ -777,7 +777,7 @@ function populateGenreFilter() {
 }
 
 function selectExcludeAnimDoc() {
-  const EXCLUDED = ['animation'];
+  const EXCLUDED = ['animation', 'documentaire'];
   document.querySelectorAll('#genre-dropdown input[type=checkbox]').forEach(cb => {
     cb.checked = !EXCLUDED.includes(cb.value.toLowerCase());
   });

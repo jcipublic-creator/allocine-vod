@@ -243,6 +243,50 @@
   #empty { margin: 60px 32px; text-align: center; display: none; }
   #empty h2 { color: var(--muted); font-size: 18px; margin-bottom: 8px; }
 
+  /* ── Profils ── */
+  .profile-btn {
+    background: none; border: 1px solid var(--blue2); color: var(--muted);
+    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
+    transition: all .15s; display: flex; align-items: center; gap: 6px;
+  }
+  .profile-btn:hover { border-color: var(--gold); color: var(--gold); }
+  #profiles-modal {
+    display: none; position: fixed; inset: 0; z-index: 1000;
+    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
+  }
+  #profiles-modal.open { display: flex; }
+  .profiles-panel {
+    background: var(--blue); border: 1px solid var(--blue2); border-radius: 14px;
+    padding: 28px 32px; min-width: 340px; max-width: 460px; width: 90%;
+    box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
+  }
+  .profiles-panel h3 { color: var(--gold); font-size: 15px; margin-bottom: 20px; }
+  .profile-row-d {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 10px 0; border-bottom: 1px solid rgba(42,79,112,.4); cursor: pointer;
+  }
+  .profile-row-d:last-of-type { border-bottom: none; }
+  .profile-row-d.active { cursor: default; }
+  .profile-row-d .pname { font-size: 14px; color: var(--text); }
+  .profile-row-d .pbadge-active { font-size: 11px; color: var(--gold); }
+  .profile-row-d .pbadge-switch { font-size: 11px; color: var(--muted); }
+  .profile-row-d:not(.active):hover .pname { color: var(--gold); }
+  .profile-add-row { display: flex; gap: 8px; margin-top: 20px; }
+  .profile-add-input {
+    flex: 1; background: var(--navy); border: 1px solid var(--blue2);
+    color: var(--text); border-radius: 8px; padding: 9px 12px; font-size: 13px; outline: none;
+  }
+  .profile-add-input:focus { border-color: var(--gold); }
+  .profile-add-btn {
+    background: var(--gold); color: var(--navy); border: none; border-radius: 8px;
+    padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
+  }
+  .profile-close {
+    position: absolute; top: 14px; right: 16px; background: none; border: none;
+    color: var(--muted); font-size: 18px; cursor: pointer;
+  }
+  .profile-close:hover { color: var(--gold); }
+
   @media (max-width: 750px) {
     .controls, #filter-bar, #progress-zone, #plat-zone, #results-header, #table-wrap, #empty, #error-banner { margin-left: 12px; margin-right: 12px; }
     header { padding: 14px; }
@@ -256,9 +300,10 @@
 <header>
   <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
   <div style="display:flex;align-items:center;gap:10px">
-  <span id="last-scrape-label" style="font-size:12px;color:var(--muted)"></span>
-  <button class="info-btn" onclick="openInfo()" title="Informations">ℹ</button>
-</div>
+    <span id="last-scrape-label" style="font-size:12px;color:var(--muted)"></span>
+    <button class="profile-btn" onclick="openProfiles()" title="Changer de profil">👤 <span id="profile-name">—</span></button>
+    <button class="info-btn" onclick="openInfo()" title="Informations">ℹ</button>
+  </div>
 </header>
 
 <div id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
@@ -278,6 +323,14 @@
     <button class="info-close" onclick="closeInfo()">✕</button>
     <h3>ℹ Informations</h3>
     <div id="info-content">Chargement…</div>
+  </div>
+</div>
+
+<div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
+  <div class="profiles-panel">
+    <button class="profile-close" onclick="closeProfiles()">✕</button>
+    <h3>👤 Profils</h3>
+    <div id="profiles-content-d"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
   </div>
 </div>
 
@@ -560,6 +613,10 @@ const UI = {
     fill.style.width = '100%';
     setTimeout(() => { fill.style.width = '0%'; }, 1000);
     loadLastScrape();
+  },
+  showUserPicker(users) {
+    renderProfilesDesktop(users, true);
+    document.getElementById('profiles-modal').classList.add('open');
   }
 };
 
@@ -900,10 +957,93 @@ function renderInfo() {
   `;
 }
 
+// ─── Gestion des profils (desktop) ───────────────────────────────────────────
+async function openProfiles() {
+  document.getElementById('profiles-modal').classList.add('open');
+  document.getElementById('profiles-content-d').innerHTML =
+    '<p style="color:var(--muted);font-size:13px">Chargement…</p>';
+  try {
+    const list = await loadUsers();
+    renderProfilesDesktop(list);
+  } catch(e) {
+    document.getElementById('profiles-content-d').innerHTML =
+      '<p style="color:#e74c3c;font-size:13px">Erreur de chargement</p>';
+  }
+}
+
+function closeProfiles() {
+  document.getElementById('profiles-modal').classList.remove('open');
+}
+
+function renderProfilesDesktop(list, firstLaunch = false) {
+  const intro = firstLaunch
+    ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">Bienvenue ! Choisis ton profil ou crée-en un nouveau.</p>'
+    : '';
+  const rows = list.map(u => {
+    const isActive = u.id === _currentUserId;
+    return `<div class="profile-row-d ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfileDesktop('${u.id}')"`}>
+      <span class="pname">${esc(u.name)}</span>
+      ${isActive ? '<span class="pbadge-active">● Actif</span>' : '<span class="pbadge-switch">Sélectionner →</span>'}
+    </div>`;
+  }).join('');
+  document.getElementById('profiles-content-d').innerHTML = `
+    ${intro}
+    <div style="margin-bottom:4px">
+      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Profils disponibles</div>
+      ${rows || '<p style="color:var(--muted);font-size:13px">Aucun profil</p>'}
+    </div>
+    <div class="profile-add-row">
+      <input type="text" id="new-user-name-d" class="profile-add-input"
+        placeholder="Nouveau profil…" maxlength="30"
+        onkeydown="if(event.key==='Enter')onAddUserDesktop()">
+      <button class="profile-add-btn" onclick="onAddUserDesktop()">+ Ajouter</button>
+    </div>`;
+}
+
+async function selectProfileDesktop(userId) {
+  switchUser(userId);
+  _userdata = {};
+  await loadUserdata();
+  updateProfileBtn();
+  closeProfiles();
+}
+
+async function onAddUserDesktop() {
+  const input = document.getElementById('new-user-name-d');
+  const name = input ? input.value.trim() : '';
+  if (!name) { input && input.focus(); return; }
+  input.disabled = true;
+  try {
+    await createUser(name);
+    _userdata = {};
+    await loadUserdata();
+    updateProfileBtn();
+    closeProfiles();
+  } catch(e) {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+function updateProfileBtn() {
+  loadUsers().then(list => {
+    const u = list.find(u => u.id === _currentUserId);
+    const el = document.getElementById('profile-name');
+    if (el && u) el.textContent = u.name;
+  }).catch(() => {});
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
+  const userInit = await initUser();
+  if (userInit.mode === 'pick') {
+    renderProfilesDesktop(userInit.users, true);
+    document.getElementById('profiles-modal').classList.add('open');
+  } else if (_currentUserId) {
+    updateProfileBtn();
+  }
   const hadCache = loadCache();
-  await loadUserdata();
+  if (_currentUserId) await loadUserdata();
   await loadLastScrape();
   if (!hadCache) await loadFilmsFromServer();
   startAutoScrapeMonitoring();

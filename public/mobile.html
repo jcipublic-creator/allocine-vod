@@ -200,6 +200,25 @@ body {
   font-size: 14px; font-weight: 600; cursor: pointer;
 }
 
+/* Confirm modal */
+#confirm-modal {
+  display: none; position: fixed; inset: 0; z-index: 600;
+  background: rgba(0,0,0,.75); align-items: flex-end; justify-content: center;
+  padding-bottom: var(--sb);
+}
+#confirm-modal.open { display: flex; }
+.confirm-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 24px 20px calc(20px + var(--sb)); width: 100%;
+}
+.confirm-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 10px; }
+.confirm-sheet p  { font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 6px; }
+.confirm-sheet .last-scrape { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+.confirm-btns { display: flex; gap: 10px; }
+.confirm-btns button { flex: 1; padding: 13px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-confirm { background: var(--gold); color: #000; }
+.btn-cancel  { background: var(--blue3); color: var(--text); }
+
 /* Error banner */
 #error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
   border: 1px solid rgba(200,80,80,.4); border-radius: 10px; font-size: 13px;
@@ -207,6 +226,18 @@ body {
 </style>
 </head>
 <body>
+
+<div id="confirm-modal">
+  <div class="confirm-sheet">
+    <h3>🔄 Relancer le scraping ?</h3>
+    <p>La liste sera mise à jour en arrière-plan.</p>
+    <div class="last-scrape" id="confirm-last-scrape"></div>
+    <div class="confirm-btns">
+      <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
+      <button class="btn-confirm" onclick="closeConfirm();startScrape()">Confirmer</button>
+    </div>
+  </div>
+</div>
 
 <div id="info-modal" onclick="if(event.target===this)closeInfo()">
   <div class="info-sheet">
@@ -224,7 +255,7 @@ body {
     <span class="note-label">≥</span>
     <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
   </div>
-  <button class="btn-scrape" id="btn-run" onclick="startScrape()" disabled>▶ Scraper</button>
+  <button class="btn-scrape" id="btn-run" onclick="openConfirm()" disabled>▶ Scraper</button>
 </div>
 
 <div class="prog-zone" id="prog-zone">
@@ -833,6 +864,29 @@ if ('serviceWorker' in navigator) {
   navigator.serviceWorker.register('/sw.js').catch(e =>
     console.warn('SW non enregistré :', e.message)
   );
+}
+
+// ─── Confirmation scraping ────────────────────────────────────────────────────
+function openConfirm() {
+  const el = document.getElementById('confirm-last-scrape');
+  const statusEl = document.getElementById('server-status');
+  // Récupère la date depuis /api/health
+  fetch('/api/health', { signal: AbortSignal.timeout(3000) })
+    .then(r => r.json())
+    .then(d => {
+      if (d.lastScrape) {
+        const dt = new Date(d.lastScrape);
+        const label = dt.toLocaleDateString('fr-FR') + ' à ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+        el.textContent = `Dernier scraping : ${label}`;
+      } else {
+        el.textContent = 'Aucun scraping effectué.';
+      }
+    })
+    .catch(() => { el.textContent = ''; });
+  document.getElementById('confirm-modal').classList.add('open');
+}
+function closeConfirm() {
+  document.getElementById('confirm-modal').classList.remove('open');
 }
 
 // ─── Panneau info ─────────────────────────────────────────────────────────────

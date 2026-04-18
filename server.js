@@ -11,6 +11,7 @@ const TOTAL_PAGES = Number(process.env.TOTAL_PAGES || 25);
 const DETAILS_TTL_MS    = 1000 * 60 * 60 * 24; // 24h
 const AUTO_SCRAPE_DAYS  = 3;                   // re-scraper si cache > 3 jours
 let   isScraping        = false;
+let   scrapeProgress    = { current: 0, total: 0, annee: '' };
 const BUILD = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();
@@ -490,6 +491,12 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+app.get('/api/scrape-status', (_req, res) => {
+  const pct = scrapeProgress.total
+    ? Math.round(scrapeProgress.current / scrapeProgress.total * 100) : 0;
+  res.json({ isScraping, pct, annee: scrapeProgress.annee });
+});
+
 app.get('/api/scrape', async (req, res) => {
   if (isScraping) return res.status(429).json({ error: 'Scraping déjà en cours' });
   isScraping = true;
@@ -685,11 +692,16 @@ async function autoScrapeIfStale() {
   const noteMin = 3.5;
   const allFilms = [];
   lastScrapeErrors = [];
+  const totalPages = annees.length * TOTAL_PAGES;
+  let globalPage = 0;
+  scrapeProgress = { current: 0, total: totalPages, annee: '' };
 
   try {
     for (const annee of annees) {
       const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
       for (let page = 1; page <= TOTAL_PAGES; page++) {
+        globalPage++;
+        scrapeProgress = { current: globalPage, total: totalPages, annee };
         const url = base + page;
         try {
           let html = getCachedPage(url);
@@ -719,6 +731,7 @@ async function autoScrapeIfStale() {
     console.log(`✅ Auto-scrape terminé — ${result.length} films\n`);
   } finally {
     isScraping = false;
+    scrapeProgress = { current: 0, total: 0, annee: '' };
   }
 }
 

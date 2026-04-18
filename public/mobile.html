@@ -32,6 +32,19 @@ body {
   min-height: 100dvh;
 }
 
+/* ── Barre auto-scrape ── */
+#auto-scrape-bar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 999;
+  height: 3px; pointer-events: none;
+}
+#auto-scrape-fill {
+  height: 100%; width: 0%;
+  background: linear-gradient(90deg, var(--gold), #ffe080);
+  transition: width 2s ease;
+  border-radius: 0 2px 2px 0;
+  box-shadow: 0 0 8px rgba(240,192,64,.7);
+}
+
 /* ── Header ── */
 .header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 200;
@@ -282,6 +295,8 @@ body {
 </head>
 <body>
 
+<div id="auto-scrape-bar"><div id="auto-scrape-fill"></div></div>
+
 <div id="confirm-modal">
   <div class="confirm-sheet">
     <h3>🔄 Relancer le scraping ?</h3>
@@ -494,6 +509,16 @@ const UI = {
     el.textContent = msg;
     el.style.display = 'block';
     setTimeout(() => { el.style.display = 'none'; }, 8000);
+  },
+  showAutoScrapeBar(pct, annee) {
+    document.getElementById('auto-scrape-fill').style.width = pct + '%';
+    document.getElementById('server-status').textContent = `🔄 ${annee || ''} ${pct}%`;
+  },
+  hideAutoScrapeBar() {
+    const fill = document.getElementById('auto-scrape-fill');
+    fill.style.width = '100%';
+    setTimeout(() => { fill.style.width = '0%'; }, 1000);
+    document.getElementById('server-status').textContent = '🟢';
   }
 };
 
@@ -732,6 +757,7 @@ function renderPrefs() {
   await pingServer();
   if (!hadCache) await loadFilmsFromServer();
   await loadUserdata();
+  startAutoScrapeMonitoring();
 })();
 </script>
 </body>

@@ -352,6 +352,39 @@ function closeConfirm() {
 }
 
 // ─── Chargement films depuis le serveur ────────────────────────────────────
+// ─── Monitoring auto-scrape ───────────────────────────────────────────────────
+let _pollTimer = null;
+
+async function startAutoScrapeMonitoring() {
+  try {
+    const r = await fetch('/api/scrape-status');
+    const d = await r.json();
+    if (d.isScraping) {
+      UI.showAutoScrapeBar(d.pct, d.annee);
+      _startPollLoop();
+    }
+  } catch(e) {}
+}
+
+function _startPollLoop() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/scrape-status');
+      const d = await r.json();
+      if (d.isScraping) {
+        UI.showAutoScrapeBar(d.pct, d.annee);
+      } else {
+        UI.hideAutoScrapeBar();
+        clearInterval(_pollTimer);
+        _pollTimer = null;
+        // Recharger les films une fois le scraping terminé
+        await loadFilmsFromServer();
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
 async function loadFilmsFromServer() {
   try {
     const r = await fetch('/api/films', { signal: AbortSignal.timeout(8000) });

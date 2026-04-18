@@ -15,6 +15,8 @@
     --text: #e8edf2; --muted: #7a9bb5;
   }
   body { background: var(--navy); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
+  #auto-scrape-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 3px; pointer-events: none; }
+  #auto-scrape-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), #ffe080); transition: width 2s ease; border-radius: 0 2px 2px 0; box-shadow: 0 0 8px rgba(240,192,64,.7); }
 
   header { background: var(--blue); border-bottom: 2px solid var(--gold); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
   .logo { font-size: 20px; font-weight: 800; color: var(--gold); }
@@ -249,6 +251,7 @@
 </style>
 </head>
 <body>
+<div id="auto-scrape-bar"><div id="auto-scrape-fill"></div></div>
 
 <header>
   <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
@@ -546,6 +549,17 @@ const UI = {
     const b = document.getElementById('error-banner');
     b.style.display = 'block';
     b.textContent = msg;
+  },
+  showAutoScrapeBar(pct, annee) {
+    document.getElementById('auto-scrape-fill').style.width = pct + '%';
+    const lbl = document.getElementById('last-scrape-label');
+    if (lbl) { lbl.textContent = `🔄 Mise à jour en cours… ${annee || ''} ${pct}%`; lbl.style.color = 'var(--gold)'; }
+  },
+  hideAutoScrapeBar() {
+    const fill = document.getElementById('auto-scrape-fill');
+    fill.style.width = '100%';
+    setTimeout(() => { fill.style.width = '0%'; }, 1000);
+    loadLastScrape();
   }
 };
 
@@ -891,9 +905,8 @@ function renderInfo() {
   const hadCache = loadCache();
   await loadUserdata();
   await loadLastScrape();
-  if (!hadCache) {
-    await loadFilmsFromServer();
-  }
+  if (!hadCache) await loadFilmsFromServer();
+  startAutoScrapeMonitoring();
 })();
 </script>
 </body>

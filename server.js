@@ -1151,6 +1151,11 @@ app.get('/api/series/details', async (req, res) => {
         if (yB) derniereAnnee = yB;
         else if (yA && !derniereAnnee) derniereAnnee = yA;
       }
+      // Année isolée ex: "2020" (série courte sans plage)
+      if (!derniereAnnee && /^\d{4}$/.test(l)) {
+        const y = parseInt(l);
+        if (y >= 1950 && y <= 2030) derniereAnnee = l;
+      }
     }
 
     const providers = extractProviders(html);

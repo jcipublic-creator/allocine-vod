@@ -1136,7 +1136,9 @@ app.get('/api/series/details', async (req, res) => {
 
   const cacheKey = `sid:${seriesId}`;
   const cached = getCachedSeriesDetails(cacheKey);
-  if (cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  // Si en cache mais sans année → on re-fetche pour bénéficier des nouvelles regex
+  if (cached && cached.derniereAnnee) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  if (cached) console.log(`Cache série sans année, re-fetch: ${seriesId}`);
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -1159,13 +1161,26 @@ app.get('/api/series/details', async (req, res) => {
           if (lines[k] && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
         }
       }
-      // Plage d'années ex: "2008 - 2013" ou "2019 - en cours"
-      if (/^\d{4}\s*[–-]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
-        const parts = l.split(/\s*[–-]\s*/);
+      // Plage d'années ex: "2008 - 2013", "2019 - en cours", "2020 − 2023" (tirets variés)
+      if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
+        const parts = l.split(/\s*[-–—−]\s*/);
         const yB = parts[1]?.match(/\d{4}/)?.[0];
         const yA = parts[0]?.match(/\d{4}/)?.[0];
         if (yB) derniereAnnee = yB;
         else if (yA && !derniereAnnee) derniereAnnee = yA;
+      }
+      // "Depuis 2020" ou "depuis 2020"
+      if (!derniereAnnee) {
+        const m = l.match(/^[Dd]epuis\s+(\d{4})$/);
+        if (m) derniereAnnee = m[1];
+      }
+      // Ligne contenant une plage d'années dans du texte ex: "Série de 2020 à 2023"
+      if (!derniereAnnee) {
+        const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/);
+        if (m) {
+          const y = parseInt(m[2]);
+          if (y >= 1950 && y <= 2030) derniereAnnee = m[2];
+        }
       }
       // Année isolée ex: "2020" (série courte sans plage)
       if (!derniereAnnee && /^\d{4}$/.test(l)) {

@@ -3,6 +3,7 @@ const axios = require('axios');
 const path = require('path');
 const fs = require('fs');
 const cheerio = require('cheerio');
+const { Redis } = require('@upstash/redis');
 
 const app = express();
 const PORT = Number(process.env.PORT || 3009);
@@ -14,22 +15,45 @@ app.use(express.json());
 
 // ─────────────────────────────────────────────────────────────────
 //  Base de données utilisateur (vu / vouloir / nonInteresse)
-//  Stockée dans userdata.json, persistante entre les sessions
+//  Stockée dans Upstash Redis si dispo, sinon fichier local
 // ─────────────────────────────────────────────────────────────────
-const DATA_DIR = process.env.DATA_DIR || __dirname;
-const USERDATA_FILE = path.join(DATA_DIR, 'userdata.json');
+const redis = process.env.UPSTASH_REDIS_REST_URL
+  ? new Redis({
+      url:   process.env.UPSTASH_REDIS_REST_URL,
+      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    })
+  : null;
+
+// Cache mémoire local (évite trop d'appels Redis)
 let userdata = {};
-try {
-  if (fs.existsSync(USERDATA_FILE))
-    userdata = JSON.parse(fs.readFileSync(USERDATA_FILE, 'utf8'));
-  console.log(`📂 userdata.json chargé (${Object.keys(userdata).length} entrées)`);
-} catch (e) {
-  console.warn('Impossible de charger userdata.json:', e.message);
+
+async function loadUserdata() {
+  if (redis) {
+    try {
+      const data = await redis.get('userdata');
+      if (data) userdata = typeof data === 'string' ? JSON.parse(data) : data;
+      console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} entrées)`);
+    } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
+  } else {
+    // Fallback fichier local
+    const file = path.join(__dirname, 'userdata.json');
+    try {
+      if (fs.existsSync(file)) userdata = JSON.parse(fs.readFileSync(file, 'utf8'));
+      console.log(`📂 userdata.json chargé (${Object.keys(userdata).length} entrées)`);
+    } catch(e) { console.warn('Impossible de charger userdata.json:', e.message); }
+  }
 }
 
-function saveUserdataFile() {
-  fs.writeFileSync(USERDATA_FILE, JSON.stringify(userdata, null, 2), 'utf8');
+async function saveUserdataFile() {
+  if (redis) {
+    try { await redis.set('userdata', JSON.stringify(userdata)); }
+    catch(e) { console.warn('Erreur sauvegarde Redis:', e.message); }
+  } else {
+    fs.writeFileSync(path.join(__dirname, 'userdata.json'), JSON.stringify(userdata, null, 2), 'utf8');
+  }
 }
+
+loadUserdata();
 
 const detailsCache = new Map();
 
@@ -374,17 +398,16 @@ app.get('/api/userdata', (_req, res) => {
   res.json(userdata);
 });
 
-app.post('/api/userdata', (req, res) => {
+app.post('/api/userdata', async (req, res) => {
   const { id, vu, vouloir, nonInteresse } = req.body;
   if (!id) return res.status(400).json({ error: 'id requis' });
   const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse };
-  // Ne stocke que si au moins une case est cochée
   if (!entry.vu && !entry.vouloir && !entry.nonInteresse) {
     delete userdata[id];
   } else {
     userdata[id] = entry;
   }
-  saveUserdataFile();
+  await saveUserdataFile();
   res.json({ ok: true });
 });
 

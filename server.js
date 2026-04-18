@@ -12,6 +12,7 @@ const DETAILS_TTL_MS = 1000 * 60 * 60 * 6; // 6h
 const BUILD = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();
+const DATA_DIR = process.env.DATA_DIR || __dirname;
 let lastScrapeErrors = [];
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -33,20 +34,31 @@ let userdata = {};
 let lastScrape = null; // timestamp ISO du dernier scraping
 
 async function loadUserdata() {
+  // 1. Essayer Redis en priorité
   if (redis) {
     try {
       const data = await redis.get('userdata');
-      if (data) userdata = typeof data === 'string' ? JSON.parse(data) : data;
+      if (data) {
+        userdata = typeof data === 'string' ? JSON.parse(data) : data;
+        console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} entrées)`);
+      }
       const ts = await redis.get('lastScrape');
       if (ts) lastScrape = ts;
-      console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} entrées)`);
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
-  } else {
-    // Fallback fichier local
-    const file = path.join(__dirname, 'userdata.json');
+  }
+  // 2. Fallback fichier local si Redis vide ou absent
+  if (Object.keys(userdata).length === 0) {
+    const file = path.join(DATA_DIR, 'userdata.json');
     try {
-      if (fs.existsSync(file)) userdata = JSON.parse(fs.readFileSync(file, 'utf8'));
-      console.log(`📂 userdata.json chargé (${Object.keys(userdata).length} entrées)`);
+      if (fs.existsSync(file)) {
+        userdata = JSON.parse(fs.readFileSync(file, 'utf8'));
+        console.log(`📂 Fallback userdata.json (${Object.keys(userdata).length} entrées)`);
+        // Resynchronise vers Redis si possible
+        if (redis && Object.keys(userdata).length > 0) {
+          redis.set('userdata', JSON.stringify(userdata)).catch(() => {});
+          console.log('🔄 Userdata resynchronisé vers Redis');
+        }
+      }
     } catch(e) { console.warn('Impossible de charger userdata.json:', e.message); }
   }
 }
@@ -60,11 +72,14 @@ async function saveLastScrape() {
 }
 
 async function saveUserdataFile() {
+  // Toujours sauvegarder dans le fichier local (backup)
+  try {
+    fs.writeFileSync(path.join(DATA_DIR, 'userdata.json'), JSON.stringify(userdata, null, 2), 'utf8');
+  } catch(e) { console.warn('Erreur sauvegarde fichier local:', e.message); }
+  // Et dans Redis si disponible
   if (redis) {
     try { await redis.set('userdata', JSON.stringify(userdata)); }
     catch(e) { console.warn('Erreur sauvegarde Redis:', e.message); }
-  } else {
-    fs.writeFileSync(path.join(__dirname, 'userdata.json'), JSON.stringify(userdata, null, 2), 'utf8');
   }
 }
 

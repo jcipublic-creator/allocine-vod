@@ -18,6 +18,16 @@ const SERVER_START = new Date().toISOString();
 const DATA_DIR = process.env.DATA_DIR || __dirname;
 let lastScrapeErrors = [];
 
+// ── Séries ────────────────────────────────────────────────────────────────────
+const SERIES_PAGES           = 10;  // pages max sur /series/top/
+const SERIES_DETAILS_TTL_MS  = 1000 * 60 * 60 * 24 * 7; // 7 jours
+let cachedSeries             = [];
+let lastSeriesScrape         = null;
+let isScrapingSeries         = false;
+let seriesProgress           = { current: 0, total: 0 };
+let lastSeriesScrapeErrors   = [];
+const seriesDetailsCache     = new Map();
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
@@ -94,6 +104,20 @@ async function loadUserdata() {
         const obj = typeof details === 'string' ? JSON.parse(details) : details;
         Object.entries(obj).forEach(([k, v]) => detailsCache.set(k, v));
         console.log(`📋 détailsCache Redis chargé (${detailsCache.size} entrées)`);
+      }
+      // Séries
+      const seriesRaw = await redis.get('series');
+      if (seriesRaw) {
+        cachedSeries = typeof seriesRaw === 'string' ? JSON.parse(seriesRaw) : seriesRaw;
+        console.log(`📺 Séries Redis chargées (${cachedSeries.length} séries)`);
+      }
+      const seriesTsRaw = await redis.get('lastSeriesScrape');
+      if (seriesTsRaw) lastSeriesScrape = seriesTsRaw;
+      const seriesDetailsRaw = await redis.get('series_details');
+      if (seriesDetailsRaw) {
+        const sdObj = typeof seriesDetailsRaw === 'string' ? JSON.parse(seriesDetailsRaw) : seriesDetailsRaw;
+        Object.entries(sdObj).forEach(([k, v]) => seriesDetailsCache.set(k, v));
+        console.log(`📋 seriesDetailsCache Redis chargé (${seriesDetailsCache.size} entrées)`);
       }
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
@@ -859,6 +883,280 @@ async function seedDefaultProfiles() {
     await saveUserdataFile();
   }
 }
+
+// ─────────────────────────────────────────────────────────────────
+//  Séries — cache mémoire, parseur, API
+// ─────────────────────────────────────────────────────────────────
+
+function getCachedSeriesDetails(key) {
+  const c = seriesDetailsCache.get(key);
+  if (!c) return null;
+  if (Date.now() - c.cachedAt > SERIES_DETAILS_TTL_MS) { seriesDetailsCache.delete(key); return null; }
+  return c.value;
+}
+function setCachedSeriesDetails(key, value) {
+  seriesDetailsCache.set(key, { value, cachedAt: Date.now() });
+  scheduleSeriesDetailsBackup();
+}
+let _seriesDetailsBackupTimer = null;
+function scheduleSeriesDetailsBackup() {
+  clearTimeout(_seriesDetailsBackupTimer);
+  _seriesDetailsBackupTimer = setTimeout(saveSeriesDetailsCache, 8000);
+}
+async function saveSeriesDetailsCache() {
+  if (!redis) return;
+  try {
+    const obj = {};
+    seriesDetailsCache.forEach((v, k) => { obj[k] = v; });
+    await redis.set('series_details', JSON.stringify(obj));
+    console.log(`💾 seriesDetailsCache sauvegardé (${seriesDetailsCache.size} entrées)`);
+  } catch(e) { console.warn('Erreur sauvegarde seriesDetailsCache:', e.message); }
+}
+
+// Extrait les IDs de séries depuis la page de liste
+function extractSeriesIdsFromTopPage(html) {
+  const $ = cheerio.load(html);
+  const titleToId = new Map();
+  $('a[href*="ficheserie"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const idMatch = href.match(/ficheserie[_-]gen_cserie=(\d+)/) || href.match(/ficheserie-(\d+)/);
+    if (!idMatch) return;
+    const texts = [$(el).text().trim(), $(el).attr('title') || '', $(el).find('img').attr('alt') || ''];
+    const title = texts.find(t => t.length > 0);
+    if (!title) return;
+    const key = normalizeTitle(title);
+    if (!key || titleToId.has(key)) return;
+    titleToId.set(key, idMatch[1]);
+  });
+  return titleToId;
+}
+
+// Parse une page de liste des meilleures séries AlloCiné
+function parseSeries(html) {
+  const $ = cheerio.load(html);
+  const titleToId = extractSeriesIdsFromTopPage(html);
+  const series = [];
+  const seen = new Set();
+
+  // Approche 1 : sélecteurs cheerio (plus fiable si les classes sont stables)
+  $('article, li.card, div.card, [class*="entity-card"]').each((_, card) => {
+    const $card = $(card);
+    const $link = $card.find('a[href*="ficheserie"]').first();
+    if (!$link.length) return;
+    const href = $link.attr('href') || '';
+    const idMatch = href.match(/ficheserie[_-]gen_cserie=(\d+)/) || href.match(/ficheserie-(\d+)/);
+    const allocineId = idMatch ? idMatch[1] : null;
+    const titre = ($link.attr('title') || $link.text()).trim();
+    if (!titre || seen.has(normalizeTitle(titre))) return;
+    seen.add(normalizeTitle(titre));
+    const ratingNotes = [];
+    $card.find('.stareval-note').each((_, el) => {
+      const n = parseFloat($(el).text().replace(',', '.'));
+      if (!isNaN(n) && n > 0 && n <= 5) ratingNotes.push(n);
+    });
+    const notePresse = ratingNotes[0] ?? null;
+    const noteSpect  = ratingNotes[1] ?? null;
+    if (!notePresse) return;
+    const genre    = $card.find('.meta-genre').text().trim() || $card.find('[class*="genre"]').first().text().trim();
+    const allText  = $card.text();
+    const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
+    const anneeSortie = yearMatch ? yearMatch[1] : null;
+    const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
+    series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId });
+  });
+
+  // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
+  if (series.length === 0) {
+    const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère/i;
+    const SKIP = new Set(['De', 'Avec', 'Titre original', 'Presse', 'Spectateurs',
+                          'En cours', 'Terminée', 'Terminé', 'Diffusion', '']);
+    const lines = htmlToLines(html);
+
+    for (let i = 0; i < lines.length; i++) {
+      if (!(lines[i] === 'Presse' && /^\d[,.]\d$/.test(lines[i + 1] || ''))) continue;
+      const notePresse = parseFloat(lines[i + 1].replace(',', '.'));
+      const noteSpect  = lines[i + 2] === 'Spectateurs' && /^\d[,.]\d$/.test(lines[i + 3] || '')
+        ? parseFloat(lines[i + 3].replace(',', '.')) : null;
+
+      let titre = '', genre = '', anneeSortie = null;
+      for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
+        const line = lines[j];
+        if (!line || SKIP.has(line)) continue;
+        if (/^\d[,.]\d$/.test(line) || /^#?\d+$/.test(line)) continue;
+        if (/^\d{4}/.test(line) || /^Dès\s+\d{4}/.test(line)) {
+          if (!anneeSortie) { const m = line.match(/\d{4}/); if (m) anneeSortie = m[0]; }
+          continue;
+        }
+        if (/^\d+\s+saison/.test(line)) continue;
+        if (GENRE_RE.test(line) && !genre) { genre = line; continue; }
+        titre = line; break;
+      }
+      if (!titre || seen.has(normalizeTitle(titre))) continue;
+      seen.add(normalizeTitle(titre));
+      const synStart = noteSpect !== null ? i + 4 : i + 2;
+      let synopsis = '';
+      for (let k = synStart; k < Math.min(lines.length, synStart + 10); k++) {
+        if (lines[k] === 'Presse') break;
+        if (lines[k] && lines[k].length > 80 && !/^\d/.test(lines[k])) { synopsis = lines[k]; break; }
+      }
+      const allocineId = titleToId.get(normalizeTitle(titre)) || null;
+      series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId });
+    }
+  }
+  return series;
+}
+
+function dedupeAndSortSeries(series) {
+  const seen = new Set();
+  return series
+    .filter(s => {
+      const key = `${s.titre.toLowerCase()}|${s.notePresse}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    })
+    .sort((a, b) => b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr'));
+}
+
+// ── Routes séries ─────────────────────────────────────────────────────────────
+
+app.get('/api/series', (_req, res) => {
+  const details = cachedSeries.map(s => {
+    const key = s.allocineId ? `sid:${s.allocineId}` : null;
+    return key ? (getCachedSeriesDetails(key) || null) : null;
+  });
+  res.json({ series: cachedSeries, lastScrape: lastSeriesScrape, count: cachedSeries.length, details });
+});
+
+app.get('/api/series/health', (_req, res) => {
+  res.json({
+    ok: true, cachedSeries: cachedSeries.length, cachedDetails: seriesDetailsCache.size,
+    lastScrape: lastSeriesScrape, isScrapingSeries, version: VERSION,
+    lastScrapeErrors: lastSeriesScrapeErrors,
+  });
+});
+
+app.get('/api/series/scrape-status', (_req, res) => {
+  const pct = seriesProgress.total
+    ? Math.round(seriesProgress.current / seriesProgress.total * 100) : 0;
+  res.json({ isScraping: isScrapingSeries, pct });
+});
+
+app.get('/api/series/scrape', async (req, res) => {
+  if (isScrapingSeries) return res.status(429).json({ error: 'Scraping déjà en cours' });
+  isScrapingSeries = true;
+  lastSeriesScrapeErrors = [];
+  seriesProgress = { current: 0, total: SERIES_PAGES };
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const allSeries = [];
+
+  for (let page = 1; page <= SERIES_PAGES; page++) {
+    seriesProgress.current = page;
+    send({ type: 'progress', page, total: SERIES_PAGES });
+    const url = `https://www.allocine.fr/series/top/?page=${page}`;
+    try {
+      let html = getCachedPage(url);
+      if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+      const raw = parseSeries(html);
+      allSeries.push(...raw);
+      send({ type: 'series', series: raw, page, total: SERIES_PAGES });
+      console.log(`[series] Page ${page}/${SERIES_PAGES} → ${raw.length} séries`);
+      // Arrêt anticipé si la page est vide (fin du catalogue)
+      if (raw.length === 0) { console.log(`[series] Page vide — arrêt à la page ${page}`); break; }
+    } catch(e) {
+      const msg = e.response ? `HTTP ${e.response.status}` : e.message;
+      console.error(`[series] Page ${page} erreur: ${msg}`);
+      lastSeriesScrapeErrors.push({ page, message: msg });
+      send({ type: 'error', page, message: msg });
+    }
+    await sleep(1500 + Math.random() * 500);
+  }
+
+  const result = dedupeAndSortSeries(allSeries);
+  cachedSeries = result;
+  lastSeriesScrape = new Date().toISOString();
+  if (redis) {
+    try {
+      await redis.set('series', JSON.stringify(result));
+      await redis.set('lastSeriesScrape', lastSeriesScrape);
+    } catch(e) { console.warn('Erreur sauvegarde series Redis:', e.message); }
+  }
+  send({ type: 'done', totalSeries: result.length, lastScrape: lastSeriesScrape });
+  res.end();
+  isScrapingSeries = false;
+  console.log(`✅ ${result.length} séries scrapées`);
+});
+
+app.get('/api/series/details', async (req, res) => {
+  const seriesId = String(req.query.seriesId || '').trim();
+  if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
+
+  const cacheKey = `sid:${seriesId}`;
+  const cached = getCachedSeriesDetails(cacheKey);
+  if (cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+
+  try {
+    const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
+    const resp  = await rateLimitedFetch(url);
+    const html  = resp.data;
+    const lines = htmlToLines(html);
+
+    let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
+    const castingArr = [];
+
+    for (let i = 0; i < lines.length - 1; i++) {
+      const l = lines[i], n = lines[i + 1];
+      if (l === 'Nationalité' || l === 'Nationalités') pays = n;
+      if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);
+      if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) createur = n;
+      if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
+      if (l === 'Avec' && castingArr.length === 0) {
+        for (let k = i + 1; k < Math.min(lines.length, i + 8); k++) {
+          if (['De', 'Avec', 'Nationalité', 'Saisons', 'Statut', 'Presse'].includes(lines[k])) break;
+          if (lines[k] && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
+        }
+      }
+      // Plage d'années ex: "2008 - 2013" ou "2019 - en cours"
+      if (/^\d{4}\s*[–-]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
+        const parts = l.split(/\s*[–-]\s*/);
+        const yB = parts[1]?.match(/\d{4}/)?.[0];
+        const yA = parts[0]?.match(/\d{4}/)?.[0];
+        if (yB) derniereAnnee = yB;
+        else if (yA && !derniereAnnee) derniereAnnee = yA;
+      }
+    }
+
+    const providers = extractProviders(html);
+    const data = {
+      createur, nbSaisons, statut, derniereAnnee, pays,
+      casting: castingArr.slice(0, 5).join(', '),
+      providers, allocineId: seriesId, allocineUrl: url,
+    };
+    if (createur || nbSaisons || providers.length > 0 || pays) setCachedSeriesDetails(cacheKey, data);
+    const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
+    console.log(`Série ${seriesId} → ${pays || '?'} statut:${statut || '?'} saisons:${nbSaisons ?? '?'} | ${pNames}`);
+    return res.json(data);
+  } catch(e) {
+    const status = e.response?.status;
+    return res.json({
+      createur: null, nbSaisons: null, statut: null, derniereAnnee: null, pays: null,
+      casting: '', providers: [], allocineId: seriesId,
+      error: status === 429 ? 'rate_limited' : e.message,
+    });
+  }
+});
+
+app.post('/api/series/clear-cache', (_req, res) => {
+  const count = seriesDetailsCache.size;
+  seriesDetailsCache.clear();
+  console.log(`🗑️  Cache séries vidé (${count} entrées)`);
+  res.json({ ok: true, cleared: count });
+});
 
 app.listen(PORT, () => {
   console.log('\n🎬 AlloCiné VOD Scraper v9 démarré !');

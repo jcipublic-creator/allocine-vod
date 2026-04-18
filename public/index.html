@@ -1188,10 +1188,40 @@ function renderInfo() {
   `;
 }
 
+// ─── Chargement films depuis le serveur (pour nouveaux visiteurs) ────────────
+async function loadFilmsFromServer() {
+  try {
+    const r = await fetch('/api/films', { signal: AbortSignal.timeout(8000) });
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (!d.films || d.films.length === 0) return false;
+    _allFilms = d.films;
+    populateGenreFilter();
+    populatePlatFilter();
+    populatePaysFilter();
+    applySort();
+    applyFilters();
+    show('filter-bar'); show('results-header'); show('table-wrap');
+    reapplyBadges();
+    reapplyUserActions();
+    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
+    console.log(`[server] ${d.films.length} films chargés depuis le serveur`);
+    return true;
+  } catch(e) {
+    console.warn('[server] Impossible de charger les films:', e.message);
+    return false;
+  }
+}
+
 // Chargement au démarrage
-loadFilmsCache();  // affiche le dernier scraping instantanément
-loadUserdata();
-loadLastScrape();
+(async () => {
+  const hadCache = loadFilmsCache(); // affiche le dernier scraping instantanément
+  await loadUserdata();
+  await loadLastScrape();
+  if (!hadCache) {
+    await loadFilmsFromServer(); // nouveau visiteur → charge depuis le serveur
+  }
+})();
 </script>
 </body>
 </html>

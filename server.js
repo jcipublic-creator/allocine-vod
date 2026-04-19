@@ -1083,6 +1083,18 @@ app.get('/api/series/health', (_req, res) => {
   });
 });
 
+app.get('/api/series/debug-genres', (_req, res) => {
+  const sample = [];
+  let withGenre = 0, withoutGenre = 0;
+  for (const [key, det] of seriesDetailsCache) {
+    if (det.genre) withGenre++; else withoutGenre++;
+    if (sample.length < 20) {
+      sample.push({ key, genre: det.genre || null, pays: det.pays || null });
+    }
+  }
+  res.json({ total: seriesDetailsCache.size, withGenre, withoutGenre, sample });
+});
+
 app.get('/api/series/providers', (_req, res) => {
   const counts = {};
   for (const [, det] of seriesDetailsCache) {

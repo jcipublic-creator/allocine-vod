@@ -528,13 +528,12 @@ const UI = {
     if (el) el.textContent = `${done} / ${total}`;
   },
   onPlatDone(errors) {
-    document.getElementById('plat-lbl').innerHTML =
-      `📺 Plateformes chargées <span id="plat-count" style="color:var(--gold)">${_allFilms.length}</span>`;
     document.getElementById('plat-fill').style.width = '100%';
     document.getElementById('server-status').textContent = '🟢';
     this.populateGenreFilter();
     this.populatePlatFilter();
     populatePaysFilter();
+    setTimeout(() => { document.getElementById('plat-zone').classList.remove('show'); }, 1000);
   },
   onDetailFetched(idx, data) { updateCardMeta(idx, data); },
   onScrapeStart(btn) {

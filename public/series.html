@@ -359,7 +359,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v1';
+const LS_SVERSION = 'vod_series_v74'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -717,7 +717,11 @@ function startSeriesScrape() {
       document.getElementById('prog-lbl').textContent = `⏳ Page ${d.page}/${d.total}…`;
     }
     if (d.type === 'series' && d.series?.length) {
-      _allSeries.push(...d.series);
+      const seen = new Set(_allSeries.map(s => `${(s.titre||'').toLowerCase()}|${s.notePresse}`));
+      d.series.forEach(s => {
+        const key = `${(s.titre||'').toLowerCase()}|${s.notePresse}`;
+        if (!seen.has(key)) { seen.add(key); _allSeries.push(s); }
+      });
       renderSeriesCards(_allSeries);
       populateGenreFilter();
       document.getElementById('filter-bar').classList.add('show');
@@ -726,8 +730,7 @@ function startSeriesScrape() {
     if (d.type === 'done' || d.type === 'error' && d.page >= 1) {
       if (d.type === 'done') {
         document.getElementById('prog-fill').style.width = '100%';
-        document.getElementById('prog-lbl').textContent = `✅ ${d.totalSeries} séries récupérées`;
-        _allSeries = _allSeries; // déjà à jour via SSE
+        document.getElementById('prog-lbl').textContent = `✅ ${_allSeries.length} séries récupérées`;
         applySeriesSort(_seriesSortBy);
         saveSeriesCache();
         btn.disabled = false; btn.textContent = '▶ Scraper les séries';

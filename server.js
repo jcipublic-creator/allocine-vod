@@ -20,8 +20,11 @@ let lastScrapeErrors = [];
 
 // ── Séries ────────────────────────────────────────────────────────────────────
 const SERIES_SOURCES = [
-  { label: 'Top AlloCiné',       baseUrl: 'https://www.allocine.fr/series/top/',                       pages: 10 },
-  { label: 'Meilleures 2020s',   baseUrl: 'https://www.allocine.fr/series/meilleures/decennie-2020/', pages: 5  },
+  { label: 'Top AlloCiné',   baseUrl: 'https://www.allocine.fr/series/top/',                                    pages: 10 },
+  { label: 'Presse 2026',    baseUrl: 'https://www.allocine.fr/series-tv/presse/decennie-2020/annee-2026/',     pages: 5  },
+  { label: 'Presse 2025',    baseUrl: 'https://www.allocine.fr/series-tv/presse/decennie-2020/annee-2025/',     pages: 5  },
+  { label: 'Presse 2024',    baseUrl: 'https://www.allocine.fr/series-tv/presse/decennie-2020/annee-2024/',     pages: 5  },
+  { label: 'Presse 2023',    baseUrl: 'https://www.allocine.fr/series-tv/presse/decennie-2020/annee-2023/',     pages: 5  },
 ];
 const SERIES_PAGES           = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
 const SERIES_DETAILS_TTL_MS  = 1000 * 60 * 60 * 24 * 7; // 7 jours

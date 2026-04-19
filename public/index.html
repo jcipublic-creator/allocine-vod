@@ -415,9 +415,8 @@ body {
   <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
 </div>
 
-<div class="prog-zone" id="plat-zone">
-  <div class="prog-lbl" id="plat-lbl">📺 Plateformes… <span id="plat-count" style="color:var(--gold)"></span></div>
-  <div class="prog-track"><div class="prog-fill green" id="plat-fill"></div></div>
+<div id="plat-zone" style="display:none">
+  <span id="plat-lbl"></span><span id="plat-count"></span><div id="plat-fill"></div>
 </div>
 
 <div id="error-banner"></div>
@@ -516,24 +515,13 @@ const UI = {
     const cur = _allFilms.indexOf(film);
     return cur >= 0 ? document.getElementById(`card-plat-${cur}`) : null;
   },
-  onPlatStart() {
-    document.getElementById('plat-zone').classList.add('show');
-    document.getElementById('plat-fill').style.width = '0%';
-    updatePlatProgress();
-  },
-  onPlatProgress(done, total) {
-    const pct = total ? Math.round(done / total * 100) : 0;
-    document.getElementById('plat-fill').style.width = pct + '%';
-    const el = document.getElementById('plat-count');
-    if (el) el.textContent = `${done} / ${total}`;
-  },
+  onPlatStart() { updatePlatProgress(); },
+  onPlatProgress(done, total) {},
   onPlatDone(errors) {
-    document.getElementById('plat-fill').style.width = '100%';
     document.getElementById('server-status').textContent = '🟢';
     this.populateGenreFilter();
     this.populatePlatFilter();
     populatePaysFilter();
-    setTimeout(() => { document.getElementById('plat-zone').classList.remove('show'); }, 1000);
   },
   onDetailFetched(idx, data) { updateCardMeta(idx, data); },
   onScrapeStart(btn) {

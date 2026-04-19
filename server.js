@@ -1011,14 +1011,18 @@ function parseSeries(html) {
       .get().filter(v => v && v.length > 1 && v.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(v));
     const genre = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
     const allText  = $card.text();
-    const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
-    const anneeSortie = yearMatch ? yearMatch[1] : null;
+    const depuisM  = allText.match(/[Dd]epuis\s+(\d{4})/);
+    const rangeM   = !depuisM && allText.match(/(\d{4})\s*[-–—]\s*(\d{4})/);
+    const singleM  = !depuisM && !rangeM && allText.match(/(\d{4})/);
+    const enCours    = !!depuisM;
+    const anneeSortie = depuisM ? depuisM[1] : rangeM ? rangeM[1] : singleM ? singleM[1] : null;
+    const anneeFin    = rangeM ? rangeM[2] : null;
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
     const $img = $card.find('img').first();
     const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
     let poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
     if (poster && poster.startsWith('/')) poster = 'https://www.allocine.fr' + poster;
-    series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId, poster });
+    series.push({ titre, titreOriginal: '', genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
   // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
@@ -1034,14 +1038,22 @@ function parseSeries(html) {
       const noteSpect  = lines[i + 2] === 'Spectateurs' && /^\d[,.]\d$/.test(lines[i + 3] || '')
         ? parseFloat(lines[i + 3].replace(',', '.')) : null;
 
-      let titre = '', anneeSortie = null;
+      let titre = '', anneeSortie = null, anneeFin = null, enCours = false;
       const genreParts = [];
       for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
         const line = lines[j];
         if (!line || SKIP.has(line)) continue;
         if (/^\d[,.]\d$/.test(line) || /^#?\d+$/.test(line)) continue;
+        if (/^[Dd]epuis\s+\d{4}/.test(line)) {
+          if (!anneeSortie) { const m = line.match(/\d{4}/); if (m) { anneeSortie = m[0]; enCours = true; } }
+          continue;
+        }
         if (/^\d{4}/.test(line) || /^Dès\s+\d{4}/.test(line)) {
-          if (!anneeSortie) { const m = line.match(/\d{4}/); if (m) anneeSortie = m[0]; }
+          if (!anneeSortie) {
+            const rangeM = line.match(/(\d{4})\s*[-–—]\s*(\d{4})/);
+            if (rangeM) { anneeSortie = rangeM[1]; anneeFin = rangeM[2]; }
+            else { const m = line.match(/\d{4}/); if (m) anneeSortie = m[0]; }
+          }
           continue;
         }
         if (/^\d+\s+saison/.test(line)) continue;
@@ -1058,7 +1070,7 @@ function parseSeries(html) {
         if (lines[k] && lines[k].length > 80 && !/^\d/.test(lines[k])) { synopsis = lines[k]; break; }
       }
       const allocineId = titleToId.get(normalizeTitle(titre)) || null;
-      series.push({ titre, titreOriginal: '', genre, anneeSortie, notePresse, noteSpect, synopsis, allocineId });
+      series.push({ titre, titreOriginal: '', genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
     }
   }
   return series;

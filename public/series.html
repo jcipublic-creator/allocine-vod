@@ -372,7 +372,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v107'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v108'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -501,7 +501,7 @@ function renderSeriesCards(series) {
         : '';
     const saisonsBadge = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
-    const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, det.derniereAnnee, statut);
+    const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, s.anneeFin || det.derniereAnnee, statut, s.enCours);
     const createur = det.createur ? `<div class="card-creator">Par <strong>${esc(det.createur)}</strong></div>` : '';
     const casting  = det.casting  ? `<div class="card-genre" style="font-size:10px">${esc(det.casting)}</div>` : '';
     const platHtml = s.allocineId && !det.providers
@@ -557,14 +557,15 @@ function renderSeriesCards(series) {
   applySeriesFilters();
 }
 
-function buildAnneeLabel(debut, fin, statut) {
-  if (!debut) return fin ? (statut === 'En cours' ? `Depuis ${fin}` : fin) : '';
-  if (statut === 'En cours') return `Depuis ${debut}`;
+function buildAnneeLabel(debut, fin, statut, enCours) {
+  const live = enCours || statut === 'En cours';
+  if (!debut) return fin ? (live ? `Depuis ${fin}` : fin) : '';
+  if (live) return `Depuis ${debut}`;
   if (fin && fin !== debut) return `${debut} – ${fin}`;
   return debut;
 }
-function buildAnneeLabelHTML(debut, fin, statut) {
-  const label = buildAnneeLabel(debut, fin, statut);
+function buildAnneeLabelHTML(debut, fin, statut, enCours) {
+  const label = buildAnneeLabel(debut, fin, statut, enCours);
   if (!label) return '';
   if (label.startsWith('Depuis ')) {
     return `<span class="depuis-label"><span class="live-dot"></span>${esc(label)}</span>`;
@@ -589,7 +590,7 @@ function updateSeriesCard(idx, det) {
       : statut === 'Terminée' ? `<span class="statut-badge terminee">■ Terminée</span>` : '';
     const saisonsBadge = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
-    const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, det.derniereAnnee, statut);
+    const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, s.anneeFin || det.derniereAnnee, statut, s.enCours);
     const paysSpan = det.pays ? `<span>${flagFor(det.pays)}${esc(det.pays.split(',')[0].trim())}</span>` : '';
     metaEl.innerHTML = `${anneeLabelHTML}${statutBadge}${saisonsBadge}${paysSpan}`;
   }

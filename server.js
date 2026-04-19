@@ -787,6 +787,32 @@ app.post('/api/users', async (req, res) => {
 });
 
 /**
+ * DELETE /api/users/:id
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Supprime un profil utilisateur et toutes ses données (notes, prefs).
+ *        Réservé à l'administrateur (user_default). Refusé pour user_default lui-même.
+ *
+ * Params : id (route)
+ * Réponse: { ok, deleted }
+ * Erreur : 403 si tentative de suppression de user_default | 404 si introuvable
+ */
+app.delete('/api/users/:id', async (req, res) => {
+  const { id } = req.params;
+  if (id === 'user_default')
+    return res.status(403).json({ error: 'Impossible de supprimer le profil administrateur' });
+  if (!users[id])
+    return res.status(404).json({ error: 'Profil introuvable' });
+  const name = users[id].name;
+  delete users[id];
+  delete userdata[id];
+  delete prefsDB[id];
+  await saveUsers();
+  await saveUserdataFile();
+  console.log(`🗑️  Profil supprimé : "${name}" (${id})`);
+  res.json({ ok: true, deleted: id });
+});
+
+/**
  * GET /api/prefs?userId=…
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Retourne les préférences d'affichage d'un profil utilisateur.

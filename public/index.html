@@ -308,6 +308,8 @@ body {
 .profile-name { font-size: 14px; color: var(--text); }
 .profile-badge-active { font-size: 11px; color: var(--gold); }
 .profile-badge-switch { font-size: 11px; color: var(--muted); }
+.profile-delete-btn { background: none; border: none; cursor: pointer; font-size: 14px; opacity: .5; padding: 2px 4px; border-radius: 4px; transition: opacity .15s; }
+.profile-delete-btn:hover { opacity: 1; }
 .add-user-row { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
 .add-user-input { flex: 1; background: var(--blue2); border: 1px solid var(--blue3); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
 .add-user-btn { background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
@@ -894,14 +896,22 @@ async function openProfiles() {
 function closeProfiles() { document.getElementById('profiles-modal').classList.remove('open'); }
 
 function renderProfiles(list, firstLaunch = false) {
+  const isAdmin = _currentUserId === 'user_default';
   const intro = firstLaunch
     ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">C\'est ton premier lancement.<br>Choisis ton profil ou crée-en un nouveau.</p>'
     : '';
   const rows = list.map(u => {
-    const isActive = u.id === _currentUserId;
+    const isActive  = u.id === _currentUserId;
+    const canDelete = isAdmin && u.id !== 'user_default';
+    const deleteBtn = canDelete
+      ? `<button class="profile-delete-btn" onclick="event.stopPropagation();deleteUser('${u.id}','${esc(u.name)}')" title="Supprimer">🗑️</button>`
+      : '';
     return `<div class="profile-row ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfile('${u.id}')"`}>
       <span class="profile-name">${esc(u.name)}</span>
-      ${isActive ? '<span class="profile-badge-active">● Actif</span>' : '<span class="profile-badge-switch">Sélectionner →</span>'}
+      <div style="display:flex;align-items:center;gap:8px">
+        ${isActive ? '<span class="profile-badge-active">● Actif</span>' : '<span class="profile-badge-switch">Sélectionner →</span>'}
+        ${deleteBtn}
+      </div>
     </div>`;
   }).join('');
   document.getElementById('profiles-content').innerHTML = `
@@ -916,6 +926,16 @@ function renderProfiles(list, firstLaunch = false) {
         onkeydown="if(event.key==='Enter')onAddUser()">
       <button class="add-user-btn" onclick="onAddUser()">+ Ajouter</button>
     </div>`;
+}
+
+async function deleteUser(userId, userName) {
+  if (!confirm(`Supprimer le profil "${userName}" ?\n\nToutes ses notes et préférences seront définitivement perdues.`)) return;
+  try {
+    const r = await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+    if (!r.ok) { const d = await r.json(); UI.showError(`Erreur : ${d.error}`); return; }
+    const list = await loadUsers();
+    renderProfiles(list);
+  } catch(e) { UI.showError('Erreur lors de la suppression.'); }
 }
 
 async function selectProfile(userId) {

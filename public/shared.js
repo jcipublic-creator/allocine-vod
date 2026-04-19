@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v79'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v80'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -328,7 +328,10 @@ async function startPlatformLoading() {
     }
   }
 
-  if (_loadGen !== gen) return;
+  if (_loadGen !== gen) {
+    if (needsFetch) UI.onPlatDone(errors); // toujours cacher la barre même si annulé
+    return;
+  }
   applySort();
   saveCache();
   if (needsFetch) UI.onPlatDone(errors);

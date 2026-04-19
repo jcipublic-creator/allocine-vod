@@ -415,8 +415,9 @@ body {
   <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
 </div>
 
-<div id="plat-zone" style="display:none">
-  <span id="plat-lbl"></span><span id="plat-count"></span><div id="plat-fill"></div>
+<div class="prog-zone" id="plat-zone">
+  <div class="prog-lbl" id="plat-lbl">Chargement des plateformes…</div>
+  <div class="prog-track"><div class="prog-fill green" id="plat-fill"></div></div>
 </div>
 
 <div id="error-banner"></div>
@@ -515,13 +516,28 @@ const UI = {
     const cur = _allFilms.indexOf(film);
     return cur >= 0 ? document.getElementById(`card-plat-${cur}`) : null;
   },
-  onPlatStart() { updatePlatProgress(); },
-  onPlatProgress(done, total) {},
+  onPlatStart() {
+    const z = document.getElementById('plat-zone');
+    document.getElementById('plat-fill').style.width = '0%';
+    document.getElementById('plat-lbl').textContent = 'Chargement des plateformes…';
+    z.classList.add('show');
+    updatePlatProgress();
+  },
+  onPlatProgress(done, total) {
+    const pct = total > 0 ? Math.round(done / total * 100) : 0;
+    document.getElementById('plat-fill').style.width = pct + '%';
+    document.getElementById('plat-lbl').textContent = `Plateformes : ${done} / ${total}`;
+  },
   onPlatDone(errors) {
+    document.getElementById('plat-fill').style.width = '100%';
+    document.getElementById('plat-lbl').textContent = '✅ Plateformes chargées';
     document.getElementById('server-status').textContent = '🟢';
     this.populateGenreFilter();
     this.populatePlatFilter();
     populatePaysFilter();
+    setTimeout(() => {
+      document.getElementById('plat-zone').classList.remove('show');
+    }, 1000);
   },
   onDetailFetched(idx, data) { updateCardMeta(idx, data); },
   onScrapeStart(btn) {

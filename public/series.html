@@ -402,7 +402,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v123';
+const LS_SVERSION = 'vod_series_v124';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -842,8 +842,8 @@ function populateAnneeFilter() {
   const sel = document.getElementById('fil-annee');
   const cur = sel.value;
   sel.innerHTML = '<option value="">Toutes années</option>' +
-    [...annees].sort().map(a =>
-      `<option value="${a}"${cur === a ? ' selected' : ''}>Depuis ${a}</option>`
+    [...annees].sort((a, b) => b - a).map(a =>
+      `<option value="${a}"${cur === a ? ' selected' : ''}>À partir de ${a}</option>`
     ).join('');
 }
 

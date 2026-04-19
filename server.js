@@ -1217,30 +1217,20 @@ app.get('/api/series/details', async (req, res) => {
     const castingArr = [];
 
     // Extraction genre via cheerio (format AlloCiné : liens /series-tv/genre-XXXXX/)
+    // Les liens ont un texte comme "série Romance" → on strip le préfixe "série(s) "
     const $$ = cheerio.load(html);
-    // Collecte tous les liens genre de la fiche (plusieurs genres possibles)
     const genreSet = [];
-    // 1. D'abord dans les blocs meta-body-item qui portent le label "Genre"
-    $$('.meta-body-item').each((_, el) => {
-      const label = $$(el).find('.light').text().trim();
-      if (/^genres?$/i.test(label)) {
-        $$(el).find('a[href*="genre-"]').each((_, a) => {
-          const t = $$(a).text().trim();
-          if (t && !genreSet.includes(t)) genreSet.push(t);
-        });
+    $$('a[href*="genre-"]').each((_, el) => {
+      const raw = $$(el).text().trim();
+      const t = raw.replace(/^s[eé]ries?\s+/i, '').trim(); // strip "série " / "séries "
+      // Garder uniquement les noms de genre : commence par une majuscule, court
+      if (t && t.length > 1 && t.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(t) && !genreSet.includes(t)) {
+        genreSet.push(t);
       }
     });
-    // 2. Si rien trouvé via label, prendre tous les liens genre- de la page (≤ 6 pour éviter la nav)
-    if (!genreSet.length) {
-      $$('a[href*="genre-"]').each((_, el) => {
-        const t = $$(el).text().trim();
-        if (t && t.length > 1 && t.length < 40 && !/^\d/.test(t) && !genreSet.includes(t)) genreSet.push(t);
-      });
-      // Trop de résultats = liens de navigation globale, on ignore
-      if (genreSet.length > 6) genreSet.length = 0;
-    }
-    if (genreSet.length) genre = genreSet.join(', ');
-    // 3. itemprop ou meta tag en dernier recours
+    // Trop de résultats = liens de navigation globale, on ignore
+    if (genreSet.length && genreSet.length <= 8) genre = genreSet.join(', ');
+    // Fallback : itemprop ou meta tag
     if (!genre) genre = $$('[itemprop="genre"]').first().text().trim() || null;
     if (!genre) genre = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content') || null;
     console.log(`  Genre: ${genre || 'null'}`);

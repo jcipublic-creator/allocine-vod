@@ -401,7 +401,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v120';
+const LS_SVERSION = 'vod_series_v121';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -862,10 +862,14 @@ function applySeriesFilters() {
     // Filtre préférences documentaires / animations
     const matchDocAnim = (_prefs.showDocumentaires || !genreStr.includes('documentaire')) &&
                          (_prefs.showAnimations    || !genreStr.includes('animation'));
-    // Filtre statut (nécessite det.statut, disponible après chargement des fiches)
+    // Filtre statut : priorité à det.statut (fiche individuelle),
+    // fallback sur s.enCours / s.anneeFin (scraping liste) si la fiche n'est pas encore chargée
+    const statut = det.statut
+      || (s.enCours  ? 'En cours' : '')
+      || (s.anneeFin ? 'Terminée' : '');
     const matchStatut = !statutFilter ||
-      (statutFilter === 'encours'  && det.statut === 'En cours') ||
-      (statutFilter === 'terminee' && det.statut === 'Terminée');
+      (statutFilter === 'encours'  && statut === 'En cours') ||
+      (statutFilter === 'terminee' && statut === 'Terminée');
     // Filtre liste personnelle
     const matchListe = (!_prefs.hideVus           || !ud.vu) &&
                        (!_prefs.hideNonInteresse  || !ud.nonInteresse) &&

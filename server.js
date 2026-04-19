@@ -660,11 +660,12 @@ function parseFilms(html) {
       const origIdx= seg.indexOf('Titre original');
       const pipeIdx= seg.findIndex((line) => line === '|');
 
-      // Genre : entre le premier "|" et "De"
+      // Genre : entre le premier "|" et "De" (s'arrête avant "Titre original" s'il est intercalé)
       if (pipeIdx >= 0 && deIdx > pipeIdx) {
+        const genreEnd = (origIdx >= 0 && origIdx > pipeIdx && origIdx < deIdx) ? origIdx : deIdx;
         genre = seg
-          .slice(pipeIdx + 1, deIdx)
-          .filter((line) => !/^\d+h/.test(line) && line !== '|')
+          .slice(pipeIdx + 1, genreEnd)
+          .filter((line) => !/^\d+h/.test(line) && line !== '|' && line !== 'Titre original')
           .map((line) => line.replace(/,$/, ''))
           .join(', ');
       }

@@ -5,6 +5,25 @@
 // ─── Pont global vers UI (appelé depuis onchange="applyFilters()" dans le HTML) ─
 function applyFilters() { UI.applyFilters(); }
 
+// ─── Sécurité — Secret applicatif ────────────────────────────────────────────
+// Chargé depuis /api/config au démarrage de la page.
+// Ajouté automatiquement en header x-app-secret sur tous les appels /api/.
+let _appSecret = '';
+const _origFetch = window.fetch.bind(window);
+window.fetch = function(url, opts = {}) {
+  if (_appSecret && typeof url === 'string' && url.startsWith('/api/')) {
+    opts = { ...opts, headers: { ...(opts.headers || {}), 'x-app-secret': _appSecret } };
+  }
+  return _origFetch(url, opts);
+};
+/** Charge le secret applicatif depuis le serveur (appelé une fois à l'init de la page). */
+async function loadAppSecret() {
+  try {
+    const r = await _origFetch('/api/config', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) { const d = await r.json(); _appSecret = d.secret || ''; }
+  } catch(e) { /* pas de secret → mode dev local */ }
+}
+
 // ─── État global ──────────────────────────────────────────────────────────────
 let _allFilms       = [];
 let _details        = {};   // filmKey → { pays, annee, providers, ... }
@@ -25,7 +44,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v135'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v136'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 

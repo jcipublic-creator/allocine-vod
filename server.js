@@ -56,6 +56,40 @@ const BUILD   = (() => { try { return require('./version.json').build; } catch(e
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();
 
+// ── Sécurité — Secret partagé ─────────────────────────────────────────────
+// Définir APP_SECRET dans les variables d'environnement Railway pour activer la protection.
+// Si non défini (développement local), tous les endpoints restent accessibles.
+const APP_SECRET = process.env.APP_SECRET || null;
+
+/** Middleware : rejette les requêtes sans le bon header x-app-secret (si APP_SECRET est défini). */
+function requireSecret(req, res, next) {
+  if (!APP_SECRET) return next();
+  if (req.headers['x-app-secret'] !== APP_SECRET)
+    return res.status(403).json({ error: 'Accès non autorisé' });
+  next();
+}
+
+// ── Sécurité — Rate limiter simple (sans dépendance externe) ──────────────
+const _rlBuckets = new Map();
+/**
+ * Retourne un middleware Express limitant les appels à `max` requêtes par `windowMs` ms par IP.
+ * Usage : app.get('/api/scrape', requireRateLimit(3, 10 * 60 * 1000), async (req, res) => …)
+ */
+function requireRateLimit(max, windowMs) {
+  return (req, res, next) => {
+    const ip  = req.ip || req.socket?.remoteAddress || 'unknown';
+    const key = `${req.path}::${ip}`;
+    const now = Date.now();
+    const b   = _rlBuckets.get(key) || { count: 0, reset: now + windowMs };
+    if (now > b.reset) { b.count = 0; b.reset = now + windowMs; }
+    b.count++;
+    _rlBuckets.set(key, b);
+    if (b.count > max)
+      return res.status(429).json({ error: 'Trop de requêtes, réessayez dans quelques minutes.' });
+    next();
+  };
+}
+
 // ── État global Films ──────────────────────────────────────────────────────
 let cachedFilms      = [];   // dernière liste de films scrapés (en mémoire + Redis)
 let lastScrape       = null; // ISO — dernier scraping liste films
@@ -743,6 +777,19 @@ function dedupeAndSortFilms(films, noteMin) {
  *   details:   (Detail|null)[] — détails indexés par position (même ordre que films[])
  * }
  */
+/**
+ * GET /api/config
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne la configuration publique nécessaire au client au démarrage.
+ *        Expose le secret applicatif pour que le client puisse s'authentifier
+ *        sur les endpoints protégés.
+ *
+ * Réponse: { secret: string }
+ */
+app.get('/api/config', (_req, res) => {
+  res.json({ secret: APP_SECRET || '' });
+});
+
 app.get('/api/films', (_req, res) => {
   const details = cachedFilms.map(film => {
     const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
@@ -771,10 +818,10 @@ app.get('/api/users', (_req, res) => {
  * Réponse: { id, name, createdAt }
  * Erreur : 400 si name manquant ou vide
  */
-app.post('/api/users', async (req, res) => {
+app.post('/api/users', requireSecret, async (req, res) => {
   const { name } = req.body;
-  if (!name || typeof name !== 'string' || !name.trim())
-    return res.status(400).json({ error: 'name requis' });
+  if (!name || typeof name !== 'string' || !name.trim() || name.trim().length > 50)
+    return res.status(400).json({ error: 'name requis (1–50 caractères)' });
 
   const id   = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const user = { id, name: name.trim(), createdAt: new Date().toISOString() };
@@ -796,7 +843,7 @@ app.post('/api/users', async (req, res) => {
  * Réponse: { ok, deleted }
  * Erreur : 403 si tentative de suppression de user_default | 404 si introuvable
  */
-app.delete('/api/users/:id', async (req, res) => {
+app.delete('/api/users/:id', requireSecret, async (req, res) => {
   const { id } = req.params;
   if (id === 'user_default')
     return res.status(403).json({ error: 'Impossible de supprimer le profil administrateur' });
@@ -837,9 +884,9 @@ app.get('/api/prefs', (req, res) => {
  * Réponse: { ok: true }
  * Erreur : 400 si userId manquant
  */
-app.post('/api/prefs', async (req, res) => {
+app.post('/api/prefs', requireSecret, async (req, res) => {
   const { userId, ...userPrefs } = req.body;
-  if (!userId) return res.status(400).json({ error: 'userId requis' });
+  if (!userId || !users[userId]) return res.status(400).json({ error: 'userId invalide' });
   prefsDB[userId] = userPrefs;
   await savePrefsData();
   res.json({ ok: true });
@@ -872,9 +919,9 @@ app.get('/api/userdata', (req, res) => {
  * Réponse: { ok: true }
  * Erreur : 400 si userId ou id manquant
  */
-app.post('/api/userdata', async (req, res) => {
+app.post('/api/userdata', requireSecret, async (req, res) => {
   const { userId, id, vu, vouloir, nonInteresse, asuivre } = req.body;
-  if (!userId || !id) return res.status(400).json({ error: 'userId et id requis' });
+  if (!userId || !id || !users[userId]) return res.status(400).json({ error: 'userId invalide ou id manquant' });
   if (!userdata[userId]) userdata[userId] = {};
   const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse, asuivre: !!asuivre };
   if (!entry.vu && !entry.vouloir && !entry.nonInteresse && !entry.asuivre) {
@@ -898,7 +945,7 @@ app.post('/api/userdata', async (req, res) => {
  */
 app.get('/api/health', (_req, res) => {
   res.json({
-    ok: true, port: PORT, totalPages: TOTAL_PAGES,
+    ok: true, isScraping, totalPages: TOTAL_PAGES,
     cachedDetails: detailsCache.size, cachedFilms: cachedFilms.length,
     lastScrape, lastDetailsScrape,
     version: VERSION, serverStart: SERVER_START,
@@ -940,7 +987,7 @@ app.get('/api/scrape-status', (_req, res) => {
  *
  * Erreur : 429 si scraping déjà en cours
  */
-app.get('/api/scrape', async (req, res) => {
+app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async (req, res) => {
   if (isScraping) return res.status(429).json({ error: 'Scraping déjà en cours' });
   isScraping = true;
 
@@ -1115,7 +1162,7 @@ app.get('/api/details', async (req, res) => {
  *
  * Réponse: { ok: bool, status: number|null, message?: string }
  */
-app.get('/api/ping-allocine', async (_req, res) => {
+app.get('/api/ping-allocine', requireSecret, async (_req, res) => {
   try {
     const r = await fetchWithRetry('https://www.allocine.fr/', 0);
     res.json({ ok: true, status: r.status });
@@ -1134,7 +1181,7 @@ app.get('/api/ping-allocine', async (_req, res) => {
  *
  * Réponse: { ok: true, cleared: number }
  */
-app.post('/api/clear-details-cache', (_req, res) => {
+app.post('/api/clear-details-cache', requireSecret, (_req, res) => {
   const count = detailsCache.size;
   detailsCache.clear();
   console.log(`🗑️  Cache plateformes films vidé (${count} entrées supprimées)`);
@@ -1149,7 +1196,7 @@ app.post('/api/clear-details-cache', (_req, res) => {
  *
  * Réponse: { ok: true, cleared: number }
  */
-app.post('/api/clear-films', async (_req, res) => {
+app.post('/api/clear-films', requireSecret, async (_req, res) => {
   const count  = cachedFilms.length;
   cachedFilms  = [];
   lastScrape   = null;
@@ -1742,7 +1789,7 @@ app.get('/api/series/scrape-status', (_req, res) => {
  *
  * Erreur : 429 si scraping déjà en cours
  */
-app.get('/api/series/scrape', async (req, res) => {
+app.get('/api/series/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async (req, res) => {
   if (isScrapingSeries) return res.status(429).json({ error: 'Scraping déjà en cours' });
   isScrapingSeries      = true;
   lastSeriesScrapeErrors = [];
@@ -1900,7 +1947,7 @@ app.get('/api/series/details', async (req, res) => {
  *
  * Réponse: { ok: true, cleared: number }
  */
-app.post('/api/series/clear-cache', async (_req, res) => {
+app.post('/api/series/clear-cache', requireSecret, async (_req, res) => {
   const count = seriesDetailsCache.size;
   seriesDetailsCache.clear();
   if (redis) {
@@ -1919,7 +1966,7 @@ app.post('/api/series/clear-cache', async (_req, res) => {
  *
  * Réponse: { ok: true, cleared: number }
  */
-app.post('/api/series/clear-list', async (_req, res) => {
+app.post('/api/series/clear-list', requireSecret, async (_req, res) => {
   const count  = cachedSeries.length;
   cachedSeries = [];
   lastSeriesScrape = null;
@@ -1939,7 +1986,7 @@ app.post('/api/series/clear-list', async (_req, res) => {
  *
  * Réponse: { ok: true, clearedList: number, clearedDetails: number }
  */
-app.post('/api/series/clear-all', async (_req, res) => {
+app.post('/api/series/clear-all', requireSecret, async (_req, res) => {
   const detCount  = seriesDetailsCache.size;
   const listCount = cachedSeries.length;
   seriesDetailsCache.clear();
@@ -1967,7 +2014,7 @@ app.post('/api/series/clear-all', async (_req, res) => {
  *
  * Réponse: { list: { total, withGenre, withoutGenre, sample[] } }
  */
-app.get('/api/series/debug-genres', (_req, res) => {
+app.get('/api/series/debug-genres', requireSecret, (_req, res) => {
   const listWith    = cachedSeries.filter(s => s.genre).length;
   const listWithout = cachedSeries.length - listWith;
   const listSample  = cachedSeries.slice(0, 10).map(s => ({ titre: s.titre, genre: s.genre || null }));
@@ -2004,7 +2051,7 @@ app.get('/api/series/providers', (_req, res) => {
  *
  * Réponse: { total, withPoster, sample: { titre, poster }[] }
  */
-app.get('/api/series/debug-posters', (_req, res) => {
+app.get('/api/series/debug-posters', requireSecret, (_req, res) => {
   const sample = cachedSeries.slice(0, 20).map(s => ({ titre: s.titre, poster: s.poster || null }));
   res.json({
     total:      cachedSeries.length,
@@ -2026,7 +2073,7 @@ app.get('/api/series/debug-posters', (_req, res) => {
  * Réponse: { seriesId, url, relevant: string[], total: number }
  * Erreur : 400 si seriesId manquant, 500 si erreur réseau
  */
-app.get('/api/series/debug-lines', async (req, res) => {
+app.get('/api/series/debug-lines', requireSecret, async (req, res) => {
   const seriesId = String(req.query.seriesId || '').trim();
   if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
   try {

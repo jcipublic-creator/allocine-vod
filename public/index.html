@@ -1151,6 +1151,7 @@ async function checkAutoScrapeFilms() {
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
+  await loadAppSecret();
   const userInit = await initUser();
   if (userInit.mode === 'pick') {
     UI.showUserPicker(userInit.users);

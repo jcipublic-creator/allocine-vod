@@ -50,7 +50,8 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
 let users    = {};  // { userId: { id, name, createdAt } }
 let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse } } }
 let prefsDB  = {};  // { userId: { showDocumentaires, showAnimations, hideVus, hideNonInteresse } }
-let lastScrape = null; // timestamp ISO du dernier scraping
+let lastScrape = null;        // timestamp ISO du dernier scraping liste films
+let lastDetailsScrape = null; // timestamp ISO du dernier scraping plateformes
 let cachedFilms = [];  // derniers films scrapés, persistés dans Redis
 
 // Détecte si userdata est dans l'ancien format plat { allocineId: { vu,... } }
@@ -98,6 +99,8 @@ async function loadUserdata() {
       }
       const ts = await redis.get('lastScrape');
       if (ts) lastScrape = ts;
+      const tsD = await redis.get('lastDetailsScrape');
+      if (tsD) lastDetailsScrape = tsD;
       const films = await redis.get('films');
       if (films) {
         cachedFilms = typeof films === 'string' ? JSON.parse(films) : films;
@@ -284,6 +287,9 @@ function getCachedDetails(key) {
 
 function setCachedDetails(key, value) {
   detailsCache.set(key, { value, cachedAt: Date.now() });
+  if (value && value.providers && value.providers.length > 0) {
+    lastDetailsScrape = new Date().toISOString();
+  }
   scheduleDetailsBackup();
 }
 
@@ -300,6 +306,7 @@ async function saveDetailsCache() {
     const obj = {};
     detailsCache.forEach((v, k) => { obj[k] = v; });
     await redis.set('details', JSON.stringify(obj));
+    if (lastDetailsScrape) await redis.set('lastDetailsScrape', lastDetailsScrape);
     console.log(`💾 détailsCache sauvegardé (${detailsCache.size} entrées)`);
   } catch(e) { console.warn('Erreur sauvegarde détailsCache:', e.message); }
 }
@@ -633,7 +640,8 @@ app.post('/api/userdata', async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true, port: PORT, totalPages: TOTAL_PAGES,
-    cachedDetails: detailsCache.size, cachedFilms: cachedFilms.length, lastScrape,
+    cachedDetails: detailsCache.size, cachedFilms: cachedFilms.length,
+    lastScrape, lastDetailsScrape,
     version: VERSION, serverStart: SERVER_START,
     lastScrapeErrors,
   });

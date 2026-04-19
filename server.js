@@ -1000,8 +1000,10 @@ function parseSeries(html) {
     const notePresse = ratingNotes[0] ?? null;
     const noteSpect  = ratingNotes[1] ?? null;
     if (!notePresse) return;
-    const genreArr = $card.find('a[href*="genre-"]').map((_, el) => $(el).text().trim()).get().filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
-    const genre    = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
+    const genreArr = $card.find('a[href*="genre-"]')
+      .map((_, el) => $(el).text().trim().replace(/^s[eé]ries?\s+/i, '').trim())
+      .get().filter(v => v && v.length > 1 && v.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(v));
+    const genre = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
     const allText  = $card.text();
     const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
     const anneeSortie = yearMatch ? yearMatch[1] : null;
@@ -1026,7 +1028,8 @@ function parseSeries(html) {
       const noteSpect  = lines[i + 2] === 'Spectateurs' && /^\d[,.]\d$/.test(lines[i + 3] || '')
         ? parseFloat(lines[i + 3].replace(',', '.')) : null;
 
-      let titre = '', genre = '', anneeSortie = null;
+      let titre = '', anneeSortie = null;
+      const genreParts = [];
       for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
         const line = lines[j];
         if (!line || SKIP.has(line)) continue;
@@ -1036,9 +1039,10 @@ function parseSeries(html) {
           continue;
         }
         if (/^\d+\s+saison/.test(line)) continue;
-        if (GENRE_RE.test(line) && !genre) { genre = line; continue; }
+        if (GENRE_RE.test(line)) { genreParts.unshift(line); continue; }
         titre = line; break;
       }
+      const genre = genreParts.join(', ');
       if (!titre || seen.has(normalizeTitle(titre))) continue;
       seen.add(normalizeTitle(titre));
       const synStart = noteSpect !== null ? i + 4 : i + 2;

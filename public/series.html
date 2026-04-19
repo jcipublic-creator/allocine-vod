@@ -303,6 +303,7 @@ body {
 <div class="header">
   <a class="header-back" href="/index.html">← Films</a>
   <div class="header-title">📺 Séries</div>
+  <a href="/index.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">🎬 Films</a>
   <div class="header-status" id="server-status"></div>
   <div id="profile-header-badge" onclick="openProfiles()">
     👤 <span id="profile-name-serie">—</span>
@@ -359,7 +360,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v80'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v81'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {

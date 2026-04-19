@@ -519,11 +519,9 @@ const UI = {
     return cur >= 0 ? document.getElementById(`card-plat-${cur}`) : null;
   },
   onPlatStart() {
-    const z = document.getElementById('plat-zone');
     document.getElementById('plat-fill').style.width = '0%';
     document.getElementById('plat-lbl').textContent = 'Chargement des plateformes…';
-    z.classList.add('show');
-    updatePlatProgress();
+    document.getElementById('plat-zone').classList.add('show');
   },
   onPlatProgress(done, total) {
     const pct = total > 0 ? Math.round(done / total * 100) : 0;

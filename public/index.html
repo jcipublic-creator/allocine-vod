@@ -2,381 +2,372 @@
 <html lang="fr">
 <head>
 <meta charset="UTF-8">
-<link rel="manifest" href="/manifest.json">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Films VOD">
 <link rel="apple-touch-icon" href="/icon-192.svg">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>🎬 AlloCiné VOD Scraper</title>
+<link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<title>🎬 Films VOD</title>
 <style>
-  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-  :root {
-    --navy: #0d2137; --blue: #1c3a56; --blue2: #2a4f70;
-    --gold: #f0c040; --green: #1a7f4b; --orange: #e8a000;
-    --text: #e8edf2; --muted: #7a9bb5;
-  }
-  body { background: var(--navy); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; min-height: 100vh; }
-  #auto-scrape-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 3px; pointer-events: none; }
-  #auto-scrape-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), #ffe080); transition: width 2s ease; border-radius: 0 2px 2px 0; box-shadow: 0 0 8px rgba(240,192,64,.7); }
+:root {
+  --navy:   #0d2137;
+  --blue2:  #1a3550;
+  --blue3:  #2a4f70;
+  --gold:   #f0c040;
+  --text:   #d0e0f0;
+  --muted:  #7090a0;
+  --green:  #4caf7d;
+  --orange: #e08030;
+  --st: env(safe-area-inset-top, 0px);
+  --sb: env(safe-area-inset-bottom, 0px);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--navy); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  padding-top: calc(56px + var(--st));
+  padding-bottom: calc(8px + var(--sb));
+  min-height: 100dvh;
+}
 
-  header { background: var(--blue); border-bottom: 2px solid var(--gold); padding: 18px 32px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .logo { font-size: 20px; font-weight: 800; color: var(--gold); }
-  .logo span { color: var(--text); font-weight: 400; }
+/* ── Barre auto-scrape ── */
+#auto-scrape-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 3px; pointer-events: none; }
+#auto-scrape-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), #ffe080); transition: width 2s ease; border-radius: 0 2px 2px 0; box-shadow: 0 0 8px rgba(240,192,64,.7); }
 
-  .controls { background: var(--blue); border-radius: 12px; padding: 20px 28px; margin: 24px 32px; display: flex; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  .field { display: flex; flex-direction: column; gap: 6px; }
-  label { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; font-weight: 600; }
-  select, input[type="number"] {
-    background: var(--navy); border: 1px solid var(--blue2); color: var(--text);
-    padding: 9px 12px; border-radius: 8px; font-size: 13px; outline: none; cursor: pointer;
-  }
-  select { min-width: 120px; }
-  input[type="number"] { width: 100px; }
-  select:focus, input:focus { border-color: var(--gold); }
+/* ── Header ── */
+.header {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 200;
+  height: calc(56px + var(--st)); padding-top: var(--st);
+  background: rgba(13,33,55,.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--blue3);
+  display: flex; align-items: center;
+  padding-left: 16px; padding-right: 12px; gap: 10px;
+}
+.header-title { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
+.note-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
-  .btn-run {
-    background: var(--gold); color: var(--navy); border: none; border-radius: 8px;
-    padding: 10px 26px; font-size: 14px; font-weight: 800; cursor: pointer;
-    transition: transform .15s, box-shadow .15s; white-space: nowrap;
-  }
-  .btn-run:hover  { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(240,192,64,.4); }
-  .btn-run:disabled { opacity: .5; cursor: not-allowed; transform: none; box-shadow: none; }
+/* ── Progress bars ── */
+.prog-zone { padding: 8px 14px 4px; display: none; }
+.prog-zone.show { display: block; }
+.prog-lbl { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
+.prog-track { background: var(--blue2); border-radius: 3px; height: 5px; overflow: hidden; }
+.prog-fill { height: 100%; border-radius: 3px; width: 0%; transition: width .3s; background: var(--gold); }
+.prog-fill.green { background: var(--green); }
 
-  #filter-bar { background: var(--blue); border-radius: 12px; padding: 16px 28px; margin: 0 32px 16px; display: none; align-items: flex-end; gap: 16px; flex-wrap: wrap; }
-  #filter-bar label { color: var(--muted); }
-  .filter-count { font-size: 12px; color: var(--muted); margin-left: auto; align-self: center; }
-  .btn-reset { background: none; border: 1px solid var(--blue2); color: var(--muted); border-radius: 6px; padding: 8px 14px; font-size: 12px; cursor: pointer; }
-  .btn-reset:hover { border-color: var(--gold); color: var(--gold); }
+/* ── Filter bar ── */
+.filter-bar {
+  display: none; padding: 8px 12px;
+  overflow-x: auto; -webkit-overflow-scrolling: touch;
+  scrollbar-width: none; gap: 6px;
+  border-bottom: 1px solid var(--blue2);
+  align-items: center;
+}
+.filter-bar.show { display: flex; }
+.filter-bar::-webkit-scrollbar { display: none; }
+.filter-bar select {
+  background: var(--blue2); border: 1px solid var(--blue3); color: var(--text);
+  padding: 6px 10px; border-radius: 20px; font-size: 13px;
+  flex-shrink: 0; -webkit-appearance: none; cursor: pointer;
+}
+.filter-toggle { flex-shrink: 0; cursor: pointer; }
+.filter-toggle input { display: none; }
+.filter-toggle span {
+  display: inline-block; padding: 6px 10px; border-radius: 20px; font-size: 12px;
+  background: var(--blue2); border: 1px solid var(--blue3); color: var(--muted);
+  white-space: nowrap; transition: all .15s;
+}
+.filter-toggle input:checked + span { border-color: var(--gold); color: var(--gold); background: rgba(240,192,64,.08); }
 
-  #progress-zone { margin: 0 32px 16px; display: none; }
-  .progress-label { font-size: 13px; color: var(--muted); margin-bottom: 8px; }
-  .progress-track { background: var(--blue2); border-radius: 6px; height: 8px; overflow: hidden; }
-  .progress-fill  { background: var(--gold); height: 100%; width: 0%; border-radius: 6px; transition: width .3s; }
-  .progress-sub   { font-size: 11px; color: var(--muted); margin-top: 5px; }
+/* Filtres desktop uniquement */
+.desktop-only { display: none !important; }
 
-  /* Barre de chargement des plateformes (secondaire) */
-  #plat-zone { margin: 0 32px 16px; display: none; }
-  .plat-label { font-size: 12px; color: var(--muted); margin-bottom: 5px; }
-  .plat-track { background: var(--blue2); border-radius: 4px; height: 4px; overflow: hidden; }
-  .plat-fill  { background: #3498db; height: 100%; width: 0%; border-radius: 4px; transition: width .4s; }
+/* ── Stats + export bar ── */
+.stats { padding: 6px 14px; font-size: 11px; color: var(--muted); display: none; }
+.stats.show { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.export-btns { display: none; gap: 6px; }
+.btn-export {
+  border: none; border-radius: 16px; padding: 4px 12px; font-size: 11px;
+  font-weight: 700; cursor: pointer; white-space: nowrap;
+}
+.btn-csv  { background: rgba(76,175,125,.2); border: 1px solid rgba(76,175,125,.4); color: #4caf7d; }
+.btn-xlsx { background: rgba(33,115,70,.2);  border: 1px solid rgba(33,115,70,.5);  color: #27ae60; }
+.btn-csv:hover  { background: rgba(76,175,125,.35); }
+.btn-xlsx:hover { background: rgba(33,115,70,.35); }
 
-  #error-banner { margin: 0 32px 16px; background: #3a1010; border: 1px solid #c0392b; border-radius: 8px; padding: 12px 18px; color: #f0c040; font-size: 13px; display: none; }
+/* ── Cards ── */
+.cards { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
 
-  #results-header { margin: 0 32px 12px; display: none; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
-  .result-count { font-size: 15px; font-weight: 700; color: var(--gold); }
-  .export-btns { display: flex; gap: 10px; }
-  .btn-export { border: none; border-radius: 8px; padding: 8px 18px; font-size: 13px; font-weight: 700; cursor: pointer; }
-  .btn-csv  { background: var(--green); color: #fff; }
-  .btn-xlsx { background: #217346; color: #fff; }
-  .btn-export:hover { opacity: .85; }
+.card {
+  background: var(--blue2); border: 1px solid var(--blue3);
+  border-radius: 12px; padding: 10px 12px; cursor: pointer;
+  transition: border-color .12s;
+}
+.card:active { border-color: var(--gold); }
 
-  #table-wrap { margin: 0 32px 40px; overflow-x: auto; display: none; border-radius: 10px; overflow: hidden; border: 1px solid var(--blue2); }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  thead th {
-    background: var(--navy); color: var(--gold); padding: 10px 14px;
-    text-align: left; font-size: 11px; text-transform: uppercase; letter-spacing: .7px;
-    border-bottom: 2px solid var(--gold); white-space: nowrap;
-  }
-  thead th.center { text-align: center; }
-  /* ── Multi-select genre ── */
-  .multi-select { position: relative; }
-  .multi-btn {
-    background: var(--blue2); border: 1px solid var(--blue3); color: var(--text);
-    padding: 9px 12px; border-radius: 8px; font-size: 13px; cursor: pointer;
-    min-width: 160px; text-align: left; white-space: nowrap;
-  }
-  .multi-btn:hover { border-color: var(--gold); }
-  .multi-btn.active { border-color: var(--gold); color: var(--gold); }
-  .multi-dropdown {
-    display: none; position: absolute; top: calc(100% + 4px); left: 0; z-index: 100;
-    background: #1a3550; border: 1px solid var(--blue3); border-radius: 8px;
-    min-width: 200px; max-height: 260px; overflow-y: auto;
-    box-shadow: 0 8px 24px rgba(0,0,0,.5);
-  }
-  .multi-dropdown.open { display: block; }
-  .multi-dropdown label {
-    display: flex; align-items: center; gap: 8px;
-    padding: 7px 12px; cursor: pointer; font-size: 13px; color: var(--text);
-  }
-  .multi-dropdown label:hover { background: rgba(240,192,64,.1); }
-  .multi-dropdown label input[type=checkbox] { accent-color: var(--gold); width: 14px; height: 14px; }
-  .multi-dropdown .ms-actions {
-    display: flex; gap: 8px; padding: 6px 12px; border-top: 1px solid var(--blue3);
-    position: sticky; bottom: 0; background: #1a3550;
-  }
-  .multi-dropdown .ms-actions button {
-    font-size: 11px; padding: 3px 8px; border-radius: 4px; cursor: pointer;
-    background: var(--blue2); border: 1px solid var(--blue3); color: var(--muted);
-  }
-  .multi-dropdown .ms-actions button:hover { color: var(--gold); border-color: var(--gold); }
+.card-top { display: flex; align-items: center; gap: 10px; }
+.card-info { flex: 1; min-width: 0; }
+.card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
+.card-orig  { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 1px; }
+.card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.card-crew strong { color: var(--text); font-weight: 600; }
+.card-pays  { color: var(--muted); font-weight: 400; }
+.card-actors { font-size: 10px; color: var(--muted); margin-top: 1px; font-style: italic; }
+.year-pill {
+  display: inline-block; font-size: 9px; font-weight: 700;
+  background: rgba(240,192,64,.12); color: var(--gold);
+  border: 1px solid rgba(240,192,64,.25); border-radius: 4px;
+  padding: 1px 4px; margin-left: 4px; vertical-align: middle;
+}
 
-  thead th.th-sort { cursor: pointer; user-select: none; }
-  thead th.th-sort:hover { color: #fff; }
-  thead th.th-sort.active { color: #fff; border-bottom-color: #fff; }
-  tbody tr.film-row { cursor: pointer; transition: background .1s; }
-  tbody tr.film-row:nth-child(odd) { background: rgba(28,58,86,.4); }
-  tbody tr.film-row:hover { background: rgba(240,192,64,.15); }
-  tbody tr.film-row.open { background: rgba(240,192,64,.08); }
-  .td-arrow { cursor: pointer; color: var(--gold); font-size: 11px; padding: 0 6px !important; user-select: none; width: 18px; text-align: center; }
-  .td-arrow::after { content: '▶'; }
-  tbody tr.film-row.open .td-arrow::after { content: '▼'; }
-  .year-badge { display: inline-block; font-size: 10px; background: rgba(240,192,64,.15);
-    color: var(--gold); border: 1px solid rgba(240,192,64,.3); border-radius: 4px;
-    padding: 1px 5px; margin-left: 6px; vertical-align: middle; font-weight: 600; }
-  tbody tr.detail-row td { background: var(--navy); padding: 0; border-bottom: 1px solid var(--blue2); }
-  tbody td { padding: 10px 14px; border-bottom: 1px solid rgba(42,79,112,.3); vertical-align: middle; }
+.card-scores { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.score-block { text-align: center; }
+.score-val { font-size: 17px; font-weight: 700; line-height: 1; }
+.score-val.green  { color: var(--green); }
+.score-val.orange { color: var(--orange); }
+.score-val.muted  { color: var(--muted); font-size: 14px; }
+.score-lbl { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
+.score-sep { width: 1px; height: 18px; background: var(--blue3); }
 
-  .td-num   { color: var(--muted); text-align: center; font-size: 11px; width: 36px; }
-  .td-arrow { text-align: center; color: var(--muted); width: 24px; font-size: 11px; transition: transform .2s; }
-  .open .td-arrow { transform: rotate(90deg); color: var(--gold); }
-  .td-title { font-weight: 700; }
-  .td-title a { color: var(--text); text-decoration: none; }
-  .td-title a:hover { color: var(--gold); }
-  .td-orig  { color: var(--muted); font-size: 11px; margin-top: 2px; font-style: italic; }
-  .td-genre { color: #8fc; font-size: 12px; }
-  .td-real  { font-weight: 600; }
-  .td-cast  { color: var(--muted); font-size: 12px; }
-  .td-note  { text-align: center; font-weight: 800; font-size: 15px; }
-  .td-spect { text-align: center; color: var(--muted); font-size: 13px; }
-  .note-green  { color: #2ecc71; }
-  .note-orange { color: var(--orange); }
+.card-plats { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
+.pb { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
+.pb.svod     { background: rgba(76,175,125,.2);  border: 1px solid rgba(76,175,125,.4);  color: #4caf7d; }
+.pb.location { background: rgba(240,192,64,.15); border: 1px solid rgba(240,192,64,.35); color: var(--gold); }
+.pb.achat    { background: rgba(224,128,48,.15); border: 1px solid rgba(224,128,48,.35); color: var(--orange); }
+.pb.vod      { background: rgba(255,255,255,.08);border: 1px solid rgba(255,255,255,.15);color: var(--text); }
+.pb-loading  { color: var(--muted); font-size: 11px; font-style: italic; }
+.pb-none     { color: var(--muted); font-size: 11px; }
 
-  /* ── Colonne Plateformes dans le tableau ── */
-  .td-plat { min-width: 140px; max-width: 220px; }
-  .plat-badges { display: flex; flex-wrap: wrap; gap: 4px; }
-  .pb {
-    display: inline-block; border-radius: 12px; padding: 2px 8px;
-    font-size: 10px; font-weight: 700; white-space: nowrap; border: 1px solid transparent;
-  }
-  .pb.svod     { background: rgba(39,174,96,.2);  border-color: #27ae60; color: #5dcc8a; }
-  .pb.location { background: rgba(52,152,219,.15); border-color: #3498db; color: #74b9e8; }
-  .pb.achat    { background: rgba(155,89,182,.15); border-color: #9b59b6; color: #c39bd3; }
-  .pb.vod      { background: rgba(127,140,141,.15);border-color: #7f8c8d; color: #aab7b8; }
-  .pb-loading  { color: var(--muted); font-size: 11px; font-style: italic; }
-  .pb-none     { color: var(--muted); font-size: 11px; }
+/* Synopsis */
+.card-synopsis-wrap {
+  margin-top: 7px; padding-top: 7px;
+  border-top: 1px solid rgba(42,79,112,.5);
+  font-size: 12px; color: var(--text); line-height: 1.5;
+}
+.card-synopsis-preview { color: var(--text); }
+.card-synopsis-rest { display: none; }
+.card-synopsis-rest.show { display: inline; }
+.card-more-btn { color: var(--gold); font-size: 11px; cursor: pointer; margin-left: 3px; white-space: nowrap; }
+.card-synopsis-meta { margin-top: 5px; font-size: 10px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
 
-  /* ── Panneau détail ── */
-  .detail-panel {
-    padding: 20px 28px; display: none; gap: 28px; flex-wrap: wrap;
-    border-top: 1px solid var(--blue2);
-  }
-  .detail-panel.visible { display: flex; }
-  .synopsis-block { flex: 2; min-width: 280px; }
-  .synopsis-block h4 { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
-  .synopsis-text { font-size: 13px; color: #bcd; line-height: 1.7; }
-  .synopsis-text.empty { color: var(--muted); font-style: italic; }
-  .meta-block { flex: 1; min-width: 160px; display: flex; flex-direction: column; gap: 14px; }
-  .meta-item h4 { font-size: 11px; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
-  .meta-item p  { font-size: 13px; color: var(--text); }
-  .meta-item p.loading { color: var(--muted); font-style: italic; }
-  .pays-pill {
-    display: inline-block; background: var(--blue2); border-radius: 20px;
-    padding: 3px 12px; font-size: 12px; margin: 3px 4px 3px 0; color: var(--text);
-  }
+/* Boutons actions utilisateur */
+.card-ua { display: flex; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(42,79,112,.5); }
+.ua-btn {
+  flex: 1; background: none; border: 1px solid var(--blue3); color: var(--muted);
+  border-radius: 8px; padding: 5px 4px; font-size: 11px; cursor: pointer;
+  text-align: center; transition: all .15s;
+}
+.ua-btn.active-vu   { border-color: #4caf7d; color: #4caf7d; background: rgba(76,175,125,.12); }
+.ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
+.ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
 
-  /* ── Filtres Ma liste ── */
-  .ua-check {
-    display: flex; align-items: center; gap: 6px;
-    font-size: 12px; color: var(--text); cursor: pointer;
-    text-transform: none; letter-spacing: 0; font-weight: 400;
-  }
-  .ua-check input[type=checkbox] { accent-color: var(--gold); width: 13px; height: 13px; }
+/* Empty */
+.empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
+.empty.show { display: block; }
 
-  /* ── Boutons actions utilisateur ── */
-  .user-actions { display: flex; gap: 4px; min-width: 90px; }
-  .ua-btn {
-    background: none; border: 1px solid var(--blue2); color: var(--muted);
-    border-radius: 6px; padding: 3px 7px; font-size: 12px; cursor: pointer;
-    transition: all .15s; white-space: nowrap; line-height: 1.4;
-  }
-  .ua-btn:hover { border-color: var(--gold); color: var(--text); }
-  .ua-btn.active-vu   { border-color: #2ecc71; color: #2ecc71; background: rgba(46,204,113,.12); }
-  .ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
-  .ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
+/* ── Modales ── */
+#info-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
+  padding-bottom: var(--sb);
+}
+#info-modal.open { display: flex; }
+.info-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--sb)); width: 100%;
+  max-height: 70vh; overflow-y: auto;
+}
+.info-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
+.info-row { display: flex; justify-content: space-between; padding: 9px 0;
+  border-bottom: 1px solid rgba(42,79,112,.4); gap: 12px; }
+.info-row:last-of-type { border-bottom: none; }
+.info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
+.info-row .val { font-size: 12px; color: var(--text); text-align: right; }
+.info-errors { margin-top: 10px; font-size: 11px; color: #e74c3c; line-height: 1.6; }
+.info-close-btn {
+  width: 100%; margin-top: 16px; padding: 12px; border-radius: 10px;
+  background: var(--blue3); border: none; color: var(--text);
+  font-size: 14px; font-weight: 600; cursor: pointer;
+}
 
-  /* ── Panneau info ── */
-  .info-btn {
-    background: none; border: 1px solid var(--blue2); color: var(--muted);
-    border-radius: 50%; width: 26px; height: 26px; font-size: 13px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    transition: all .15s;
-  }
-  .info-btn:hover { border-color: var(--gold); color: var(--gold); }
-  #confirm-modal {
-    display: none; position: fixed; inset: 0; z-index: 1100;
-    background: rgba(0,0,0,.65); align-items: center; justify-content: center;
-  }
-  #confirm-modal.open { display: flex; }
-  .confirm-panel {
-    background: var(--blue); border: 1px solid var(--blue2); border-radius: 14px;
-    padding: 28px 32px; min-width: 320px; max-width: 420px; width: 90%;
-    box-shadow: 0 20px 60px rgba(0,0,0,.5);
-  }
-  .confirm-panel h3 { color: var(--gold); font-size: 15px; margin-bottom: 10px; }
-  .confirm-panel p  { font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 6px; }
-  .confirm-panel .last-scrape { font-size: 12px; color: var(--muted); margin-bottom: 22px; }
-  .confirm-btns { display: flex; gap: 10px; justify-content: flex-end; }
-  .confirm-btns button { padding: 9px 22px; border-radius: 8px; border: none; font-size: 13px; font-weight: 700; cursor: pointer; }
-  .btn-confirm { background: var(--gold); color: var(--navy); }
-  .btn-cancel  { background: var(--blue2); color: var(--text); }
+#confirm-modal {
+  display: none; position: fixed; inset: 0; z-index: 600;
+  background: rgba(0,0,0,.75); align-items: flex-end; justify-content: center;
+  padding-bottom: var(--sb);
+}
+#confirm-modal.open { display: flex; }
+.confirm-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 24px 20px calc(20px + var(--sb)); width: 100%;
+}
+.confirm-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 10px; }
+.confirm-sheet p  { font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 6px; }
+.confirm-sheet .last-scrape { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+.confirm-btns { display: flex; gap: 10px; }
+.confirm-btns button { flex: 1; padding: 13px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
+.btn-confirm { background: var(--gold); color: #000; }
+.btn-cancel  { background: var(--blue3); color: var(--text); }
+.confirm-note { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 18px; padding: 12px 14px; background: rgba(255,255,255,.04); border-radius: 10px; border: 1px solid var(--blue3); }
+.confirm-note .note-label { font-size: 13px; color: var(--text); }
+.note-input {
+  width: 52px; background: var(--blue2); border: 1px solid var(--blue3);
+  color: var(--text); border-radius: 8px; padding: 5px 6px;
+  font-size: 13px; text-align: center;
+}
 
-  #info-modal {
-    display: none; position: fixed; inset: 0; z-index: 1000;
-    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
-  }
-  #info-modal.open { display: flex; }
-  .info-panel {
-    background: var(--blue); border: 1px solid var(--blue2); border-radius: 14px;
-    padding: 28px 32px; min-width: 340px; max-width: 480px; width: 90%;
-    box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
-  }
-  .info-panel h3 { color: var(--gold); font-size: 15px; margin-bottom: 20px; }
-  .info-row { display: flex; justify-content: space-between; align-items: baseline;
-    padding: 8px 0; border-bottom: 1px solid rgba(42,79,112,.4); gap: 16px; }
-  .info-row:last-child { border-bottom: none; }
-  .info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .6px; }
-  .info-row .val { font-size: 13px; color: var(--text); text-align: right; }
-  .info-errors { margin-top: 12px; font-size: 11px; color: #e74c3c; max-height: 80px; overflow-y: auto; }
-  .info-close { position: absolute; top: 14px; right: 16px; background: none; border: none;
-    color: var(--muted); font-size: 18px; cursor: pointer; }
-  .info-close:hover { color: var(--gold); }
+/* Error banner */
+#error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
+  border: 1px solid rgba(200,80,80,.4); border-radius: 10px; font-size: 13px;
+  color: #f08080; display: none; }
 
-  #empty { margin: 60px 32px; text-align: center; display: none; }
-  #empty h2 { color: var(--muted); font-size: 18px; margin-bottom: 8px; }
+/* ── Menu hamburger ── */
+.menu-btn {
+  background: none; border: 1px solid var(--blue3); color: var(--muted);
+  border-radius: 8px; width: 32px; height: 32px; font-size: 16px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; transition: color .15s, border-color .15s;
+}
+.menu-btn:active, .menu-btn.open { color: var(--gold); border-color: var(--gold); }
+.menu-dropdown {
+  display: none; position: fixed;
+  top: calc(56px + var(--st) + 6px); right: 12px;
+  background: #0f2540; border: 1px solid var(--blue3);
+  border-radius: 12px; z-index: 400; min-width: 200px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.5); overflow: hidden;
+}
+.menu-dropdown.open { display: block; }
+.menu-item {
+  display: flex; align-items: center; gap: 10px;
+  width: 100%; padding: 14px 16px;
+  background: none; border: none; border-bottom: 1px solid rgba(42,79,112,.3);
+  color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
+}
+.menu-item:last-child { border-bottom: none; }
+.menu-item:active { background: rgba(255,255,255,.06); }
+.menu-item:disabled { opacity: .4; cursor: default; }
+.menu-separator { height: 1px; background: rgba(42,79,112,.5); }
 
-  /* ── Profils ── */
-  .profile-btn {
-    background: none; border: 1px solid var(--blue2); color: var(--muted);
-    border-radius: 8px; padding: 6px 12px; font-size: 13px; cursor: pointer;
-    transition: all .15s; display: flex; align-items: center; gap: 6px;
-  }
-  .profile-btn:hover { border-color: var(--gold); color: var(--gold); }
-  #profiles-modal {
-    display: none; position: fixed; inset: 0; z-index: 1000;
-    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
-  }
-  #profiles-modal.open { display: flex; }
-  .profiles-panel {
-    background: var(--blue); border: 1px solid var(--blue2); border-radius: 14px;
-    padding: 28px 32px; min-width: 340px; max-width: 460px; width: 90%;
-    box-shadow: 0 20px 60px rgba(0,0,0,.5); position: relative;
-  }
-  .profiles-panel h3 { color: var(--gold); font-size: 15px; margin-bottom: 20px; }
-  .profile-row-d {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 0; border-bottom: 1px solid rgba(42,79,112,.4); cursor: pointer;
-  }
-  .profile-row-d:last-of-type { border-bottom: none; }
-  .profile-row-d.active { cursor: default; }
-  .profile-row-d .pname { font-size: 14px; color: var(--text); }
-  .profile-row-d .pbadge-active { font-size: 11px; color: var(--gold); }
-  .profile-row-d .pbadge-switch { font-size: 11px; color: var(--muted); }
-  .profile-row-d:not(.active):hover .pname { color: var(--gold); }
-  .profile-add-row { display: flex; gap: 8px; margin-top: 20px; }
-  .profile-add-input {
-    flex: 1; background: var(--navy); border: 1px solid var(--blue2);
-    color: var(--text); border-radius: 8px; padding: 9px 12px; font-size: 13px; outline: none;
-  }
-  .profile-add-input:focus { border-color: var(--gold); }
-  .profile-add-btn {
-    background: var(--gold); color: var(--navy); border: none; border-radius: 8px;
-    padding: 9px 16px; font-size: 13px; font-weight: 700; cursor: pointer; white-space: nowrap;
-  }
-  .profile-close {
-    position: absolute; top: 14px; right: 16px; background: none; border: none;
-    color: var(--muted); font-size: 18px; cursor: pointer;
-  }
-  .profile-close:hover { color: var(--gold); }
+/* ── Prefs & Profils modales ── */
+#prefs-modal, #profiles-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
+}
+#prefs-modal.open, #profiles-modal.open { display: flex; }
+.prefs-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--sb)); width: 100%;
+  max-height: 75vh; overflow-y: auto;
+}
+.prefs-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
+.prefs-section { margin-bottom: 20px; }
+.prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.pref-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); }
+.pref-row:last-child { border-bottom: none; }
+.pref-label { font-size: 14px; color: var(--text); }
+.pref-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+/* Toggle switch */
+.toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider { position: absolute; inset: 0; cursor: pointer; background: var(--blue3); border-radius: 13px; transition: background .2s; }
+.toggle-slider::before { content: ''; position: absolute; width: 20px; height: 20px; left: 3px; top: 3px; background: #fff; border-radius: 50%; transition: transform .2s; }
+.toggle input:checked + .toggle-slider { background: var(--gold); }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 
-  @media (max-width: 750px) {
-    #filter-bar, #progress-zone, #plat-zone, #results-header, #table-wrap, #empty, #error-banner { margin-left: 12px; margin-right: 12px; }
-    header { padding: 14px; }
-    .td-cast, .td-spect, .td-plat { display: none; }
-  }
+/* ── Profils ── */
+.profile-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); cursor: pointer; }
+.profile-row:last-child { border-bottom: none; }
+.profile-row.active { cursor: default; }
+.profile-name { font-size: 14px; color: var(--text); }
+.profile-badge-active { font-size: 11px; color: var(--gold); }
+.profile-badge-switch { font-size: 11px; color: var(--muted); }
+.add-user-row { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+.add-user-input { flex: 1; background: var(--blue2); border: 1px solid var(--blue3); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
+.add-user-btn { background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 
-  /* ── Menu desktop ── */
-  .menu-btn-d {
-    background: none; border: 1px solid var(--blue2); color: var(--muted);
-    border-radius: 8px; width: 36px; height: 36px; font-size: 16px; cursor: pointer;
-    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    transition: all .15s;
-  }
-  .menu-btn-d:hover { border-color: var(--gold); color: var(--gold); }
-  .menu-btn-d.open  { border-color: var(--gold); color: var(--gold); }
-  .menu-dropdown-d {
-    display: none; position: fixed; top: 70px; right: 24px; z-index: 600;
-    background: var(--blue); border: 1px solid var(--blue2); border-radius: 12px;
-    min-width: 215px; box-shadow: 0 8px 32px rgba(0,0,0,.6); overflow: hidden;
-  }
-  .menu-dropdown-d.open { display: block; }
-  .menu-item-d {
-    display: flex; align-items: center; gap: 10px;
-    width: 100%; padding: 13px 18px;
-    background: none; border: none; border-bottom: 1px solid rgba(42,79,112,.3);
-    color: var(--text); font-size: 14px; cursor: pointer; text-align: left;
-    transition: background .1s;
-  }
-  .menu-item-d:last-child { border-bottom: none; }
-  .menu-item-d:hover:not(:disabled) { background: rgba(240,192,64,.08); color: var(--gold); }
-  .menu-item-d:disabled { opacity: .4; cursor: default; }
-  .menu-separator-d { height: 1px; background: rgba(42,79,112,.5); }
+/* Profile badge header */
+#profile-header-badge {
+  display: none; align-items: center; gap: 4px;
+  background: rgba(240,192,64,.1); border: 1px solid rgba(240,192,64,.25);
+  border-radius: 14px; padding: 4px 10px; font-size: 12px; color: var(--gold);
+  cursor: pointer; white-space: nowrap; flex-shrink: 0;
+}
 
-  /* Badge profil actif (header) */
-  .active-profile-badge {
-    display: flex; align-items: center; gap: 6px;
-    background: rgba(240,192,64,.1); border: 1px solid rgba(240,192,64,.3);
-    border-radius: 20px; padding: 5px 14px; font-size: 13px; color: var(--gold);
-    white-space: nowrap; user-select: none;
+/* ── RESPONSIVE DESKTOP ─────────────────────────────────────── */
+@media (min-width: 700px) {
+  body { padding-top: calc(60px + var(--st)); }
+
+  .header { height: calc(60px + var(--st)); padding-left: 24px; padding-right: 20px; }
+  .header-title { font-size: 18px; }
+
+  /* Grille 2 colonnes */
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    padding: 10px 20px;
+    gap: 10px;
   }
 
-  /* Modale préférences desktop */
-  #prefs-modal-d {
-    display: none; position: fixed; inset: 0; z-index: 1000;
-    background: rgba(0,0,0,.6); align-items: center; justify-content: center;
+  /* Filtres desktop visibles */
+  .desktop-only { display: flex !important; }
+
+  /* Filter bar : wrap au lieu du scroll horizontal */
+  .filter-bar {
+    overflow-x: visible;
+    flex-wrap: wrap;
+    padding: 10px 20px;
+    gap: 8px;
   }
-  #prefs-modal-d.open { display: flex; }
-  .pref-row-d {
-    display: flex; justify-content: space-between; align-items: center;
-    padding: 10px 0; border-bottom: 1px solid rgba(42,79,112,.4);
+
+  /* Export visible */
+  .export-btns { display: flex; }
+
+  /* Stats : fond légèrement distinct */
+  .stats { padding: 8px 20px; }
+  #error-banner { margin: 8px 20px; }
+
+  /* Modales centrées */
+  #info-modal, #confirm-modal, #prefs-modal, #profiles-modal {
+    align-items: center;
+    padding-bottom: 0;
   }
-  .pref-row-d:last-child { border-bottom: none; }
-  .pref-row-d .pref-lbl { font-size: 13px; color: var(--text); }
-  .pref-row-d input[type=checkbox] { accent-color: var(--gold); width: 16px; height: 16px; cursor: pointer; }
-  .pref-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .7px; margin: 14px 0 4px; }
-  .pref-section-title:first-child { margin-top: 0; }
+  .info-sheet, .confirm-sheet {
+    border-radius: 14px;
+    max-width: 480px;
+    padding-bottom: 24px;
+  }
+  .prefs-sheet {
+    border-radius: 14px;
+    max-width: 480px;
+    padding-bottom: 24px;
+  }
+
+  /* Progress zones */
+  .prog-zone { padding: 8px 20px 4px; }
+}
+
+@media (min-width: 1100px) {
+  .cards { grid-template-columns: repeat(3, 1fr); padding: 12px 28px; }
+  .filter-bar { padding: 10px 28px; }
+  .stats { padding: 8px 28px; }
+  #error-banner { margin: 8px 28px; }
+  .prog-zone { padding: 8px 28px 4px; }
+}
 </style>
 </head>
 <body>
+
 <div id="auto-scrape-bar"><div id="auto-scrape-fill"></div></div>
 
-<header>
-  <div class="logo">🎬 AlloCiné VOD <span>Scraper</span></div>
-  <a href="/series.html" style="text-decoration:none;font-size:13px;color:var(--muted);border:1px solid var(--blue2);border-radius:8px;padding:6px 12px;transition:color .15s,border-color .15s" onmouseover="this.style.color='var(--gold)';this.style.borderColor='var(--gold)'" onmouseout="this.style.color='var(--muted)';this.style.borderColor='var(--blue2)'">📺 Séries</a>
-  <div style="display:flex;align-items:center;gap:10px">
-    <span id="last-scrape-label" style="font-size:12px;color:var(--muted)"></span>
-    <div class="active-profile-badge" onclick="openProfiles()" title="Changer de profil" style="cursor:pointer;">👤 <span id="profile-name">—</span></div>
-    <button class="menu-btn-d" id="menu-btn-d" onclick="toggleMenuDesktop(event)" title="Menu">☰</button>
-  </div>
-</header>
-
-<div class="menu-dropdown-d" id="menu-dropdown-d">
-  <button class="menu-item-d" id="btn-run" onclick="closeMenuDesktop();openConfirm()" disabled>▶ Scraper</button>
-  <button class="menu-item-d" onclick="closeMenuDesktop();openPrefsDesktop()">🔖 Préférences</button>
-  <button class="menu-item-d" onclick="closeMenuDesktop();openProfiles()">👤 Profil</button>
-  <button class="menu-item-d" onclick="closeMenuDesktop();openInfo()">ℹ Info</button>
-  <a class="menu-item-d" href="/series.html" style="text-decoration:none">📺 Séries</a>
-  <div class="menu-separator-d"></div>
-  <button class="menu-item-d" style="font-size:12px;color:var(--muted)" id="btn-test" onclick="closeMenuDesktop();testAllocine()">🔍 Tester AlloCiné</button>
-  <button class="menu-item-d" style="font-size:12px;color:var(--muted)" id="btn-cache" onclick="closeMenuDesktop();clearCache()">🗑️ Vider le cache</button>
-</div>
-
-<div id="confirm-modal" onclick="if(event.target===this)closeConfirm()">
-  <div class="confirm-panel">
+<div id="confirm-modal">
+  <div class="confirm-sheet">
     <h3>🔄 Relancer le scraping ?</h3>
     <p>La liste sera mise à jour en arrière-plan.</p>
     <div class="last-scrape" id="confirm-last-scrape"></div>
-    <div style="display:flex;align-items:center;justify-content:space-between;margin:14px 0 18px;padding:10px 14px;background:rgba(255,255,255,.03);border-radius:8px;border:1px solid var(--blue2)">
-      <label style="font-size:13px;color:var(--text)">Note presse minimum</label>
-      <input type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
+    <div class="confirm-note">
+      <span class="note-label">Note presse minimum</span>
+      <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
     </div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
@@ -386,321 +377,521 @@
 </div>
 
 <div id="info-modal" onclick="if(event.target===this)closeInfo()">
-  <div class="info-panel">
-    <button class="info-close" onclick="closeInfo()">✕</button>
+  <div class="info-sheet">
     <h3>ℹ Informations</h3>
     <div id="info-content">Chargement…</div>
+    <button class="info-close-btn" onclick="closeInfo()">Fermer</button>
   </div>
 </div>
 
-<div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
-  <div class="profiles-panel">
-    <button class="profile-close" onclick="closeProfiles()">✕</button>
-    <h3>👤 Profils</h3>
-    <div id="profiles-content-d"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+<div class="header">
+  <div class="header-title">🎬 Films VOD</div>
+  <a href="/series.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">📺 Séries</a>
+  <div id="server-status" style="font-size:11px;color:var(--muted);white-space:nowrap;"></div>
+  <div id="profile-header-badge" onclick="openProfiles()">
+    👤 <span id="profile-name-badge">—</span>
   </div>
+  <button class="menu-btn" id="menu-btn" onclick="toggleMenu(event)">☰</button>
 </div>
 
-
-<div id="filter-bar">
-  <div class="field">
-    <label>Genre</label>
-    <div class="multi-select" id="genre-ms">
-      <button class="multi-btn" id="genre-btn" onclick="toggleGenreDropdown(event)">Tous les genres ▾</button>
-      <div class="multi-dropdown" id="genre-dropdown"></div>
-    </div>
-  </div>
-  <div class="field">
-    <label>Année</label>
-    <select id="fil-annee" onchange="applyFilters()">
-      <option value="">Toutes les années</option>
-      <option value="2026">À partir de 2026</option>
-      <option value="2025">À partir de 2025</option>
-      <option value="2024">À partir de 2024</option>
-      <option value="2023">À partir de 2023</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Type</label>
-    <select id="fil-type" onchange="applyFilters()">
-      <option value="">Streaming &amp; VOD</option>
-      <option value="svod">Streaming seulement</option>
-      <option value="vod">VOD seulement</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Plateforme</label>
-    <select id="fil-plat" onchange="applyFilters()">
-      <option value="">Toutes les plateformes</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Pays</label>
-    <select id="fil-pays" onchange="applyFilters()">
-      <option value="">Tous les pays</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Note presse min.</label>
-    <select id="fil-note" onchange="applyFilters()">
-      <option value="0">Toutes les notes</option>
-      <option value="4">≥ 4,0</option>
-      <option value="3.8">≥ 3,8</option>
-      <option value="3.5" selected>≥ 3,5</option>
-    </select>
-  </div>
-  <div class="field">
-    <label>Ma liste</label>
-    <div style="display:flex;flex-direction:column;gap:5px">
-      <label class="ua-check"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"> 🔖 Seulement "À voir"</label>
-      <label class="ua-check"><input type="checkbox" id="fil-show-all"  onchange="applyFilters()"> Tout afficher</label>
-    </div>
-  </div>
-  <button class="btn-reset" onclick="resetFilters()">✕ Réinitialiser</button>
-  <div class="filter-count" id="filter-count"></div>
+<div class="menu-dropdown" id="menu-dropdown">
+  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper</button>
+  <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profils</button>
+  <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
+  <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
+  <a class="menu-item" href="/series.html" style="text-decoration:none">📺 Séries</a>
+  <div class="menu-separator"></div>
+  <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadCSV()">⬇ Exporter CSV</button>
+  <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
+  <button class="menu-item desktop-only" style="font-size:13px;color:var(--muted)" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
+  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearCache()">🗑️ Vider le cache</button>
 </div>
 
-<div id="progress-zone">
-  <div class="progress-label" id="prog-label">Connexion à AlloCiné…</div>
-  <div class="progress-track"><div class="progress-fill" id="prog-fill"></div></div>
-  <div class="progress-sub" id="prog-sub"></div>
+<div class="prog-zone" id="prog-zone">
+  <div class="prog-lbl" id="prog-lbl">Connexion à AlloCiné…</div>
+  <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
 </div>
 
-<!-- Barre de progression secondaire pour les plateformes -->
-<div id="plat-zone">
-  <div class="plat-label" id="plat-label">📺 Chargement des plateformes… <span id="plat-count" style="color:var(--gold)"></span></div>
-  <div class="plat-track"><div class="plat-fill" id="plat-fill"></div></div>
-  <div id="plat-debug" style="font-size:11px;color:#e67e22;margin-top:4px;display:none;"></div>
+<div class="prog-zone" id="plat-zone">
+  <div class="prog-lbl" id="plat-lbl">📺 Plateformes… <span id="plat-count" style="color:var(--gold)"></span></div>
+  <div class="prog-track"><div class="prog-fill green" id="plat-fill"></div></div>
 </div>
 
 <div id="error-banner"></div>
-<details style="margin:0 32px 12px;font-size:11px;">
-  <summary style="cursor:pointer;color:#888;">🔧 Console debug (cliquer pour ouvrir)</summary>
-  <pre id="dbg-console" style="background:#111;color:#0f0;padding:10px;border-radius:6px;max-height:250px;overflow-y:auto;font-size:10px;line-height:1.4;white-space:pre-wrap;"></pre>
-</details>
 
-<div id="results-header">
-  <div class="result-count" id="result-count"></div>
+<div class="filter-bar" id="filter-bar">
+  <select id="fil-annee" onchange="applyFilters()">
+    <option value="">Toutes les années</option>
+    <option value="2026">À partir de 2026</option>
+    <option value="2025">À partir de 2025</option>
+    <option value="2024">À partir de 2024</option>
+    <option value="2023">À partir de 2023</option>
+  </select>
+  <select id="fil-genre" onchange="applyFilters()">
+    <option value="">Tous genres</option>
+  </select>
+  <select id="fil-type" onchange="applyFilters()">
+    <option value="">Streaming &amp; VOD</option>
+    <option value="svod">Streaming</option>
+    <option value="vod">VOD seulement</option>
+  </select>
+  <select id="fil-pays" onchange="applyFilters()">
+    <option value="">Tous pays</option>
+  </select>
+  <!-- Desktop uniquement -->
+  <select class="desktop-only" id="fil-plat" onchange="applyFilters()">
+    <option value="">Toutes les plateformes</option>
+  </select>
+  <select class="desktop-only" id="fil-note" onchange="applyFilters()">
+    <option value="0">Toutes les notes</option>
+    <option value="4">≥ 4,0</option>
+    <option value="3.8">≥ 3,8</option>
+    <option value="3.5" selected>≥ 3,5</option>
+  </select>
+  <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
+  <select id="fil-sort" onchange="applySort(this.value)">
+    <option value="presse">↓ Note presse</option>
+    <option value="spectateurs">↓ Note spectateurs</option>
+    <option value="annee">↓ Année</option>
+  </select>
+</div>
+
+<div class="stats" id="stats">
+  <span id="stats-text"></span>
   <div class="export-btns">
     <button class="btn-export btn-csv"  onclick="downloadCSV()">⬇ CSV</button>
     <button class="btn-export btn-xlsx" onclick="downloadXLSX()">⬇ Excel</button>
   </div>
 </div>
 
-<div id="table-wrap">
-  <table>
-    <thead>
-      <tr>
-        <th class="center" style="width:36px">#</th>
-        <th style="width:20px"></th>
-        <th>Titre</th>
-        <th>Genre</th>
-        <th>Réalisateur</th>
-        <th class="td-cast">Acteurs principaux</th>
-        <th class="center th-sort" id="th-annee" onclick="applySort('annee')" title="Trier par année de sortie">Année</th>
-        <th class="center th-sort" id="th-presse" onclick="applySort('presse')" title="Trier par note presse">Presse ↓</th>
-        <th class="center td-spect th-sort" id="th-spect" onclick="applySort('spectateurs')" title="Trier par note spectateurs">Spectateurs</th>
-        <th class="td-plat">Plateformes</th>
-        <th style="min-width:100px">Mes notes</th>
-      </tr>
-    </thead>
-    <tbody id="tbody"></tbody>
-  </table>
+<div class="cards" id="cards"></div>
+<div class="empty" id="empty">Aucun film trouvé avec ces critères.</div>
+
+<div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
+  <div class="prefs-sheet">
+    <h3>👤 Profils</h3>
+    <div id="profiles-content"><p style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</p></div>
+    <button class="info-close-btn" style="margin-top:20px" onclick="closeProfiles()">Fermer</button>
+  </div>
 </div>
 
-<div id="empty"><h2>Aucun film trouvé</h2><p style="color:var(--muted);font-size:13px">Essayez de modifier les filtres.</p></div>
-
-<div id="prefs-modal-d" onclick="if(event.target===this)closePrefsDesktop()">
-  <div class="info-panel">
-    <button class="info-close" onclick="closePrefsDesktop()">✕</button>
-    <h3>🔖 Préférences</h3>
-    <div id="prefs-content-d"></div>
+<div id="prefs-modal" onclick="if(event.target===this)closePrefs()">
+  <div class="prefs-sheet">
+    <h3>🔖 Mes préférences</h3>
+    <div id="prefs-content"></div>
+    <button class="info-close-btn" onclick="closePrefs()">Fermer</button>
   </div>
 </div>
 
 <script src="/shared.js"></script>
 <script>
-// ─── Objet UI desktop ─────────────────────────────────────────────────────────
+// ─── Objet UI ─────────────────────────────────────────────────────────────────
 const UI = {
-  renderFilms(films) { renderTable(films); },
+  renderFilms(films) { renderCards(films); },
   reapplyAfterSort(films) {
     films.forEach((film, i) => {
       const det = _details[filmKey(film)];
       if (!det) return;
-      const platEl = document.getElementById(`plat-${i}`);
+      const platEl = document.getElementById(`card-plat-${i}`);
       if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
+      updateCardMeta(i, det);
     });
-    reapplyUserActions(); // re-remplit les cellules UA vides après re-rendu
   },
   renderUserActions(film, idx) {
     const el = document.getElementById(`ua-${idx}`);
     if (!el) return;
     const id = film.allocineId;
-    if (!id) {
-      el.innerHTML = '<span style="color:var(--muted);font-size:10px">—</span>';
-      return;
-    }
+    if (!id) { el.innerHTML = ''; return; }
     const ud = _userdata[id] || {};
-    el.innerHTML = `<div class="user-actions">
-      <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')" title="J'ai vu ce film">👁</button>
-      <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')" title="Je veux le voir">🔖</button>
-      <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')" title="Pas intéressé">✕</button>
+    el.outerHTML = `<div class="card-ua" id="ua-${idx}" onclick="event.stopPropagation()">
+      <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')">👁 Vu</button>
+      <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')">🔖 À voir</button>
+      <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')">✕ Non</button>
     </div>`;
   },
   getPlatEl(film) {
     const cur = _allFilms.indexOf(film);
-    return cur >= 0 ? document.getElementById(`plat-${cur}`) : null;
+    return cur >= 0 ? document.getElementById(`card-plat-${cur}`) : null;
   },
   onPlatStart() {
-    show('plat-zone');
+    document.getElementById('plat-zone').classList.add('show');
     document.getElementById('plat-fill').style.width = '0%';
-    const dbgEl = document.getElementById('plat-debug');
-    if (dbgEl) { dbgEl.style.display = 'none'; dbgEl.textContent = ''; }
+    updatePlatProgress();
   },
   onPlatProgress(done, total) {
     const pct = total ? Math.round(done / total * 100) : 0;
     document.getElementById('plat-fill').style.width = pct + '%';
-    document.getElementById('plat-count').textContent = `${done} / ${total}`;
+    const el = document.getElementById('plat-count');
+    if (el) el.textContent = `${done} / ${total}`;
   },
   onPlatDone(errors) {
-    const labelTxt = errors > 0 ? `📺 Plateformes chargées (${errors} échec(s))` : '📺 Plateformes chargées';
-    document.getElementById('plat-label').innerHTML = `${labelTxt} <span id="plat-count" style="color:var(--gold)"></span>`;
+    document.getElementById('plat-lbl').innerHTML =
+      `📺 Plateformes chargées <span id="plat-count" style="color:var(--gold)">${_allFilms.length}</span>`;
     document.getElementById('plat-fill').style.width = '100%';
-    this.populatePlatFilter();
-    populatePaysFilter();
-  },
-  onDetailFetched(idx, data) {
-    updateDetailPanel(idx, data);
-  },
-  onScrapeStart(btn) {
-    btn.disabled = true;
-    btn.textContent = '⏳ Scraping…';
-    show('progress-zone');
-    document.getElementById('error-banner').style.display = 'none';
-    document.getElementById('prog-fill').style.width = '0%';
-    document.getElementById('prog-label').textContent = 'Scraping en arrière-plan…';
-    document.getElementById('prog-sub').textContent = '';
-  },
-  onScrapeProgress(pct, annee, count) {
-    document.getElementById('prog-fill').style.width = pct + '%';
-    const anneeLabel = annee ? ` — ${annee}` : '';
-    document.getElementById('prog-label').textContent = `⏳ ${pct}%${anneeLabel} — ${count} films`;
-  },
-  onScrapeDone(btn, lastScrape) {
-    document.getElementById('prog-fill').style.width = '100%';
-    document.getElementById('prog-label').textContent = `✅ ${_allFilms.length} films récupérés`;
-    document.getElementById('prog-sub').textContent = '';
-    btn.disabled = false;
-    btn.textContent = '▶ Scraper';
-    if (lastScrape) updateLastScrapeLabel(lastScrape);
-    if (!_allFilms.length) show('empty');
-    show('filter-bar');
-    show('results-header');
-    show('table-wrap');
-  },
-  onScrapeError(btn) {
-    btn.disabled = false;
-    btn.textContent = '▶ Scraper';
-    document.getElementById('prog-label').textContent = '❌ Connexion perdue';
-    this.showError('❌ Connexion perdue. Vérifiez que le serveur tourne (npm start).');
-  },
-  onCacheLoaded(label) {
-    const lbl = document.getElementById('last-scrape-label');
-    if (lbl) { lbl.textContent = `Cache du ${label}`; lbl.style.color = 'var(--muted)'; }
+    document.getElementById('server-status').textContent = '🟢';
     this.populateGenreFilter();
     this.populatePlatFilter();
     populatePaysFilter();
-    applySort(); // rend le tableau + applique les filtres
-    show('filter-bar');
-    show('results-header');
-    show('table-wrap');
+  },
+  onDetailFetched(idx, data) { updateCardMeta(idx, data); },
+  onScrapeStart(btn) {
+    btn.disabled = true; btn.textContent = '⏳ En cours…';
+    document.getElementById('prog-zone').classList.add('show');
+    document.getElementById('plat-zone').classList.remove('show');
+    document.getElementById('error-banner').style.display = 'none';
+    document.getElementById('prog-fill').style.width = '0%';
+    document.getElementById('prog-lbl').textContent = 'Scraping en arrière-plan…';
+  },
+  onScrapeProgress(pct, annee, count) {
+    document.getElementById('prog-fill').style.width = pct + '%';
+    document.getElementById('prog-lbl').textContent = `⏳ ${annee || ''} — ${pct}% — ${count} films`;
+  },
+  onScrapeDone(btn, lastScrape) {
+    document.getElementById('prog-fill').style.width = '100%';
+    document.getElementById('prog-lbl').textContent = `✅ ${_allFilms.length} films récupérés`;
+    document.getElementById('server-status').textContent = '🟢';
+    btn.disabled = false; btn.textContent = '▶ Scraper';
+    document.getElementById('filter-bar').classList.add('show');
+    document.getElementById('stats').classList.add('show');
+    document.getElementById('empty').classList.toggle('show', _allFilms.length === 0);
+  },
+  onScrapeError(btn) {
+    btn.disabled = false; btn.textContent = '▶ Scraper';
+    document.getElementById('prog-lbl').textContent = '❌ Connexion perdue';
+    this.showError('❌ Connexion perdue. Le serveur tourne ?');
+  },
+  onCacheLoaded(label) {
+    document.getElementById('server-status').textContent = '📦';
+    this.populateGenreFilter();
+    this.populatePlatFilter();
+    populatePaysFilter();
+    applySort();
+    document.getElementById('filter-bar').classList.add('show');
+    document.getElementById('stats').classList.add('show');
   },
   onFilmsFromServer(d) {
-    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
-    show('filter-bar');
-    show('results-header');
-    show('table-wrap');
+    document.getElementById('filter-bar').classList.add('show');
+    document.getElementById('stats').classList.add('show');
+    if (d.lastScrape) {
+      const dt = new Date(d.lastScrape);
+      const label = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+      document.getElementById('server-status').textContent = `🟢 ${label}`;
+      setTimeout(() => { document.getElementById('server-status').textContent = '🟢'; }, 4000);
+    }
   },
   populateGenreFilter() {
     const genres = new Set();
-    _allFilms.forEach(f => f.genre.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
-    const dd = document.getElementById('genre-dropdown');
-    dd.innerHTML = '';
-    [...genres].sort().forEach(g => {
-      const id = `genre-cb-${g.replace(/\s+/g, '_')}`;
-      const lbl = document.createElement('label');
-      lbl.innerHTML = `<input type="checkbox" id="${id}" value="${esc(g)}" onchange="_exclMode=false;applyFilters()"> ${esc(g)}`;
-      dd.appendChild(lbl);
-    });
-    const actions = document.createElement('div');
-    actions.className = 'ms-actions';
-    actions.innerHTML = `<button onclick="selectAllGenres(false)">Tous</button><button onclick="selectExcludeAnimDoc()">Sauf Animation et Documentaire</button>`;
-    dd.appendChild(actions);
-    if (!_genreDefaultApplied) { _genreDefaultApplied = true; selectExcludeAnimDoc(); }
-    else updateGenreBtn();
+    _allFilms.forEach(f => (f.genre||'').split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
+    const sel = document.getElementById('fil-genre');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">Tous genres</option>' +
+      [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
+    this.applyFilters();
   },
   populatePlatFilter() {
     const sel = document.getElementById('fil-plat');
     if (!sel) return;
+    const plats = new Set();
+    Object.values(_details).forEach(d =>
+      (d.providers || []).forEach(p => { if (!/dvd|blu.ray/i.test(p.name)) plats.add(p.name); })
+    );
     const cur = sel.value;
     sel.innerHTML = '<option value="">Toutes les plateformes</option>';
-    [..._allPlats].sort().forEach(p =>
+    [...plats].sort().forEach(p =>
       sel.insertAdjacentHTML('beforeend', `<option value="${esc(p)}"${cur===p?' selected':''}>${esc(p)}</option>`)
     );
   },
   updateSortButtons(sortBy) {
-    const thAnnee = document.getElementById('th-annee');
-    const thPresse = document.getElementById('th-presse');
-    const thSpect = document.getElementById('th-spect');
-    if (!thPresse || !thSpect || !thAnnee) return;
-    thAnnee.classList.toggle('active', sortBy === 'annee');
-    thPresse.classList.toggle('active', sortBy === 'presse');
-    thSpect.classList.toggle('active', sortBy === 'spectateurs');
-    thAnnee.textContent = sortBy === 'annee' ? 'Année ↓' : 'Année';
-    thPresse.textContent = sortBy === 'presse' ? 'Presse ↓' : 'Presse';
-    thSpect.textContent = sortBy === 'spectateurs' ? 'Spectateurs ↓' : 'Spectateurs';
+    const sel = document.getElementById('fil-sort');
+    if (sel) sel.value = sortBy;
   },
   reapplyUserActions() {
     _allFilms.forEach((film, i) => this.renderUserActions(film, i));
   },
-  applyFilters() { applyFiltersDesktop(); },
+  applyFilters() { applyFiltersResponsive(); },
   showError(msg) {
-    const b = document.getElementById('error-banner');
-    b.style.display = 'block';
-    b.textContent = msg;
+    const el = document.getElementById('error-banner');
+    el.textContent = msg; el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, 8000);
   },
   showAutoScrapeBar(pct, annee) {
     document.getElementById('auto-scrape-fill').style.width = pct + '%';
-    const lbl = document.getElementById('last-scrape-label');
-    if (lbl) { lbl.textContent = `🔄 Mise à jour en cours… ${annee || ''} ${pct}%`; lbl.style.color = 'var(--gold)'; }
+    document.getElementById('server-status').textContent = `🔄 ${annee || ''} ${pct}%`;
   },
   hideAutoScrapeBar() {
     const fill = document.getElementById('auto-scrape-fill');
     fill.style.width = '100%';
     setTimeout(() => { fill.style.width = '0%'; }, 1000);
-    loadLastScrape();
+    document.getElementById('server-status').textContent = '🟢';
   },
   showUserPicker(users) {
-    renderProfilesDesktop(users, true);
+    renderProfiles(users, true);
     document.getElementById('profiles-modal').classList.add('open');
   }
 };
 
-// ─── Menu desktop ─────────────────────────────────────────────────────────────
-function toggleMenuDesktop(e) {
+// ─── Rendu des cartes ─────────────────────────────────────────────────────────
+function renderCards(films) {
+  const container = document.getElementById('cards');
+  container.innerHTML = films.map((f, i) => {
+    const url = f.allocineId
+      ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${f.allocineId}.html`
+      : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(f.titre)}`;
+    const annee = f.anneeReelle || f.anneeSortie || '';
+    const pScore = f.notePresse;
+    const sScore = f.noteSpect;
+    const LIMIT = 120;
+    const full = f.synopsis || '';
+    const short = full.length > LIMIT ? full.slice(0, full.lastIndexOf(' ', LIMIT)) : full;
+    const rest = full.length > LIMIT ? full.slice(short.length) : '';
+    return `
+<div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
+  <div class="card-top">
+    <div class="card-info">
+      <div class="card-title">${esc(f.titre)}${annee ? `<span class="year-pill" id="card-year-${i}">${esc(annee)}</span>` : `<span class="year-pill" id="card-year-${i}" style="display:none"></span>`}</div>
+      ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
+      <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}</div>
+      ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
+      ${f.acteurs ? `<div class="card-actors">${esc(f.acteurs.split(',').map(a=>a.trim()).filter(Boolean).slice(0,5).join(', '))}</div>` : ''}
+    </div>
+    <div class="card-scores">
+      <div class="score-block">
+        <div class="score-val ${pScore >= 4 ? 'green' : 'orange'}">${pScore.toFixed(1)}</div>
+        <div class="score-lbl">Presse</div>
+      </div>
+      <div class="score-sep"></div>
+      <div class="score-block">
+        ${sScore != null ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>` : `<div class="score-val muted">—</div>`}
+        <div class="score-lbl">Spect.</div>
+      </div>
+    </div>
+  </div>
+  ${full ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()"><span class="card-synopsis-preview">${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSynopsis(${i})">… Lire la suite</span>` : ''}<div class="card-synopsis-meta" id="card-meta-${i}"></div></div>` : `<div class="card-synopsis-meta" id="card-meta-${i}" style="margin-top:8px;font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap"></div>`}
+  <div class="card-plats" id="card-plat-${i}"><span class="pb-loading">…</span></div>
+  <div id="ua-${i}"></div>
+</div>`;
+  }).join('');
+}
+
+function openFilm(url) { window.open(url, '_blank'); }
+
+function toggleSynopsis(i) {
+  const btn = document.getElementById(`syn-btn-${i}`);
+  const rest = document.getElementById(`syn-rest-${i}`);
+  if (!btn || !rest) return;
+  const isOpen = rest.classList.contains('show');
+  rest.classList.toggle('show', !isOpen);
+  btn.textContent = isOpen ? '… Lire la suite' : ' Réduire';
+}
+
+function updateCardMeta(i, data) {
+  const el = document.getElementById(`card-meta-${i}`);
+  if (data.pays) {
+    const paysEl = document.getElementById(`card-pays-${i}`);
+    if (paysEl) paysEl.textContent = ` · ${flagFor(data.pays)}${data.pays}`;
+  }
+  if (data.annee) {
+    const film = _allFilms[i];
+    if (film) film.anneeReelle = data.annee;
+    const yearEl = document.getElementById(`card-year-${i}`);
+    if (yearEl) { yearEl.textContent = data.annee; yearEl.style.display = ''; }
+  }
+}
+
+// ─── Filtres ──────────────────────────────────────────────────────────────────
+function applyFiltersResponsive() {
+  const anneeFilter = document.getElementById('fil-annee').value;
+  const genreFilter = document.getElementById('fil-genre').value;
+  const typeFilter  = document.getElementById('fil-type').value;
+  const paysFilter  = document.getElementById('fil-pays').value;
+  const onlyVoir    = document.getElementById('fil-only-voir')?.checked;
+  // Desktop only (might not be visible but still read)
+  const noteMin     = parseFloat(document.getElementById('fil-note')?.value || '0');
+  const platFilter  = (document.getElementById('fil-plat')?.value || '').toLowerCase();
+
+  let visible = 0;
+  _allFilms.forEach((film, i) => {
+    const card = document.getElementById(`card-${i}`);
+    if (!card) return;
+
+    const det = _details[filmKey(film)] || {};
+    const provObjs = det.providers || [];
+    const genres = (film.genre||'').split(',').map(g => g.trim().toLowerCase());
+    const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
+    const providers = provObjs.map(p => p.name.toLowerCase());
+    const ud = _userdata[film.allocineId] || {};
+
+    const matchAnnee   = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
+    const matchGenre   = (!genreFilter || genres.some(g => g.includes(genreFilter)))
+                      && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
+                      && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
+    const matchType    = !typeFilter
+                      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
+                      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
+    const matchPays    = !paysFilter  || filmPays.some(p => p === paysFilter);
+    const matchNote    = film.notePresse >= noteMin;
+    const matchPlat    = !platFilter  || providers.some(p => p.includes(platFilter));
+    const matchListe   = (!_prefs.hideVus           || !ud.vu)
+                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
+                      && (!onlyVoir                 || !!ud.vouloir);
+
+    const ok = matchAnnee && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe;
+    card.style.display = ok ? '' : 'none';
+    if (ok) visible++;
+  });
+
+  const statsText = document.getElementById('stats-text');
+  if (statsText) statsText.textContent = `${visible} film${visible > 1 ? 's' : ''} affiché${visible > 1 ? 's' : ''} · ${_allFilms.length} au total`;
+  document.getElementById('empty').classList.toggle('show', visible === 0 && _allFilms.length > 0);
+}
+
+// ─── Service Worker ───────────────────────────────────────────────────────────
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW non enregistré :', e.message));
+}
+
+// ─── Ping serveur ─────────────────────────────────────────────────────────────
+async function pingServer() {
+  const statusEl = document.getElementById('server-status');
+  const btnEl = document.getElementById('btn-run');
+  try {
+    const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+    if (r.ok) {
+      const d = await r.json();
+      statusEl.style.color = 'var(--green)';
+      statusEl.textContent = '🟢';
+      btnEl.disabled = false;
+    } else { throw new Error('non-ok'); }
+  } catch {
+    statusEl.textContent = '🔴 Hors ligne';
+    statusEl.style.color = 'var(--orange)';
+    btnEl.disabled = true;
+  }
+}
+
+// ─── Info ─────────────────────────────────────────────────────────────────────
+let _infoData = null;
+
+async function openInfo() {
+  document.getElementById('info-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
+    _infoData = await r.json();
+  } catch(e) { _infoData = null; }
+  renderInfo();
+}
+function closeInfo() { document.getElementById('info-modal').classList.remove('open'); }
+function renderInfo() {
+  const el = document.getElementById('info-content');
+  if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
+  const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
+  const errors = _infoData.lastScrapeErrors || [];
+  el.innerHTML = `
+    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(_infoData.version||'—')}</span></div>
+    <div class="info-row"><span class="lbl">Serveur démarré</span><span class="val">${fmt(_infoData.serverStart)}</span></div>
+    <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(_infoData.lastScrape)}</span></div>
+    <div class="info-row"><span class="lbl">Films en base</span><span class="val">${_infoData.cachedFilms ?? '—'} films</span></div>
+    <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${_infoData.cachedDetails} en mémoire</span></div>
+    <div class="info-row"><span class="lbl">Erreurs scraping</span><span class="val">${errors.length === 0 ? '✅ Aucune' : `⚠️ ${errors.length}`}</span></div>
+    ${errors.length > 0 ? `<div class="info-errors">${errors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
+  `;
+}
+
+// ─── Menu ─────────────────────────────────────────────────────────────────────
+function toggleMenu(e) {
   e.stopPropagation();
-  const dd = document.getElementById('menu-dropdown-d');
-  const btn = document.getElementById('menu-btn-d');
+  const dd = document.getElementById('menu-dropdown');
+  const btn = document.getElementById('menu-btn');
   const isOpen = dd.classList.toggle('open');
   btn.classList.toggle('open', isOpen);
 }
-function closeMenuDesktop() {
-  document.getElementById('menu-dropdown-d').classList.remove('open');
-  document.getElementById('menu-btn-d').classList.remove('open');
+function closeMenu() {
+  document.getElementById('menu-dropdown').classList.remove('open');
+  document.getElementById('menu-btn').classList.remove('open');
 }
-document.addEventListener('click', () => closeMenuDesktop());
+document.addEventListener('click', () => closeMenu());
 
-// ─── Préférences desktop ──────────────────────────────────────────────────────
+// ─── Profils ──────────────────────────────────────────────────────────────────
+async function openProfiles() {
+  document.getElementById('profiles-modal').classList.add('open');
+  document.getElementById('profiles-content').innerHTML =
+    '<p style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</p>';
+  try {
+    const list = await loadUsers();
+    renderProfiles(list);
+  } catch(e) {
+    document.getElementById('profiles-content').innerHTML =
+      '<p style="color:#e74c3c;font-size:13px;padding:10px 0">Erreur de chargement</p>';
+  }
+}
+function closeProfiles() { document.getElementById('profiles-modal').classList.remove('open'); }
+
+function renderProfiles(list, firstLaunch = false) {
+  const intro = firstLaunch
+    ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">C\'est ton premier lancement.<br>Choisis ton profil ou crée-en un nouveau.</p>'
+    : '';
+  const rows = list.map(u => {
+    const isActive = u.id === _currentUserId;
+    return `<div class="profile-row ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfile('${u.id}')"`}>
+      <span class="profile-name">${esc(u.name)}</span>
+      ${isActive ? '<span class="profile-badge-active">● Actif</span>' : '<span class="profile-badge-switch">Sélectionner →</span>'}
+    </div>`;
+  }).join('');
+  document.getElementById('profiles-content').innerHTML = `
+    ${intro}
+    <div class="prefs-section">
+      <div class="prefs-section-title">Profils disponibles</div>
+      ${rows || '<p style="color:var(--muted);font-size:13px;padding:10px 0">Aucun profil</p>'}
+    </div>
+    <div class="add-user-row">
+      <input type="text" id="new-user-name" class="add-user-input"
+        placeholder="Nouveau profil…" maxlength="30"
+        onkeydown="if(event.key==='Enter')onAddUser()">
+      <button class="add-user-btn" onclick="onAddUser()">+ Ajouter</button>
+    </div>`;
+}
+
+async function selectProfile(userId) {
+  switchUser(userId);
+  loadPrefs();
+  _userdata = {};
+  await loadUserdata();
+  closeProfiles();
+  updateProfileBadge();
+}
+
+async function onAddUser() {
+  const input = document.getElementById('new-user-name');
+  const name = input ? input.value.trim() : '';
+  if (!name) { input && input.focus(); return; }
+  input.disabled = true;
+  try {
+    await createUser(name);
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+    savePrefs();
+    _userdata = {};
+    await loadUserdata();
+    closeProfiles();
+    updateProfileBadge();
+  } catch(e) {
+    input.disabled = false;
+    input.focus();
+  }
+}
+
+function updateProfileBadge() {
+  if (!_currentUserId) return;
+  loadUsers().then(list => {
+    const u = list.find(u => u.id === _currentUserId);
+    if (!u) return;
+    const nameEl = document.getElementById('profile-name-badge');
+    const badge  = document.getElementById('profile-header-badge');
+    if (nameEl) nameEl.textContent = u.name;
+    if (badge) badge.style.display = 'flex';
+  }).catch(() => {});
+}
+
+// ─── Préférences ──────────────────────────────────────────────────────────────
 let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
@@ -712,264 +903,78 @@ function loadPrefs() {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
     Object.assign(_prefs, serverPrefs);
     localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
-    applySort();
+    applyFilters();
   });
 }
-
 function savePrefs() {
   localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
   saveServerPrefs(_prefs);
 }
+function setPref(key, val) { _prefs[key] = val; savePrefs(); applyFilters(); }
 
-function setPrefDesktop(key, val) {
-  _prefs[key] = val;
-  savePrefs();
-  applyFiltersDesktop();
-}
-
-function openPrefsDesktop() {
-  renderPrefsDesktop();
-  document.getElementById('prefs-modal-d').classList.add('open');
-}
-function closePrefsDesktop() {
-  document.getElementById('prefs-modal-d').classList.remove('open');
-}
-function renderPrefsDesktop() {
+function openPrefs() { renderPrefs(); document.getElementById('prefs-modal').classList.add('open'); }
+function closePrefs() { document.getElementById('prefs-modal').classList.remove('open'); }
+function renderPrefs() {
   const row = (key, label) => `
-    <div class="pref-row-d">
-      <span class="pref-lbl">${label}</span>
-      <input type="checkbox" ${_prefs[key] ? 'checked' : ''} onchange="setPrefDesktop('${key}', this.checked)">
+    <div class="pref-row">
+      <div class="pref-label">${label}</div>
+      <label class="toggle">
+        <input type="checkbox" ${_prefs[key] ? 'checked' : ''} onchange="setPref('${key}', this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
     </div>`;
-  document.getElementById('prefs-content-d').innerHTML = `
-    <div class="pref-section-title">Genres</div>
-    ${row('showDocumentaires', 'Afficher les documentaires')}
-    ${row('showAnimations',    'Afficher les animations')}
-    <div class="pref-section-title">Ma liste</div>
-    ${row('hideVus',           'Masquer les films déjà vus')}
-    ${row('hideNonInteresse',  'Masquer les "Non intéressé"')}
-  `;
+  document.getElementById('prefs-content').innerHTML = `
+    <div class="prefs-section">
+      <div class="prefs-section-title">Genres</div>
+      ${row('showDocumentaires', 'Afficher les documentaires')}
+      ${row('showAnimations',    'Afficher les animations')}
+    </div>
+    <div class="prefs-section">
+      <div class="prefs-section-title">Ma liste</div>
+      ${row('hideVus',          'Masquer les films déjà vus')}
+      ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
+    </div>`;
 }
 
-// ─── Mini-console de debug ────────────────────────────────────────────────────
-const _dbgLines = [];
-function dbgLog(msg) {
-  const ts = new Date().toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
-  _dbgLines.push(`[${ts}] ${msg}`);
-  if (_dbgLines.length > 30) _dbgLines.shift();
-  const el = document.getElementById('dbg-console');
-  if (el) el.textContent = _dbgLines.join('\n');
-  console.log('[DBG]', msg);
+// ─── Cache ────────────────────────────────────────────────────────────────────
+async function clearCache() {
+  const btn = document.getElementById('btn-run');
+  try {
+    const r = await fetch('/api/clear-details-cache', { method: 'POST' });
+    const d = await r.json();
+    this.showError?.(`✅ Cache vidé — ${d.cleared} entrée(s) supprimées`);
+  } catch(e) {}
 }
 
-// ─── Utilitaires ──────────────────────────────────────────────────────────────
-function show(id) { document.getElementById(id).style.display = 'flex'; }
-function hide(id) { document.getElementById(id).style.display = 'none'; }
-function dl(blob, name) {
-  const a = document.createElement('a');
-  const url = URL.createObjectURL(blob);
-  a.href = url;
-  a.download = name;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function getFilmUrl(film) {
-  return film.allocineId
-    ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`
-    : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(film.titre)}`;
-}
-
-// ─── Filtres desktop ──────────────────────────────────────────────────────────
-let _exclMode = false;
-
-function selectExcludeAnimDoc() {
-  const EXCLUDED = ['animation', 'documentaire'];
-  document.querySelectorAll('#genre-dropdown input[type=checkbox]').forEach(cb => {
-    cb.checked = !EXCLUDED.includes(cb.value.toLowerCase());
-  });
-  _exclMode = true;
-  updateGenreBtn();
-  applyFiltersDesktop();
-}
-
-function getSelectedGenres() {
-  return [...document.querySelectorAll('#genre-dropdown input[type=checkbox]:checked')]
-    .map(cb => cb.value.toLowerCase());
-}
-
-function updateGenreBtn() {
-  const selected = getSelectedGenres();
-  const btn = document.getElementById('genre-btn');
-  if (!btn) return;
-  if (selected.length === 0) {
-    btn.textContent = 'Tous les genres ▾';
-    btn.classList.remove('active');
-  } else {
-    btn.textContent = `${selected.length} genre${selected.length > 1 ? 's' : ''} ▾`;
-    btn.classList.add('active');
-  }
-}
-
-function toggleGenreDropdown(e) {
-  e.stopPropagation();
-  document.getElementById('genre-dropdown').classList.toggle('open');
-}
-
-function selectAllGenres(checked) {
-  _exclMode = false;
-  document.querySelectorAll('#genre-dropdown input[type=checkbox]')
-    .forEach(cb => cb.checked = checked);
-  updateGenreBtn();
-  applyFiltersDesktop();
-}
-
-document.addEventListener('click', () => {
-  document.getElementById('genre-dropdown')?.classList.remove('open');
-});
-
-function applyFiltersDesktop() {
-  updateGenreBtn();
-  const selectedGenres = getSelectedGenres();
-  const anneeFilter = document.getElementById('fil-annee').value;
-  const typeFilter = document.getElementById('fil-type').value;
-  const plat = document.getElementById('fil-plat').value.toLowerCase();
-  const paysFilter = document.getElementById('fil-pays').value;
-  const noteMin = parseFloat(document.getElementById('fil-note').value || '0');
-  const onlyVoir = document.getElementById('fil-only-voir')?.checked;
-  const showAll = document.getElementById('fil-show-all')?.checked;
-
-  const rows = document.querySelectorAll('tr.film-row');
-  let visible = 0;
-  rows.forEach(row => {
-    const i = parseInt(row.dataset.idx);
-    const film = _allFilms[i];
-    const det = _details[filmKey(film)] || {};
-    const provObjs = det.providers || [];
-    const providers = provObjs.map(p => p.name.toLowerCase());
-    const filmGenres = film.genre.split(',').map(g => g.trim().toLowerCase());
-    const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
-    const ud = _userdata[film.allocineId] || {};
-
-    const EXCL_GENRES = ['animation', 'documentaire'];
-    const matchGenreMulti = selectedGenres.length === 0
-      || (_exclMode && !filmGenres.some(g => EXCL_GENRES.some(ex => g.includes(ex))))
-      || (!_exclMode && selectedGenres.some(g => filmGenres.some(fg => fg.includes(g))));
-    const matchDocu = _prefs.showDocumentaires || !filmGenres.some(g => g.includes('documentaire'));
-    const matchAnim = _prefs.showAnimations    || !filmGenres.some(g => g.includes('animation'));
-    const matchGenre = matchGenreMulti && matchDocu && matchAnim;
-    const matchAnnee = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
-    const matchPlat = !plat || providers.some(p => p.includes(plat));
-    const matchPays = !paysFilter || filmPays.some(p => p === paysFilter);
-    const matchNote = film.notePresse >= noteMin;
-    const hideVu  = _prefs.hideVus           && !showAll;
-    const hideNon = _prefs.hideNonInteresse   && !showAll;
-    const matchListe = (!hideVu || !ud.vu) && (!hideNon || !ud.nonInteresse) &&
-                       (!onlyVoir || !!ud.vouloir);
-
-    let matchType = true;
-    if (typeFilter === 'svod') {
-      matchType = provObjs.some(p => p.type === 'svod');
-    } else if (typeFilter === 'vod') {
-      matchType = provObjs.some(p => p.type === 'location' || p.type === 'achat');
+// ─── Tester AlloCiné ─────────────────────────────────────────────────────────
+async function testAllocine() {
+  const el = document.getElementById('server-status');
+  el.textContent = '⏳ Test…';
+  try {
+    const r = await fetch('/api/ping-allocine');
+    const d = await r.json();
+    if (d.ok) {
+      el.textContent = `✅ AlloCiné OK (${d.status})`;
+      setTimeout(() => { el.textContent = '🟢'; }, 5000);
+    } else {
+      el.textContent = `❌ AlloCiné bloqué`;
+      UI.showError(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}`);
+      setTimeout(() => { el.textContent = '🔴'; }, 8000);
     }
-
-    const ok = matchGenre && matchAnnee && matchType && matchPlat && matchPays && matchNote && matchListe;
-    row.style.display = ok ? '' : 'none';
-    const dr = document.getElementById(`detail-${i}`);
-    if (dr) dr.style.display = ok ? '' : 'none';
-    if (ok) visible++;
-  });
-
-  document.getElementById('filter-count').textContent = `${visible} film${visible > 1 ? 's' : ''} affiché${visible > 1 ? 's' : ''}`;
-  document.getElementById('result-count').textContent = `${_allFilms.length} films · ${visible} affichés`;
-  document.getElementById('empty').style.display = visible === 0 ? 'block' : 'none';
-}
-
-function resetFilters() {
-  selectAllGenres(false);
-  document.getElementById('fil-annee').value = '';
-  document.getElementById('fil-type').value = '';
-  document.getElementById('fil-plat').value = '';
-  document.getElementById('fil-pays').value = '';
-  document.getElementById('fil-note').value = '3.5';
-  document.getElementById('fil-only-voir').checked = false;
-  document.getElementById('fil-show-all').checked = false;
-  _sortBy = 'presse';
-  applySort();
-}
-
-// ─── Rendu du tableau ─────────────────────────────────────────────────────────
-function renderTable(films) {
-  const tbody = document.getElementById('tbody');
-  tbody.innerHTML = films.map((f, idx) => `
-    <tr class="film-row" data-idx="${idx}" onclick="window.open('${getFilmUrl(f)}','_blank')">
-      <td class="td-num">${idx + 1}</td>
-      <td class="td-arrow" onclick="event.stopPropagation();toggleDetail(${idx})" title="Voir le résumé"></td>
-      <td class="td-title">${esc(f.titre)}${f.titreOriginal ? `<div class="td-orig">${esc(f.titreOriginal)}</div>` : ''}</td>
-      <td class="td-genre">${esc(f.genre || '—')}</td>
-      <td class="td-real"><strong>${esc(f.realisateur || '—')}</strong></td>
-      <td class="td-cast">${esc((f.acteurs||'').split(',').map(a=>a.trim()).filter(Boolean).slice(0,4).join(', ') || '—')}</td>
-      <td class="center" id="annee-cell-${idx}" style="font-size:12px;color:var(--muted)">${f.anneeSortie || '—'}</td>
-      <td class="td-note ${f.notePresse >= 4 ? 'note-green' : 'note-orange'}">${f.notePresse.toFixed(1)}</td>
-      <td class="td-spect">${f.noteSpect != null ? f.noteSpect.toFixed(1) : '—'}</td>
-      <td class="td-plat" id="plat-${idx}"><span class="pb-loading">…</span></td>
-      <td onclick="event.stopPropagation()" id="ua-${idx}"></td>
-    </tr>
-    <tr class="detail-row" id="detail-${idx}" style="display:none">
-      <td colspan="11"><div class="detail-panel" id="panel-${idx}">
-        <div class="synopsis-block"><h4>📖 Résumé</h4><p class="synopsis-text ${f.synopsis ? '' : 'empty'}">${f.synopsis ? esc(f.synopsis) : 'Résumé non disponible sur la page de liste.'}</p></div>
-        <div class="meta-block">
-          <div class="meta-item"><h4>🌍 Pays</h4><p id="pays-${idx}" class="loading">Chargement…</p></div>
-          <div class="meta-item"><h4>📅 Année</h4><p id="annee-${idx}" class="loading">Chargement…</p></div>
-        </div>
-      </div></td>
-    </tr>
-  `).join('');
-}
-
-function toggleDetail(idx) {
-  const filmRow = document.querySelector(`tr.film-row[data-idx="${idx}"]`);
-  if (!filmRow) return;
-  const detailRow = document.getElementById(`detail-${idx}`);
-  const panel = document.getElementById(`panel-${idx}`);
-  const isOpen = filmRow.classList.contains('open');
-
-  if (isOpen) {
-    filmRow.classList.remove('open');
-    if (detailRow) detailRow.style.display = 'none';
-    if (panel) panel.classList.remove('visible');
-  } else {
-    filmRow.classList.add('open');
-    if (detailRow) detailRow.style.display = '';
-    if (panel) panel.classList.add('visible');
-    const key = filmKey(_allFilms[idx]);
-    if (_details[key]) updateDetailPanel(idx, _details[key]);
-  }
-}
-
-function updateDetailPanel(idx, data) {
-  const paysEl = document.getElementById(`pays-${idx}`);
-  const anneeEl = document.getElementById(`annee-${idx}`);
-  if (paysEl) {
-    paysEl.className = '';
-    paysEl.innerHTML = data.pays
-      ? data.pays.split(',').map(p => `<span class="pays-pill">${esc(p.trim())}</span>`).join('')
-      : '<span style="color:var(--muted);font-style:italic">Non trouvé</span>';
-  }
-  if (anneeEl) {
-    anneeEl.className = '';
-    anneeEl.textContent = data.annee || '—';
-  }
-  if (data.annee) {
-    const film = _allFilms[idx];
-    if (film) film.anneeReelle = data.annee;
-    const cellEl = document.getElementById(`annee-cell-${idx}`);
-    if (cellEl) cellEl.textContent = data.annee;
+  } catch(e) {
+    el.textContent = '❌ Erreur réseau';
+    setTimeout(() => { el.textContent = '🔴'; }, 5000);
   }
 }
 
 // ─── Export CSV / Excel ───────────────────────────────────────────────────────
+function dlBlob(blob, name) {
+  const a = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
 function downloadCSV() {
   const BOM = '\uFEFF';
   const head = ['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes'];
@@ -979,11 +984,11 @@ function downloadCSV() {
     return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
             f.notePresse.toFixed(1), f.noteSpect != null ? f.noteSpect.toFixed(1) : '', f.synopsis||'', plats];
   });
-  const csv = BOM + [head,...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(';')).join('\n');
-  dl(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'allocine_vod.csv');
+  const csv = BOM + [head,...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(';')).join('\n');
+  dlBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'allocine_vod.csv');
 }
-
 function downloadXLSX() {
+  if (typeof XLSX === 'undefined') { UI.showError('Bibliothèque Excel non chargée.'); return; }
   const wb = XLSX.utils.book_new();
   const head = [['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes']];
   const rows = _allFilms.map((f, i) => {
@@ -998,196 +1003,19 @@ function downloadXLSX() {
   XLSX.writeFile(wb, 'allocine_vod.xlsx');
 }
 
-async function clearCache() {
-  const btn = document.getElementById('btn-cache');
-  btn.disabled = true;
-  btn.textContent = '⏳ Vidage…';
-  try {
-    const r = await fetch('/api/clear-details-cache', { method: 'POST' });
-    const d = await r.json();
-    btn.textContent = `✅ ${d.cleared} entrée(s) supprimées`;
-    btn.style.background = '#27ae60';
-    setTimeout(() => {
-      btn.disabled = false;
-      btn.textContent = '🗑️ Vider le cache';
-      btn.style.background = '#7f3030';
-    }, 4000);
-  } catch (e) {
-    btn.textContent = '❌ Erreur';
-    btn.disabled = false;
-  }
-}
-
-async function testAllocine() {
-  const btn = document.getElementById('btn-test');
-  btn.disabled = true;
-  btn.textContent = '⏳ Test…';
-  try {
-    const r = await fetch('/api/ping-allocine');
-    const d = await r.json();
-    if (d.ok) {
-      btn.textContent = `✅ AlloCiné OK (${d.status})`;
-      btn.style.background = '#27ae60';
-    } else {
-      btn.textContent = `❌ AlloCiné bloqué (${d.status || d.message})`;
-      btn.style.background = '#c0392b';
-      alert(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}\n\nSi c'est un 429, attendez 5-10 minutes avant de charger les plateformes.`);
-    }
-  } catch (e) {
-    btn.textContent = '❌ Erreur réseau';
-    btn.style.background = '#c0392b';
-  }
-  setTimeout(() => {
-    btn.disabled = false;
-    btn.textContent = '🔍 Tester AlloCiné';
-    btn.style.background = '#555';
-  }, 8000);
-}
-
-function updateLastScrapeLabel(iso) {
-  const el = document.getElementById('last-scrape-label');
-  if (!el || !iso) return;
-  const d = new Date(iso);
-  const label = d.toLocaleDateString('fr-FR') + ' à ' + d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
-  el.textContent = `Dernier scraping : ${label}`;
-  el.style.color = 'var(--gold)';
-}
-
-async function loadLastScrape() {
-  try {
-    const r = await fetch('/api/health');
-    const d = await r.json();
-    if (d.lastScrape) updateLastScrapeLabel(d.lastScrape);
-    const btn = document.getElementById('btn-run');
-    if (btn) btn.disabled = false;
-  } catch(e) {}
-}
-
-// ─── Panneau info ─────────────────────────────────────────────────────────────
-let _infoData = null;
-
-async function openInfo() {
-  document.getElementById('info-modal').classList.add('open');
-  try {
-    const r = await fetch('/api/health');
-    _infoData = await r.json();
-  } catch(e) { _infoData = null; }
-  renderInfo();
-}
-
-function closeInfo() {
-  document.getElementById('info-modal').classList.remove('open');
-}
-
-function renderInfo() {
-  const el = document.getElementById('info-content');
-  if (!_infoData) { el.textContent = 'Impossible de charger les informations.'; return; }
-  const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' à ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
-  const errors = _infoData.lastScrapeErrors || [];
-  el.innerHTML = `
-    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(_infoData.version||'—')}</span></div>
-    <div class="info-row"><span class="lbl">Serveur démarré</span><span class="val">${fmt(_infoData.serverStart)}</span></div>
-    <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(_infoData.lastScrape)}</span></div>
-    <div class="info-row"><span class="lbl">Films en base</span><span class="val">${_infoData.cachedFilms ?? '—'} films</span></div>
-    <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${_infoData.cachedDetails} en mémoire</span></div>
-    <div class="info-row"><span class="lbl">Erreurs dernier scraping</span><span class="val">${errors.length === 0 ? '✅ Aucune' : `⚠️ ${errors.length}`}</span></div>
-    ${errors.length > 0 ? `<div class="info-errors">${errors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
-  `;
-}
-
-// ─── Gestion des profils (desktop) ───────────────────────────────────────────
-async function openProfiles() {
-  document.getElementById('profiles-modal').classList.add('open');
-  document.getElementById('profiles-content-d').innerHTML =
-    '<p style="color:var(--muted);font-size:13px">Chargement…</p>';
-  try {
-    const list = await loadUsers();
-    renderProfilesDesktop(list);
-  } catch(e) {
-    document.getElementById('profiles-content-d').innerHTML =
-      '<p style="color:#e74c3c;font-size:13px">Erreur de chargement</p>';
-  }
-}
-
-function closeProfiles() {
-  document.getElementById('profiles-modal').classList.remove('open');
-}
-
-function renderProfilesDesktop(list, firstLaunch = false) {
-  const intro = firstLaunch
-    ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">Bienvenue ! Choisis ton profil ou crée-en un nouveau.</p>'
-    : '';
-  const rows = list.map(u => {
-    const isActive = u.id === _currentUserId;
-    return `<div class="profile-row-d ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfileDesktop('${u.id}')"`}>
-      <span class="pname">${esc(u.name)}</span>
-      ${isActive ? '<span class="pbadge-active">● Actif</span>' : '<span class="pbadge-switch">Sélectionner →</span>'}
-    </div>`;
-  }).join('');
-  document.getElementById('profiles-content-d').innerHTML = `
-    ${intro}
-    <div style="margin-bottom:4px">
-      <div style="font-size:11px;color:var(--muted);text-transform:uppercase;letter-spacing:.7px;margin-bottom:8px">Profils disponibles</div>
-      ${rows || '<p style="color:var(--muted);font-size:13px">Aucun profil</p>'}
-    </div>
-    <div class="profile-add-row">
-      <input type="text" id="new-user-name-d" class="profile-add-input"
-        placeholder="Nouveau profil…" maxlength="30"
-        onkeydown="if(event.key==='Enter')onAddUserDesktop()">
-      <button class="profile-add-btn" onclick="onAddUserDesktop()">+ Ajouter</button>
-    </div>`;
-}
-
-async function selectProfileDesktop(userId) {
-  switchUser(userId);
-  _userdata = {};
-  loadPrefs();
-  await loadUserdata();
-  updateProfileBtn();
-  closeProfiles();
-}
-
-async function onAddUserDesktop() {
-  const input = document.getElementById('new-user-name-d');
-  const name = input ? input.value.trim() : '';
-  if (!name) { input && input.focus(); return; }
-  input.disabled = true;
-  try {
-    await createUser(name);
-    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
-    savePrefs();
-    _userdata = {};
-    await loadUserdata();
-    updateProfileBtn();
-    closeProfiles();
-  } catch(e) {
-    input.disabled = false;
-    input.focus();
-  }
-}
-
-function updateProfileBtn() {
-  loadUsers().then(list => {
-    const u = list.find(u => u.id === _currentUserId);
-    const el = document.getElementById('profile-name');
-    if (el && u) el.textContent = u.name;
-  }).catch(() => {});
-}
-
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
   const userInit = await initUser();
   if (userInit.mode === 'pick') {
-    renderProfilesDesktop(userInit.users, true);
-    document.getElementById('profiles-modal').classList.add('open');
-  } else if (_currentUserId) {
-    updateProfileBtn();
+    UI.showUserPicker(userInit.users);
+  } else {
+    updateProfileBadge();
   }
   loadPrefs();
   const hadCache = loadCache();
-  if (_currentUserId) await loadUserdata();
-  await loadLastScrape();
+  await pingServer();
   if (!hadCache) await loadFilmsFromServer();
+  if (_currentUserId) await loadUserdata();
   startAutoScrapeMonitoring();
 })();
 </script>

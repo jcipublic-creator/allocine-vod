@@ -301,7 +301,7 @@ body {
 </div>
 
 <div class="header">
-  <a class="header-back" id="films-link" href="/">← Films</a>
+  <a class="header-back" href="/index.html">← Films</a>
   <div class="header-title">📺 Séries</div>
   <div class="header-status" id="server-status"></div>
   <div id="profile-header-badge" onclick="openProfiles()">
@@ -359,7 +359,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v74'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v75'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -943,9 +943,6 @@ const UI = {
   hideAutoScrapeBar()    {},
   showUserPicker(users)  { renderProfiles(users, true); document.getElementById('profiles-modal').classList.add('open'); },
 };
-
-// ─── Lien retour Films (mobile → mobile.html, desktop → index.html) ──────────
-document.getElementById('films-link').href = window.innerWidth < 700 ? '/mobile.html' : '/index.html';
 
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {

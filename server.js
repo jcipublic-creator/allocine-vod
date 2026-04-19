@@ -1084,15 +1084,21 @@ app.get('/api/series/health', (_req, res) => {
 });
 
 app.get('/api/series/debug-genres', (_req, res) => {
-  const sample = [];
-  let withGenre = 0, withoutGenre = 0;
+  // Données des détails (Redis series_details)
+  const detSample = [];
+  let detWith = 0, detWithout = 0;
   for (const [key, det] of seriesDetailsCache) {
-    if (det.genre) withGenre++; else withoutGenre++;
-    if (sample.length < 20) {
-      sample.push({ key, genre: det.genre || null, pays: det.pays || null });
-    }
+    if (det.genre) detWith++; else detWithout++;
+    if (detSample.length < 10) detSample.push({ key, genre: det.genre || null, pays: det.pays || null });
   }
-  res.json({ total: seriesDetailsCache.size, withGenre, withoutGenre, sample });
+  // Données de la liste (cachedSeries)
+  const listWith  = cachedSeries.filter(s => s.genre).length;
+  const listWithout = cachedSeries.length - listWith;
+  const listSample = cachedSeries.slice(0, 10).map(s => ({ titre: s.titre, genre: s.genre || null }));
+  res.json({
+    details: { total: seriesDetailsCache.size, withGenre: detWith, withoutGenre: detWithout, sample: detSample },
+    list:    { total: cachedSeries.length, withGenre: listWith, withoutGenre: listWithout, sample: listSample },
+  });
 });
 
 app.get('/api/series/providers', (_req, res) => {

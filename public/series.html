@@ -362,7 +362,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v104'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v105'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -659,7 +659,11 @@ function applySeriesSort(sortBy) {
 // ─── Filtres ─────────────────────────────────────────────────────────────────
 function populateGenreFilter() {
   const genres = new Set();
-  _allSeries.forEach(s => (s.genre || '').split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g)));
+  _allSeries.forEach(s => {
+    const det = _seriesDet[s.allocineId] || {};
+    const genreStr = det.genre || s.genre || '';
+    genreStr.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g));
+  });
   const sel = document.getElementById('fil-genre');
   const cur = sel.value;
   sel.innerHTML = '<option value="">Tous genres</option>' +
@@ -676,16 +680,19 @@ function applySeriesFilters() {
     const card = document.getElementById(`card-${i}`);
     if (!card) return;
     const det  = _seriesDet[s.allocineId] || {};
-    const genres = (s.genre || '').split(',').map(g => g.trim().toLowerCase());
+    const genreStr = (det.genre || s.genre || '').toLowerCase();
+    const genres = genreStr.split(',').map(g => g.trim()).filter(Boolean);
     const ud = _userdata[s.allocineId ? `s:${s.allocineId}` : ''] || {};
 
-    const matchGenre  = !genreFilter || genres.some(g => g.includes(genreFilter));
-    const matchStatut = !statutFilter ||
+    const matchGenre   = !genreFilter || genres.some(g => g.includes(genreFilter));
+    const matchDocAnim = (_prefs.showDocumentaires || !genreStr.includes('documentaire')) &&
+                         (_prefs.showAnimations    || !genreStr.includes('animation'));
+    const matchStatut  = !statutFilter ||
       (statutFilter === 'encours'  && det.statut === 'En cours')  ||
       (statutFilter === 'terminee' && det.statut === 'Terminée');
-    const matchListe  = (!_prefs.hideVus || !ud.vu) && (!_prefs.hideNonInteresse || !ud.nonInteresse) &&
-                        (!onlyVoir || !!ud.vouloir) && (!onlySuivre || !!ud.asuivre);
-    const ok = matchGenre && matchStatut && matchListe;
+    const matchListe   = (!_prefs.hideVus || !ud.vu) && (!_prefs.hideNonInteresse || !ud.nonInteresse) &&
+                         (!onlyVoir || !!ud.vouloir) && (!onlySuivre || !!ud.asuivre);
+    const ok = matchGenre && matchDocAnim && matchStatut && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

@@ -361,7 +361,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v86'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v87'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -757,7 +757,8 @@ async function openInfo() {
     const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
     document.getElementById('info-content').innerHTML = `
       <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(d.version||'—')}</span></div>
-      <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(d.lastScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(d.lastScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(d.lastDetailsScrape)}</span></div>
       <div class="info-row"><span class="lbl">Séries en base</span><span class="val">${d.cachedSeries} séries</span></div>
       <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${d.cachedDetails} en mémoire</span></div>
     `;

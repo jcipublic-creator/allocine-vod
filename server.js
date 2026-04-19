@@ -27,6 +27,7 @@ const SERIES_PAGES           = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 
 const SERIES_DETAILS_TTL_MS  = 1000 * 60 * 60 * 24 * 7; // 7 jours
 let cachedSeries             = [];
 let lastSeriesScrape         = null;
+let lastSeriesDetailsScrape  = null;
 let isScrapingSeries         = false;
 let seriesProgress           = { current: 0, total: 0 };
 let lastSeriesScrapeErrors   = [];
@@ -120,6 +121,8 @@ async function loadUserdata() {
       }
       const seriesTsRaw = await redis.get('lastSeriesScrape');
       if (seriesTsRaw) lastSeriesScrape = seriesTsRaw;
+      const seriesDetailsTsRaw = await redis.get('lastSeriesDetailsScrape');
+      if (seriesDetailsTsRaw) lastSeriesDetailsScrape = seriesDetailsTsRaw;
       const seriesDetailsRaw = await redis.get('series_details');
       if (seriesDetailsRaw) {
         const sdObj = typeof seriesDetailsRaw === 'string' ? JSON.parse(seriesDetailsRaw) : seriesDetailsRaw;
@@ -934,6 +937,7 @@ function getCachedSeriesDetails(key) {
 }
 function setCachedSeriesDetails(key, value) {
   seriesDetailsCache.set(key, { value, cachedAt: Date.now() });
+  lastSeriesDetailsScrape = new Date().toISOString();
   scheduleSeriesDetailsBackup();
 }
 let _seriesDetailsBackupTimer = null;
@@ -947,6 +951,7 @@ async function saveSeriesDetailsCache() {
     const obj = {};
     seriesDetailsCache.forEach((v, k) => { obj[k] = v; });
     await redis.set('series_details', JSON.stringify(obj));
+    if (lastSeriesDetailsScrape) await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
     console.log(`💾 seriesDetailsCache sauvegardé (${seriesDetailsCache.size} entrées)`);
   } catch(e) { console.warn('Erreur sauvegarde seriesDetailsCache:', e.message); }
 }
@@ -1072,7 +1077,8 @@ app.get('/api/series', (_req, res) => {
 app.get('/api/series/health', (_req, res) => {
   res.json({
     ok: true, cachedSeries: cachedSeries.length, cachedDetails: seriesDetailsCache.size,
-    lastScrape: lastSeriesScrape, isScrapingSeries, version: VERSION,
+    lastScrape: lastSeriesScrape, lastDetailsScrape: lastSeriesDetailsScrape,
+    isScrapingSeries, version: VERSION,
     lastScrapeErrors: lastSeriesScrapeErrors,
   });
 });

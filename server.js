@@ -1263,7 +1263,7 @@ app.get('/api/series/details', async (req, res) => {
         const creators = [];
         for (let k = i + 1; k < Math.min(lines.length, i + 6); k++) {
           if (!lines[k] || lines[k] === ',' ) continue;
-          if (/^(Avec|Nationalités?|Saisons?|Statut|Presse|\d)/.test(lines[k])) break;
+          if (/^(Avec|Nationalités?|Saisons?|Statut|Presse|Titre original|\d)/.test(lines[k])) break;
           creators.push(lines[k]);
         }
         if (creators.length) createur = creators.join(', ');
@@ -1271,7 +1271,7 @@ app.get('/api/series/details', async (req, res) => {
       if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
       if (l === 'Avec' && castingArr.length === 0) {
         for (let k = i + 1; k < Math.min(lines.length, i + 8); k++) {
-          if (['De', 'Avec', 'Nationalité', 'Nationalités', 'Saisons', 'Statut', 'Presse'].includes(lines[k])) break;
+          if (['De', 'Avec', 'Nationalité', 'Nationalités', 'Saisons', 'Statut', 'Presse', 'Titre original'].includes(lines[k])) break;
           if (lines[k] && lines[k] !== ',' && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
         }
       }

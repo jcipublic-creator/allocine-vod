@@ -1300,8 +1300,8 @@ function parseSeries(html) {
   const series    = [];
   const seen      = new Set();
 
-  /** Regex de détection des noms de genres connus AlloCiné */
-  const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère/i;
+  /** Regex de détection des noms de genres connus AlloCiné (liste exhaustive) */
+  const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science-[Ff]iction|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère|Espionnage|Médical|Sport|Guerre|Musical|Téléréalité|Famille|Jeunesse|Comédie dramatique|Comédie romantique|Super-héros|Superhéros|Mini-série|Soap Opera|Reality|Talk[ -]?[Ss]how|Manga/i;
 
   /** Tokens qui indiquent la fin d'une section créateur ou casting lors du scan */
   const CARD_STOP = new Set(['Avec', 'De', 'Créée par', 'Créé par', 'Créateur', 'Presse', 'Spectateurs', 'Titre original']);
@@ -1362,11 +1362,21 @@ function parseSeries(html) {
     const noteSpect  = ratingNotes[1] ?? null;
     if (!notePresse) return; // pas de note = pas une vraie carte série
 
-    // Genre via liens /genre-XXXXX (plus fiable que le texte libre)
+    // Genre — 3 niveaux de fallback :
+    //   1. Liens /genre-XXXXX dans la carte (le plus fiable)
+    //   2. Éléments .meta-genre, .genre, [class*="genre"]
+    //   3. Scan des lignes texte de la carte via GENRE_RE
     const genreArr = $card.find('a[href*="genre-"]')
       .map((_, el) => $(el).text().trim().replace(/^s[eé]ries?\s+/i, '').trim())
       .get().filter(v => v && v.length > 1 && v.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(v));
-    const genre = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
+    let genre = [...new Set(genreArr)].join(', ')
+      || $card.find('.meta-genre, .genre, [class*="genre"]').first().text().trim().replace(/^s[eé]ries?\s+/i, '').trim();
+    // Fallback : scan texte ligne par ligne dans la carte
+    if (!genre) {
+      const cardLines = htmlToLines($card.html() || '');
+      const genreFromLines = cardLines.filter(l => GENRE_RE.test(l) && l.length < 50);
+      if (genreFromLines.length) genre = [...new Set(genreFromLines)].join(', ');
+    }
 
     // Dates : "Depuis XXXX" → enCours=true ; "XXXX – XXXX" → range ; "XXXX" → date unique
     const allText    = $card.text();

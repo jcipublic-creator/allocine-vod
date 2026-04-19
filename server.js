@@ -1234,8 +1234,10 @@ app.get('/api/series/details', async (req, res) => {
       const STOP_RE = /^(Créée? par|Créateur|Avec|Nationalités?|Saisons?|Statut|Presse|Synopsis)$/i;
       const start = pipePos[1] + 1;
       const stop = lines.findIndex((l, i) => i >= start && STOP_RE.test(l));
+      // Filtre strict : noms de genre seulement (court, majuscule, pas de chiffre ni ponctuation spéciale)
+      const GENRE_NAME_RE = /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ][a-zA-ZÀ-ÿ\s\-]{1,25}$/;
       const parts = lines.slice(start, stop > 0 ? stop : start + 6)
-        .filter(l => l !== ',' && l.length > 1 && l.length < 40);
+        .filter(l => l !== ',' && GENRE_NAME_RE.test(l));
       if (parts.length) genre = parts.join(', ');
     }
 
@@ -1244,12 +1246,21 @@ app.get('/api/series/details', async (req, res) => {
       if (/^Nationalités?$/i.test(l)) pays = n;
       if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
       if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);
-      if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) createur = n;
+      if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) {
+        // Collecter tous les créateurs (séparés par "," sur des lignes distinctes)
+        const creators = [];
+        for (let k = i + 1; k < Math.min(lines.length, i + 6); k++) {
+          if (!lines[k] || lines[k] === ',' ) continue;
+          if (/^(Avec|Nationalités?|Saisons?|Statut|Presse|\d)/.test(lines[k])) break;
+          creators.push(lines[k]);
+        }
+        if (creators.length) createur = creators.join(', ');
+      }
       if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
       if (l === 'Avec' && castingArr.length === 0) {
         for (let k = i + 1; k < Math.min(lines.length, i + 8); k++) {
-          if (['De', 'Avec', 'Nationalité', 'Saisons', 'Statut', 'Presse'].includes(lines[k])) break;
-          if (lines[k] && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
+          if (['De', 'Avec', 'Nationalité', 'Nationalités', 'Saisons', 'Statut', 'Presse'].includes(lines[k])) break;
+          if (lines[k] && lines[k] !== ',' && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
         }
       }
       // Plage d'années ex: "2008 - 2013", "2019 - en cours", "2020 − 2023" (tirets variés)

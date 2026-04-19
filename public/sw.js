@@ -1,4 +1,4 @@
-const CACHE = `vod-shell-v103`;
+const CACHE = `vod-shell-v104`;
 
 const SHELL = [
   '/manifest.json',

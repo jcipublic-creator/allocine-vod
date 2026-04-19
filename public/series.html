@@ -365,6 +365,7 @@ body {
 <div id="error-banner"></div>
 <div class="filter-bar" id="filter-bar">
   <select id="fil-genre"  onchange="applySeriesFilters()"><option value="">Tous genres</option></select>
+  <select id="fil-annee"  onchange="applySeriesFilters()"><option value="">Toutes années</option></select>
   <select id="fil-statut" onchange="applySeriesFilters()">
     <option value="">Toutes</option>
     <option value="encours">En cours</option>
@@ -401,7 +402,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v121';
+const LS_SVERSION = 'vod_series_v122';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -444,7 +445,7 @@ function loadSeriesCache() {
     if (det) _seriesDet = JSON.parse(det);
     if (_allSeries.length > 0) {
       renderSeriesCards(_allSeries);
-      populateGenreFilter();
+      populateGenreFilter(); populateAnneeFilter();
       document.getElementById('filter-bar').classList.add('show');
       document.getElementById('stats').classList.add('show');
       const statusEl = document.getElementById('server-status');
@@ -482,7 +483,7 @@ async function loadSeriesFromServer() {
       });
     }
     applySeriesSort(_seriesSortBy);
-    populateGenreFilter();
+    populateGenreFilter(); populateAnneeFilter();
     saveSeriesCache();
     document.getElementById('filter-bar').classList.add('show');
     document.getElementById('stats').classList.add('show');
@@ -547,7 +548,7 @@ async function startSeriesDetailsLoading() {
     document.getElementById('plat-lbl').innerHTML = `📺 Détails chargés <span id="plat-count" style="color:var(--gold)">${toFetch.length}</span>`;
     document.getElementById('plat-fill').style.width = '100%';
     saveSeriesCache();
-    populateGenreFilter();
+    populateGenreFilter(); populateAnneeFilter();
   }
 }
 
@@ -832,6 +833,21 @@ function populateGenreFilter() {
 }
 
 /**
+ * Remplit le sélecteur d'année avec les années de création uniques de _allSeries.
+ * Triées du plus ancien au plus récent. Source : s.anneeSortie (scraping liste).
+ */
+function populateAnneeFilter() {
+  const annees = new Set();
+  _allSeries.forEach(s => { if (s.anneeSortie) annees.add(s.anneeSortie); });
+  const sel = document.getElementById('fil-annee');
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Toutes années</option>' +
+    [...annees].sort().map(a =>
+      `<option value="${a}"${cur === a ? ' selected' : ''}>${a}</option>`
+    ).join('');
+}
+
+/**
  * Applique tous les filtres actifs et masque/affiche les cartes en conséquence.
  * Filtres appliqués :
  *   1. Genre (depuis s.genre, source liste)
@@ -843,6 +859,7 @@ function populateGenreFilter() {
  */
 function applySeriesFilters() {
   const genreFilter  = document.getElementById('fil-genre').value;
+  const anneeFilter  = document.getElementById('fil-annee').value;
   const statutFilter = document.getElementById('fil-statut').value;
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
   const onlySuivre   = document.getElementById('fil-only-suivre')?.checked;
@@ -859,6 +876,8 @@ function applySeriesFilters() {
 
     // Filtre genre (recherche partielle pour gérer "Science-Fiction", "Sci-Fi"…)
     const matchGenre = !genreFilter || genres.some(g => g.includes(genreFilter));
+    // Filtre année de création
+    const matchAnnee = !anneeFilter || s.anneeSortie === anneeFilter;
     // Filtre préférences documentaires / animations
     const matchDocAnim = (_prefs.showDocumentaires || !genreStr.includes('documentaire')) &&
                          (_prefs.showAnimations    || !genreStr.includes('animation'));
@@ -876,7 +895,7 @@ function applySeriesFilters() {
                        (!onlyVoir                 || !!ud.vouloir) &&
                        (!onlySuivre               || !!ud.asuivre);
 
-    const ok = matchGenre && matchDocAnim && matchStatut && matchListe;
+    const ok = matchGenre && matchAnnee && matchDocAnim && matchStatut && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });
@@ -1016,7 +1035,7 @@ function startSeriesScrape() {
         if (!seen.has(key)) { seen.add(key); _allSeries.push(s); }
       });
       renderSeriesCards(_allSeries);
-      populateGenreFilter();
+      populateGenreFilter(); populateAnneeFilter();
       document.getElementById('filter-bar').classList.add('show');
       document.getElementById('stats').classList.add('show');
     }
@@ -1322,7 +1341,7 @@ const UI = {
   onScrapeError()         {},
   onCacheLoaded()         {},
   onFilmsFromServer()     {},
-  populateGenreFilter()   { populateGenreFilter(); },
+  populateGenreFilter()   { populateGenreFilter(); populateAnneeFilter(); },
   updateSortButtons()     {},
   reapplyUserActions()    { _allSeries.forEach((s, i) => renderSeriesUA(s, i)); },
   applyFilters()          { applySeriesFilters(); },

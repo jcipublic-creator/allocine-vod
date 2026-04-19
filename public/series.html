@@ -93,7 +93,7 @@ body {
 .menu-item:disabled { opacity: .4; cursor: default; }
 .menu-separator { height: 1px; background: rgba(42,79,112,.5); }
 
-/* ── Sous-menu Débogage ── */
+/* ── Sous-menu Debug ── */
 .menu-item-sub {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; padding: 14px 16px;
@@ -364,7 +364,7 @@ body {
   <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
   <div class="menu-separator"></div>
   <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
-    🛠 Débogage <span class="sub-arrow">▶</span>
+    🛠 Debug <span class="sub-arrow">▶</span>
   </button>
   <div class="submenu" id="submenu-debug">
     <button class="menu-item" id="btn-run"         onclick="closeMenu();openConfirmSeries('list')"    disabled>▶ Rescraper la liste</button>
@@ -427,7 +427,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v130';
+const LS_SVERSION = 'vod_series_v131';
 
 
 // ══════════════════════════════════════════════════════════════════════════════

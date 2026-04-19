@@ -252,7 +252,7 @@ body {
 .menu-item:disabled { opacity: .4; cursor: default; }
 .menu-separator { height: 1px; background: rgba(42,79,112,.5); }
 
-/* ── Sous-menu Débogage ── */
+/* ── Sous-menu Debug ── */
 .menu-item-sub {
   display: flex; align-items: center; justify-content: space-between;
   width: 100%; padding: 14px 16px;
@@ -430,7 +430,7 @@ body {
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
   <div class="menu-separator"></div>
   <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
-    🛠 Débogage <span class="sub-arrow">▶</span>
+    🛠 Debug <span class="sub-arrow">▶</span>
   </button>
   <div class="submenu" id="submenu-debug">
     <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>

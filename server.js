@@ -1216,29 +1216,34 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
-    // Extraction genre via cheerio (format AlloCiné : liens /series-tv/genre-XXXXX/)
-    // Les liens ont un texte comme "série Romance" → on strip le préfixe "série(s) "
+    // Extraction genre — approche texte brut (même méthode que pays, indépendant des URLs)
     const $$ = cheerio.load(html);
-    const genreSet = [];
-    $$('a[href*="genre-"]').each((_, el) => {
-      const raw = $$(el).text().trim();
-      const t = raw.replace(/^s[eé]ries?\s+/i, '').trim(); // strip "série " / "séries "
-      // Garder uniquement les noms de genre : commence par une majuscule, court
-      if (t && t.length > 1 && t.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(t) && !genreSet.includes(t)) {
-        genreSet.push(t);
-      }
-    });
-    // Trop de résultats = liens de navigation globale, on ignore
-    if (genreSet.length && genreSet.length <= 8) genre = genreSet.join(', ');
-    // Fallback : itemprop ou meta tag
-    if (!genre) genre = $$('[itemprop="genre"]').first().text().trim() || null;
-    if (!genre) genre = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content') || null;
-    console.log(`  Genre: ${genre || 'null'}`);
 
+    const SECTION_STOP = /^(Nationalités?|Saisons|Créée? par|Créateur|Avec|Statut|Presse|Spectateurs|Synopsis|Casting|Diffusion|Réalisateur|De\s*$)/i;
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
-      if (!genre && /^Genres?$/i.test(l)) genre = n;
+      // Genre : collecte toutes les lignes jusqu'au prochain label de section
+      if (!genre && /^Genres?$/i.test(l)) {
+        const parts = [];
+        for (let j = i + 1; j < Math.min(lines.length, i + 8); j++) {
+          if (!lines[j] || SECTION_STOP.test(lines[j])) break;
+          const g = lines[j].replace(/^s[eé]ries?\s+/i, '').trim();
+          if (g && g.length < 40) parts.push(g);
+        }
+        if (parts.length) genre = parts.join(', ');
+      }
       if (!genre && /^Genre\s*:(.+)/i.test(l)) genre = l.replace(/^Genre\s*:\s*/i, '').trim();
+      // Fallback cheerio si texte ne trouve rien
+      if (!genre && i === lines.length - 2) {
+        const genreSet = [];
+        $$('a[href*="genre-"]').each((_, el) => {
+          const t = $$(el).text().trim().replace(/^s[eé]ries?\s+/i, '').trim();
+          if (t && t.length > 1 && t.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(t) && !genreSet.includes(t)) genreSet.push(t);
+        });
+        if (genreSet.length && genreSet.length <= 8) genre = genreSet.join(', ');
+        if (!genre) genre = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content') || null;
+        console.log(`  Genre final: ${genre || 'null'}`);
+      }
       if (/^Nationalités?$/i.test(l)) pays = n;
       if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
       if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);

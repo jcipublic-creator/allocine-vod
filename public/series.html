@@ -372,7 +372,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v106'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v107'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -558,9 +558,9 @@ function renderSeriesCards(series) {
 }
 
 function buildAnneeLabel(debut, fin, statut) {
-  if (!debut) return fin || '';
-  if (fin && fin !== debut) return `${debut} – ${fin}`;
+  if (!debut) return fin ? (statut === 'En cours' ? `Depuis ${fin}` : fin) : '';
   if (statut === 'En cours') return `Depuis ${debut}`;
+  if (fin && fin !== debut) return `${debut} – ${fin}`;
   return debut;
 }
 function buildAnneeLabelHTML(debut, fin, statut) {
@@ -679,7 +679,8 @@ function populateGenreFilter() {
   const genres = new Set();
   _allSeries.forEach(s => {
     const det = _seriesDet[s.allocineId] || {};
-    const genreStr = det.genre || s.genre || '';
+    // N'utiliser que det.genre (fiches AlloCiné) — s.genre contient trop de bruit
+    const genreStr = det.genre || '';
     genreStr.split(',').map(g => g.trim()).filter(Boolean).forEach(g => genres.add(g));
   });
   const sel = document.getElementById('fil-genre');

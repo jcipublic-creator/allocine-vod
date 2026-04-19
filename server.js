@@ -1607,24 +1607,26 @@ app.get('/api/series/scrape', async (req, res) => {
 /**
  * GET /api/series/details?seriesId=XXXXX
  * ─────────────────────────────────────────────────────────────────────────────
- * Rôle : Récupère les données complémentaires d'une série depuis sa fiche AlloCiné :
- *          • statut (En cours / Terminée)
- *          • pays de production
- *          • nombre de saisons
- *          • dernière année connue (pour afficher la plage de dates)
- *          • plateformes de streaming disponibles
+ * Rôle : Récupère les données complémentaires d'une série depuis sa fiche AlloCiné.
  *
- *        NOTE : genre, créateur et casting NE SONT PAS utilisés côté client
- *        depuis cet endpoint — ils viennent exclusivement du scraping de liste (s.*).
- *        L'endpoint les extrait quand même et les stocke pour éventuel debug.
+ * Champs extraits et stockés :
+ *   • statut       — "En cours" | "Terminée"
+ *   • pays         — nationalité de production
+ *   • nbSaisons    — nombre de saisons
+ *   • derniereAnnee— dernière année connue (complète la plage de dates)
+ *   • providers    — plateformes streaming avec leur type (svod/location/achat)
  *
- *        Le résultat est mis en cache 7 jours (seriesDetailsCache + Redis).
+ * Champs EXCLUS intentionnellement (source = scraping de liste uniquement) :
+ *   ✗ genre    → s.genre    (parseSeries, page de liste)
+ *   ✗ createur → s.createur (parseSeries, page de liste)
+ *   ✗ casting  → s.casting  (parseSeries, page de liste)
+ *
+ * Le résultat est mis en cache 7 jours (seriesDetailsCache + Redis).
  *
  * Params (query) :
  *   seriesId : ID numérique AlloCiné de la série (obligatoire)
  *
- * Réponse: { createur, nbSaisons, statut, derniereAnnee, pays, genre,
- *            casting, providers[], allocineId, allocineUrl, error? }
+ * Réponse: { nbSaisons, statut, derniereAnnee, pays, providers[], allocineId, allocineUrl, error? }
  * Erreur : 400 si seriesId manquant
  */
 app.get('/api/series/details', async (req, res) => {
@@ -1633,12 +1635,7 @@ app.get('/api/series/details', async (req, res) => {
 
   const cacheKey = `sid:${seriesId}`;
   const cached   = getCachedSeriesDetails(cacheKey);
-  // Vérifie que le cache est complet (contient le champ genre, ajouté dans une version récente)
-  if (cached && cached.derniereAnnee && 'genre' in cached) {
-    console.log(`Cache série: ${seriesId}`);
-    return res.json(cached);
-  }
-  if (cached) console.log(`Cache série incomplet, re-fetch: ${seriesId}`);
+  if (cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -1646,50 +1643,15 @@ app.get('/api/series/details', async (req, res) => {
     const html  = resp.data;
     const lines = htmlToLines(html);
 
-    let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
-    const castingArr = [];
+    let nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
 
-    // Extraction genre — structure pipe : [statut] [année] | [durée] | [genre1] , [genre2] Créée par…
-    const pipePos = [];
-    lines.forEach((l, i) => { if (l === '|') pipePos.push(i); });
-    if (pipePos.length >= 2) {
-      const STOP_RE = /^(Créée? par|Créateur|Avec|Nationalités?|Saisons?|Statut|Presse|Synopsis|Titre original)$/i;
-      const start   = pipePos[1] + 1;
-      const stop    = lines.findIndex((l, i) => i >= start && STOP_RE.test(l));
-      // Filtre strict : genre doit commencer par une majuscule, pas de chiffres, longueur courte
-      const GENRE_NAME_RE = /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ][a-zA-ZÀ-ÿ\s\-]{1,25}$/;
-      const parts   = lines.slice(start, stop > 0 ? stop : start + 6)
-        .filter(l => l !== ',' && GENRE_NAME_RE.test(l));
-      if (parts.length) genre = parts.join(', ');
-    }
-
-    // Extraction des autres champs par scan de lignes
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
-      if (/^Nationalités?$/i.test(l))                             pays = n;
-      if (/^Nationalité\s*:(.+)/i.test(l) && !pays)              pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
-      if (l === 'Saisons' && /^\d+$/.test(n))                    nbSaisons = parseInt(n);
 
-      // Créateur(s) : collecte plusieurs noms séparés par des virgules
-      if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) {
-        const creators = [];
-        for (let k = i + 1; k < Math.min(lines.length, i + 6); k++) {
-          if (!lines[k] || lines[k] === ',') continue;
-          if (/^(Avec|Nationalités?|Saisons?|Statut|Presse|Titre original|\d)/.test(lines[k])) break;
-          creators.push(lines[k]);
-        }
-        if (creators.length) createur = creators.join(', ');
-      }
-
-      if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
-
-      // Casting : 5 acteurs max
-      if (l === 'Avec' && castingArr.length === 0) {
-        for (let k = i + 1; k < Math.min(lines.length, i + 8); k++) {
-          if (['De', 'Avec', 'Nationalité', 'Nationalités', 'Saisons', 'Statut', 'Presse', 'Titre original'].includes(lines[k])) break;
-          if (lines[k] && lines[k] !== ',' && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
-        }
-      }
+      if (/^Nationalités?$/i.test(l))              pays = n;
+      if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
+      if (l === 'Saisons' && /^\d+$/.test(n))       nbSaisons = parseInt(n);
+      if (l === 'Statut')                            statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
 
       // Plage d'années — ex: "2008 - 2013", "2019 - en cours", "2020 − 2023"
       if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
@@ -1699,7 +1661,7 @@ app.get('/api/series/details', async (req, res) => {
         if (yB) derniereAnnee = yB;
         else if (yA && !derniereAnnee) derniereAnnee = yA;
       }
-      // "Depuis 2020" ou "depuis 2020"
+      // "Depuis 2020"
       if (!derniereAnnee) {
         const m = l.match(/^[Dd]epuis\s+(\d{4})$/);
         if (m) derniereAnnee = m[1];
@@ -1707,27 +1669,19 @@ app.get('/api/series/details', async (req, res) => {
       // Plage dans du texte : "Série de 2020 à 2023"
       if (!derniereAnnee) {
         const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/);
-        if (m) {
-          const y = parseInt(m[2]);
-          if (y >= 1950 && y <= 2030) derniereAnnee = m[2];
-        }
+        if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; }
       }
       // Année isolée : "2020"
       if (!derniereAnnee && /^\d{4}$/.test(l)) {
-        const y = parseInt(l);
-        if (y >= 1950 && y <= 2030) derniereAnnee = l;
+        const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l;
       }
     }
 
     const providers = extractProviders(html);
-    const data = {
-      createur, nbSaisons, statut, derniereAnnee, pays, genre,
-      casting:  castingArr.slice(0, 5).join(', '),
-      providers, allocineId: seriesId, allocineUrl: url,
-    };
+    const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: seriesId, allocineUrl: url };
 
-    // Ne met en cache que si on a trouvé au moins une info utile
-    if (createur || nbSaisons || providers.length > 0 || pays || genre)
+    // Met en cache uniquement si au moins une donnée utile a été trouvée
+    if (nbSaisons || providers.length > 0 || pays || statut)
       setCachedSeriesDetails(cacheKey, data);
 
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
@@ -1737,8 +1691,8 @@ app.get('/api/series/details', async (req, res) => {
   } catch(e) {
     const status = e.response?.status;
     return res.json({
-      createur: null, nbSaisons: null, statut: null, derniereAnnee: null, pays: null,
-      casting: '', providers: [], allocineId: seriesId,
+      nbSaisons: null, statut: null, derniereAnnee: null, pays: null,
+      providers: [], allocineId: seriesId,
       error: status === 429 ? 'rate_limited' : e.message,
     });
   }
@@ -1815,27 +1769,17 @@ app.post('/api/series/clear-all', async (_req, res) => {
 /**
  * GET /api/series/debug-genres
  * ─────────────────────────────────────────────────────────────────────────────
- * Rôle : Statistiques de couverture des genres dans les deux sources :
- *          - cache de la liste (s.genre, depuis le scraping de liste)
- *          - cache des détails (det.genre, depuis les fiches individuelles)
- *        Permet de vérifier que l'extraction de genre fonctionne correctement.
+ * Rôle : Statistiques de couverture des genres dans la liste scrapée.
+ *        Source unique : s.genre depuis le scraping de liste (parseSeries).
  *
- * Réponse: { details: { total, withGenre, withoutGenre, sample[] },
- *            list:    { total, withGenre, withoutGenre, sample[] } }
+ * Réponse: { list: { total, withGenre, withoutGenre, sample[] } }
  */
 app.get('/api/series/debug-genres', (_req, res) => {
-  const detSample = [];
-  let detWith = 0, detWithout = 0;
-  for (const [key, det] of seriesDetailsCache) {
-    if (det.genre) detWith++; else detWithout++;
-    if (detSample.length < 10) detSample.push({ key, genre: det.genre || null, pays: det.pays || null });
-  }
   const listWith    = cachedSeries.filter(s => s.genre).length;
   const listWithout = cachedSeries.length - listWith;
   const listSample  = cachedSeries.slice(0, 10).map(s => ({ titre: s.titre, genre: s.genre || null }));
   res.json({
-    details: { total: seriesDetailsCache.size, withGenre: detWith,  withoutGenre: detWithout, sample: detSample },
-    list:    { total: cachedSeries.length,      withGenre: listWith, withoutGenre: listWithout, sample: listSample },
+    list: { total: cachedSeries.length, withGenre: listWith, withoutGenre: listWithout, sample: listSample },
   });
 });
 

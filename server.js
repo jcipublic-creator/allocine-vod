@@ -48,7 +48,7 @@ const app       = express();
 const PORT      = Number(process.env.PORT || 3009);
 const TOTAL_PAGES      = Number(process.env.TOTAL_PAGES || 25); // pages de films VOD par année
 const DETAILS_TTL_MS   = 1000 * 60 * 60 * 24;       // 24h  — durée de validité des fiches films
-const AUTO_SCRAPE_DAYS = 3;                          // re-scraper films si cache > 3 jours
+const AUTO_SCRAPE_DAYS = 2;                          // re-scraper si cache > 2 jours (films + séries)
 const DATA_DIR         = process.env.DATA_DIR || __dirname; // répertoire pour le fallback JSON local
 
 // Version du build (incrémentée par le hook pre-commit)

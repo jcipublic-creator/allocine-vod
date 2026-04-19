@@ -25,7 +25,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v84'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v85'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -299,7 +299,7 @@ async function startPlatformLoading() {
   let idx = 0;
 
   while (true) {
-    if (_loadGen !== gen) return;
+    if (_loadGen !== gen) { if (needsFetch) UI.onPlatDone(errors); return; }
 
     if (idx < _allFilms.length) {
       const i = idx++;
@@ -316,7 +316,7 @@ async function startPlatformLoading() {
       }
 
       const err = await fetchDetails(i, gen);
-      if (_loadGen !== gen) return;
+      if (_loadGen !== gen) { if (needsFetch) UI.onPlatDone(errors); return; }
       _platsDone++;
       if (err) errors++;
       UI.onPlatProgress(_platsDone, _allFilms.length);

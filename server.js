@@ -1197,10 +1197,21 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
+    // Extraction genre via cheerio (liens catégorie sur la fiche série)
+    const $$ = cheerio.load(html);
+    const genreLinks = $$('[class*="genre"] a, .meta-body-item a[href*="genre"], [itemprop="genre"]')
+      .map((_, el) => $$(el).text().trim()).get().filter(Boolean);
+    if (genreLinks.length) genre = genreLinks.join(', ');
+    // Fallback : meta tag
+    if (!genre) {
+      const gMeta = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content');
+      if (gMeta) genre = gMeta;
+    }
+
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
-      if (/^Genres?$/i.test(l) && !genre) genre = n;
-      if (/^Genre\s*:(.+)/i.test(l) && !genre) genre = l.replace(/^Genre\s*:\s*/i, '').trim();
+      if (!genre && /^Genres?$/i.test(l)) genre = n;
+      if (!genre && /^Genre\s*:(.+)/i.test(l)) genre = l.replace(/^Genre\s*:\s*/i, '').trim();
       if (/^Nationalités?$/i.test(l)) pays = n;
       if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
       if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);

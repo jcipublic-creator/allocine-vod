@@ -420,14 +420,14 @@ let _seriesDet    = {};   // allocineId → détails { statut, pays, nbSaisons, 
 let _seriesSortBy = 'presse'; // critère de tri courant
 
 // Préférences d'affichage (chargées depuis le serveur + localStorage)
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
 
 // ── Clés localStorage ─────────────────────────────────────────────────────────
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v132';
+const LS_SVERSION = 'vod_series_v133';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -915,8 +915,8 @@ function applySeriesFilters() {
       (statutFilter === 'encours'  && statut === 'En cours') ||
       (statutFilter === 'terminee' && statut === 'Terminée');
     // Filtre liste personnelle
-    const matchListe = (!_prefs.hideVus           || !ud.vu) &&
-                       (!_prefs.hideNonInteresse  || !ud.nonInteresse) &&
+    const matchListe = (!_prefs.hideVusSeries          || !ud.vu) &&
+                       (!_prefs.hideNonInteresseSeries || !ud.nonInteresse) &&
                        (!onlyVoir                 || !!ud.vouloir) &&
                        (!onlySuivre               || !!ud.asuivre);
 
@@ -1196,7 +1196,7 @@ function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
  * puis depuis le serveur (GET /api/prefs) pour écraser si différentes.
  */
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   loadServerPrefs().then(sp => {
     if (!sp || Object.keys(sp).length === 0) return;
@@ -1235,9 +1235,14 @@ function renderPrefs() {
       ${row('showAnimations',    'Afficher les animations')}
     </div>
     <div class="prefs-section">
-      <div class="prefs-section-title">Ma liste</div>
-      ${row('hideVus',          'Masquer les séries déjà vues')}
+      <div class="prefs-section-title">🎬 Films — Ma liste</div>
+      ${row('hideVus',          'Masquer les films déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
+    </div>
+    <div class="prefs-section">
+      <div class="prefs-section-title">📺 Séries — Ma liste</div>
+      ${row('hideVusSeries',          'Masquer les séries déjà vues')}
+      ${row('hideNonInteresseSeries', 'Masquer les "Non intéressé"')}
     </div>`;
 }
 
@@ -1320,7 +1325,7 @@ async function onAddUser() {
   input.disabled = true;
   try {
     await createUser(name);
-    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
     savePrefs();
     _userdata = {};
     await loadUserdata();

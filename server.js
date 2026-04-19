@@ -1203,6 +1203,135 @@ async function autoScrapeIfStale() {
 }
 
 /**
+ * Auto-scrape séries en tâche de fond si le cache est périmé.
+ * Déclenché au démarrage du serveur puis toutes les 24h via setInterval.
+ * Scrape d'abord la liste, puis les détails (plateformes, statut, pays…).
+ */
+async function autoScrapeSeriesIfStale() {
+  if (isScrapingSeries) return;
+
+  const ageListMs   = lastSeriesScrape        ? Date.now() - new Date(lastSeriesScrape).getTime()        : Infinity;
+  const ageDetMs    = lastSeriesDetailsScrape  ? Date.now() - new Date(lastSeriesDetailsScrape).getTime() : Infinity;
+  const ageListDays = ageListMs  / 86400000;
+  const ageDetDays  = ageDetMs   / 86400000;
+
+  const listStale = ageListDays >= AUTO_SCRAPE_DAYS;
+  const detStale  = ageDetDays  >= AUTO_SCRAPE_DAYS;
+
+  if (!listStale && !detStale) {
+    console.log(`⏭️  Auto-scrape séries ignoré — liste il y a ${ageListDays.toFixed(1)}j, détails il y a ${ageDetDays.toFixed(1)}j`);
+    return;
+  }
+
+  isScrapingSeries      = true;
+  lastSeriesScrapeErrors = [];
+  seriesProgress         = { current: 0, total: SERIES_PAGES };
+
+  // ── 1. Scrape la liste si périmée ────────────────────────────────────────
+  if (listStale) {
+    const label = lastSeriesScrape ? `${ageListDays.toFixed(1)} jour(s)` : 'jamais';
+    console.log(`\n🔄 Auto-scrape séries (liste) — dernier scraping il y a ${label}`);
+
+    const allSeries = [];
+    let globalPage  = 0;
+
+    try {
+      for (const source of SERIES_SOURCES) {
+        console.log(`[auto-series] Source: ${source.label}`);
+        for (let page = 1; page <= source.pages; page++) {
+          globalPage++;
+          seriesProgress.current = globalPage;
+          const url = `${source.baseUrl}?page=${page}`;
+          try {
+            let html = getCachedPage(url);
+            if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+            const raw = parseSeries(html);
+            allSeries.push(...raw);
+            console.log(`[auto-series] ${source.label} p${page}/${source.pages} → ${raw.length} séries`);
+            if (raw.length === 0) break; // page vide, on passe à la source suivante
+          } catch(e) {
+            const msg = e.response ? `HTTP ${e.response.status}` : e.message;
+            console.warn(`[auto-series] ${source.label} p${page} erreur: ${msg}`);
+            lastSeriesScrapeErrors.push({ source: source.label, page, message: msg });
+          }
+          await sleep(1500 + Math.random() * 500);
+        }
+      }
+
+      const result     = dedupeAndSortSeries(allSeries);
+      cachedSeries     = result;
+      lastSeriesScrape = new Date().toISOString();
+      if (redis) {
+        try {
+          await redis.set('series', JSON.stringify(result));
+          await redis.set('lastSeriesScrape', lastSeriesScrape);
+        } catch(e) { console.warn('[auto-series] Erreur Redis:', e.message); }
+      }
+      console.log(`✅ Auto-scrape séries (liste) terminé — ${result.length} séries\n`);
+    } catch(e) {
+      console.error('[auto-series] Erreur liste:', e.message);
+    }
+  }
+
+  // ── 2. Scrape les détails si périmés (ou si on vient de rescaper la liste) ──
+  if (detStale || listStale) {
+    const toFetch = cachedSeries.filter(s => s.allocineId);
+    if (toFetch.length > 0) {
+      const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
+      console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
+      let done = 0;
+      for (const serie of toFetch) {
+        const cacheKey = `sid:${serie.allocineId}`;
+        // Force le rafraîchissement si les détails sont périmés
+        if (detStale) seriesDetailsCache.delete(cacheKey);
+        if (getCachedSeriesDetails(cacheKey)) { done++; continue; }
+        try {
+          const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${serie.allocineId}.html`;
+          const resp = await rateLimitedFetch(url);
+          const html = resp.data;
+          const lines = htmlToLines(html);
+          let nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
+          for (let i = 0; i < lines.length - 1; i++) {
+            const l = lines[i], n = lines[i + 1];
+            if (/^Nationalités?$/i.test(l))              pays = n;
+            if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
+            if (l === 'Saisons' && /^\d+$/.test(n))       nbSaisons = parseInt(n);
+            if (l === 'Statut')                            statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
+            if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
+              const parts = l.split(/\s*[-–—−]\s*/);
+              const yB = parts[1]?.match(/\d{4}/)?.[0];
+              const yA = parts[0]?.match(/\d{4}/)?.[0];
+              if (yB) derniereAnnee = yB;
+              else if (yA && !derniereAnnee) derniereAnnee = yA;
+            }
+            if (!derniereAnnee) { const m = l.match(/^[Dd]epuis\s+(\d{4})$/); if (m) derniereAnnee = m[1]; }
+            if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
+            if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
+          }
+          const providers = extractProviders(html);
+          const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
+          if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
+        } catch(e) { console.warn(`[auto-series] Détail ${serie.allocineId}: ${e.message}`); }
+        done++;
+        if (done % 20 === 0) console.log(`[auto-series] Détails: ${done}/${toFetch.length}`);
+      }
+
+      lastSeriesDetailsScrape = new Date().toISOString();
+      if (redis) {
+        try {
+          await redis.set('series_details', JSON.stringify(Object.fromEntries(seriesDetailsCache)));
+          await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
+        } catch(e) { console.warn('[auto-series] Erreur Redis détails:', e.message); }
+      }
+      console.log(`✅ Auto-scrape séries (détails) terminé — ${done} fiches\n`);
+    }
+  }
+
+  isScrapingSeries  = false;
+  seriesProgress    = { current: 0, total: SERIES_PAGES };
+}
+
+/**
  * Crée les profils famille par défaut s'ils n'existent pas encore.
  * Idempotent : peut être appelé à chaque démarrage sans risque de duplication.
  * Renomme aussi le profil migré "Mon profil" en "JC".
@@ -1901,10 +2030,13 @@ app.listen(PORT, () => {
   //   1. Charge Redis (films, séries, utilisateurs, prefs, caches)
   //   2. Crée les profils par défaut s'ils n'existent pas
   //   3. Lance un auto-scrape des films si le cache est périmé
+  //   4. Lance un auto-scrape des séries (liste + détails) si le cache est périmé
   loadUserdata()
     .then(() => seedDefaultProfiles())
-    .then(() => autoScrapeIfStale());
+    .then(() => autoScrapeIfStale())
+    .then(() => autoScrapeSeriesIfStale());
 
   // Vérifie toutes les 24h si un auto-scrape est nécessaire
-  setInterval(() => autoScrapeIfStale(), 24 * 60 * 60 * 1000);
+  setInterval(() => autoScrapeIfStale(),       24 * 60 * 60 * 1000);
+  setInterval(() => autoScrapeSeriesIfStale(), 24 * 60 * 60 * 1000);
 });

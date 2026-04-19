@@ -1305,12 +1305,39 @@ app.get('/api/series/details', async (req, res) => {
   }
 });
 
+// Vide le cache des détails (fiches séries : genre, pays, plateformes…)
 app.post('/api/series/clear-cache', async (_req, res) => {
   const count = seriesDetailsCache.size;
   seriesDetailsCache.clear();
   if (redis) { try { await redis.del('series_details'); } catch(e) { console.warn('Redis del series_details:', e.message); } }
-  console.log(`🗑️  Cache séries vidé (${count} entrées)`);
+  console.log(`🗑️  Cache détails séries vidé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
+});
+
+// Vide le cache de la liste des séries
+app.post('/api/series/clear-list', async (_req, res) => {
+  const count = cachedSeries.length;
+  cachedSeries = [];
+  lastSeriesScrape = null;
+  if (redis) { try { await redis.del('series'); await redis.del('lastSeriesScrape'); } catch(e) { console.warn('Redis del series:', e.message); } }
+  console.log(`🗑️  Cache liste séries vidé (${count} entrées)`);
+  res.json({ ok: true, cleared: count });
+});
+
+// Vide les deux caches
+app.post('/api/series/clear-all', async (_req, res) => {
+  const detCount = seriesDetailsCache.size;
+  const listCount = cachedSeries.length;
+  seriesDetailsCache.clear();
+  cachedSeries = [];
+  lastSeriesScrape = null;
+  lastSeriesDetailsScrape = null;
+  if (redis) {
+    try { await redis.del('series_details'); } catch(e) {}
+    try { await redis.del('series'); await redis.del('lastSeriesScrape'); } catch(e) {}
+  }
+  console.log(`🗑️  Cache complet séries vidé (liste: ${listCount}, détails: ${detCount})`);
+  res.json({ ok: true, clearedList: listCount, clearedDetails: detCount });
 });
 
 app.listen(PORT, () => {

@@ -262,16 +262,12 @@ body {
 
 <div id="confirm-modal">
   <div class="sheet">
-    <h3>🔄 Lancer le scraping des séries ?</h3>
-    <p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
-    <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
-      <li>🏆 Top AlloCiné (10 pages)</li>
-      <li>📅 Meilleures séries des années 2020 (5 pages)</li>
-    </ul>
+    <h3 id="confirm-title">🔄 Lancer le scraping ?</h3>
+    <div id="confirm-body"></div>
     <div class="last-scrape-info" id="confirm-last-scrape"></div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirmSeries()">Annuler</button>
-      <button class="btn-confirm" onclick="closeConfirmSeries();startSeriesScrape()">Confirmer</button>
+      <button class="btn-confirm" id="confirm-ok-btn" onclick="">Confirmer</button>
     </div>
   </div>
 </div>
@@ -313,12 +309,17 @@ body {
 </div>
 
 <div class="menu-dropdown" id="menu-dropdown">
-  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirmSeries()" disabled>▶ Scraper les séries</button>
+  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirmSeries('list')" disabled>▶ Rescraper la liste</button>
+  <button class="menu-item" id="btn-run-details" onclick="closeMenu();openConfirmSeries('details')" disabled>🔄 Rescraper les détails</button>
+  <button class="menu-item" id="btn-run-all" onclick="closeMenu();openConfirmSeries('all')" disabled>⚡ Rescraper tout</button>
+  <div class="menu-separator"></div>
   <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
   <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profil</button>
   <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
   <div class="menu-separator"></div>
-  <button class="menu-item" style="font-size:12px;color:var(--muted)" onclick="closeMenu();clearSeriesCache()">🗑️ Vider le cache</button>
+  <button class="menu-item" style="font-size:12px;color:var(--muted)" onclick="closeMenu();confirmClearCache('list')">🗑️ Vider cache liste</button>
+  <button class="menu-item" style="font-size:12px;color:var(--muted)" onclick="closeMenu();confirmClearCache('details')">🗑️ Vider cache détails</button>
+  <button class="menu-item" style="font-size:12px;color:var(--muted)" onclick="closeMenu();confirmClearCache('all')">🗑️ Vider tout le cache</button>
 </div>
 
 <div class="prog-zone" id="prog-zone">
@@ -361,7 +362,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v95'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v96'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -708,11 +709,36 @@ function toggleSyn(i) {
 }
 
 // ─── Scraping séries (SSE) ────────────────────────────────────────────────────
-function openConfirmSeries() {
+const SCRAPE_CONFIGS = {
+  list: {
+    title: '▶ Rescraper la liste ?',
+    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
+           <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
+             <li>🏆 Top AlloCiné (10 pages)</li><li>📅 Meilleures des années 2020 (5 pages)</li></ul>`,
+    dateKey: 'lastScrape', action: () => { closeConfirmSeries(); startSeriesScrape(); }
+  },
+  details: {
+    title: '🔄 Rescraper les détails ?',
+    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Recharge les fiches de chaque série :<br><span style="color:var(--muted);font-size:12px">genre, pays, plateformes, casting, statut…</span></p>`,
+    dateKey: 'lastDetailsScrape', action: () => { closeConfirmSeries(); startDetailsRescrape(); }
+  },
+  all: {
+    title: '⚡ Rescraper tout ?',
+    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Relance le scraping complet :<br><span style="color:var(--muted);font-size:12px">liste + toutes les fiches (genre, pays, plateformes…)</span></p>`,
+    dateKey: 'lastScrape', action: () => { closeConfirmSeries(); startAllRescrape(); }
+  }
+};
+
+function openConfirmSeries(mode = 'list') {
+  const cfg = SCRAPE_CONFIGS[mode];
+  document.getElementById('confirm-title').textContent = cfg.title;
+  document.getElementById('confirm-body').innerHTML = cfg.body;
+  document.getElementById('confirm-ok-btn').onclick = cfg.action;
   const el = document.getElementById('confirm-last-scrape');
   fetch('/api/series/health').then(r => r.json()).then(d => {
-    if (d.lastScrape) {
-      const dt = new Date(d.lastScrape);
+    const iso = d[cfg.dateKey];
+    if (iso) {
+      const dt = new Date(iso);
       el.textContent = `Dernier scraping : ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}`;
     } else { el.textContent = 'Aucun scraping effectué.'; }
   }).catch(() => { el.textContent = ''; });
@@ -785,14 +811,40 @@ async function openInfo() {
 function closeInfo() { document.getElementById('info-modal').classList.remove('open'); }
 
 // ─── Vider le cache ───────────────────────────────────────────────────────────
-async function clearSeriesCache() {
-  const btn = document.getElementById('btn-run');
+async function confirmClearCache(mode) {
+  const labels = { list: 'la liste', details: 'les détails', all: 'tout le cache' };
+  if (!confirm(`Vider ${labels[mode]} des séries ?`)) return;
+  await clearSeriesCache(mode);
+}
+
+async function clearSeriesCache(mode = 'details') {
   try {
-    await fetch('/api/series/clear-cache', { method: 'POST' });
-    _seriesDet = {};
+    if (mode === 'list' || mode === 'all') {
+      await fetch('/api/series/clear-list', { method: 'POST' });
+      _allSeries = [];
+      localStorage.removeItem('vod_series_cache');
+      localStorage.removeItem('vod_series_version');
+    }
+    if (mode === 'details' || mode === 'all') {
+      await fetch('/api/series/clear-cache', { method: 'POST' });
+      _seriesDet = {};
+    }
     saveSeriesCache();
-    showError('✅ Cache des détails séries vidé.');
-  } catch(e) {}
+    const msgs = { list: '✅ Cache liste vidé.', details: '✅ Cache détails vidé.', all: '✅ Cache complet vidé.' };
+    showError(msgs[mode]);
+    if (mode === 'list' || mode === 'all') { document.getElementById('cards').innerHTML = ''; }
+  } catch(e) { showError('Erreur lors de la suppression du cache.'); }
+}
+
+// Rescraper les détails uniquement (vide le cache + relance le chargement)
+async function startDetailsRescrape() {
+  await clearSeriesCache('details');
+  startSeriesDetailsLoading();
+}
+
+// Rescraper tout (liste + détails)
+function startAllRescrape() {
+  clearSeriesCache('all').then(() => startSeriesScrape());
 }
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
@@ -932,11 +984,12 @@ function showError(msg) {
 async function pingServer() {
   const statusEl = document.getElementById('server-status');
   const btnEl    = document.getElementById('btn-run');
+  const scrapeButtons = ['btn-run', 'btn-run-details', 'btn-run-all'].map(id => document.getElementById(id));
   try {
     const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-    if (r.ok) { statusEl.textContent = '🟢'; statusEl.style.color = 'var(--green)'; btnEl.disabled = false; }
+    if (r.ok) { statusEl.textContent = '🟢'; statusEl.style.color = 'var(--green)'; scrapeButtons.forEach(b => b && (b.disabled = false)); }
     else throw new Error();
-  } catch { statusEl.textContent = '🔴'; statusEl.style.color = 'var(--orange)'; btnEl.disabled = true; }
+  } catch { statusEl.textContent = '🔴'; statusEl.style.color = 'var(--orange)'; scrapeButtons.forEach(b => b && (b.disabled = true)); }
 }
 
 // L'objet UI est requis par shared.js (toggleUA l'utilise)

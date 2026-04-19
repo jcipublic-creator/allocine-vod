@@ -402,7 +402,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v122';
+const LS_SVERSION = 'vod_series_v123';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -843,7 +843,7 @@ function populateAnneeFilter() {
   const cur = sel.value;
   sel.innerHTML = '<option value="">Toutes années</option>' +
     [...annees].sort().map(a =>
-      `<option value="${a}"${cur === a ? ' selected' : ''}>${a}</option>`
+      `<option value="${a}"${cur === a ? ' selected' : ''}>Depuis ${a}</option>`
     ).join('');
 }
 
@@ -876,8 +876,8 @@ function applySeriesFilters() {
 
     // Filtre genre (recherche partielle pour gérer "Science-Fiction", "Sci-Fi"…)
     const matchGenre = !genreFilter || genres.some(g => g.includes(genreFilter));
-    // Filtre année de création
-    const matchAnnee = !anneeFilter || s.anneeSortie === anneeFilter;
+    // Filtre année de création : "à partir de" (>=)
+    const matchAnnee = !anneeFilter || (s.anneeSortie && parseInt(s.anneeSortie) >= parseInt(anneeFilter));
     // Filtre préférences documentaires / animations
     const matchDocAnim = (_prefs.showDocumentaires || !genreStr.includes('documentaire')) &&
                          (_prefs.showAnimations    || !genreStr.includes('animation'));

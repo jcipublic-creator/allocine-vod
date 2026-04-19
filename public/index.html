@@ -252,6 +252,27 @@ body {
 .menu-item:disabled { opacity: .4; cursor: default; }
 .menu-separator { height: 1px; background: rgba(42,79,112,.5); }
 
+/* ── Sous-menu Débogage ── */
+.menu-item-sub {
+  display: flex; align-items: center; justify-content: space-between;
+  width: 100%; padding: 14px 16px;
+  background: none; border: none; border-bottom: 1px solid rgba(42,79,112,.3);
+  color: var(--muted); font-size: 13px; cursor: pointer; text-align: left;
+}
+.menu-item-sub:active { background: rgba(255,255,255,.06); }
+.menu-item-sub .sub-arrow { font-size: 10px; transition: transform .2s; }
+.menu-item-sub.open .sub-arrow { transform: rotate(90deg); }
+.submenu {
+  display: none; background: rgba(0,0,0,.2);
+  border-bottom: 1px solid rgba(42,79,112,.3);
+}
+.submenu.open { display: block; }
+.submenu .menu-item {
+  padding-left: 28px; font-size: 13px; color: var(--muted);
+  border-bottom: 1px solid rgba(42,79,112,.15);
+}
+.submenu .menu-item:last-child { border-bottom: none; }
+
 /* ── Prefs & Profils modales ── */
 #prefs-modal, #profiles-modal {
   display: none; position: fixed; inset: 0; z-index: 500;
@@ -400,8 +421,6 @@ body {
 </div>
 
 <div class="menu-dropdown" id="menu-dropdown">
-  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
-  <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
   <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profils</button>
   <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
   <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
@@ -409,9 +428,17 @@ body {
   <div class="menu-separator"></div>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadCSV()">⬇ Exporter CSV</button>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
-  <button class="menu-item desktop-only" style="font-size:13px;color:var(--muted)" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
-  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
-  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearFilmsListCache()">🗑️ Vider cache liste</button>
+  <div class="menu-separator"></div>
+  <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
+    🛠 Débogage <span class="sub-arrow">▶</span>
+  </button>
+  <div class="submenu" id="submenu-debug">
+    <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
+    <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
+    <button class="menu-item desktop-only" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
+    <button class="menu-item" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
+    <button class="menu-item" onclick="closeMenu();clearFilmsListCache()">🗑️ Vider cache liste</button>
+  </div>
 </div>
 
 <div class="prog-zone" id="prog-zone">
@@ -826,6 +853,15 @@ function toggleMenu(e) {
 function closeMenu() {
   document.getElementById('menu-dropdown').classList.remove('open');
   document.getElementById('menu-btn').classList.remove('open');
+  document.getElementById('submenu-debug')?.classList.remove('open');
+  document.getElementById('btn-debug-toggle')?.classList.remove('open');
+}
+function toggleSubmenu(e) {
+  e.stopPropagation();
+  const sub = document.getElementById('submenu-debug');
+  const btn = document.getElementById('btn-debug-toggle');
+  sub.classList.toggle('open');
+  btn.classList.toggle('open');
 }
 document.addEventListener('click', () => closeMenu());
 

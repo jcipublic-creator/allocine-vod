@@ -1000,7 +1000,8 @@ function parseSeries(html) {
     const notePresse = ratingNotes[0] ?? null;
     const noteSpect  = ratingNotes[1] ?? null;
     if (!notePresse) return;
-    const genre    = $card.find('.meta-genre').text().trim() || $card.find('[class*="genre"]').first().text().trim();
+    const genreArr = $card.find('a[href*="/genre/"]').map((_, el) => $(el).text().trim()).get().filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
+    const genre    = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
     const allText  = $card.text();
     const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
     const anneeSortie = yearMatch ? yearMatch[1] : null;
@@ -1202,9 +1203,9 @@ app.get('/api/series/details', async (req, res) => {
 
   const cacheKey = `sid:${seriesId}`;
   const cached = getCachedSeriesDetails(cacheKey);
-  // Si en cache mais sans année → on re-fetche pour bénéficier des nouvelles regex
-  if (cached && cached.derniereAnnee) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
-  if (cached) console.log(`Cache série sans année, re-fetch: ${seriesId}`);
+  // Servir depuis le cache seulement si l'entrée est récente (a le champ genre)
+  if (cached && cached.derniereAnnee && 'genre' in cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  if (cached) console.log(`Cache série obsolète (sans genre), re-fetch: ${seriesId}`);
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -1215,20 +1216,31 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
-    // Extraction genre via cheerio (liens catégorie sur la fiche série AlloCiné)
+    // Extraction genre via cheerio — même approche que le scraping de liste
     const $$ = cheerio.load(html);
-    // Sélecteurs par ordre de priorité pour AlloCiné
-    const genreLinks = $$(
-      'a[href*="/series/genre/"], a[href*="genre"], [itemprop="genre"], [class*="genre"] a, .meta-body-item a'
-    ).map((_, el) => $$(el).text().trim()).get()
-      .filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
-    if (genreLinks.length) genre = [...new Set(genreLinks)].join(', ');
-    // Fallback : meta tag
+    // 1. Liens genre dans un bloc meta-body-item (structure fiche AlloCiné)
+    $$('.meta-body-item').each((_, el) => {
+      if (genre) return;
+      const label = $$(el).find('.light').text().trim();
+      if (/^genres?$/i.test(label)) {
+        const links = $$(el).find('a').map((_, a) => $$(a).text().trim()).get().filter(Boolean);
+        if (links.length) genre = links.join(', ');
+        else {
+          const txt = $$(el).text().replace(label, '').replace(/[\n,]+/g, ', ').trim();
+          if (txt) genre = txt;
+        }
+      }
+    });
+    // 2. Tous les liens /genre/ de la page (même sélecteur que le scraping liste)
     if (!genre) {
-      const gMeta = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content');
-      if (gMeta) genre = gMeta;
+      const gLinks = $$('a[href*="/genre/"]').map((_, el) => $$(el).text().trim()).get()
+        .filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
+      if (gLinks.length) genre = [...new Set(gLinks)].join(', ');
     }
-    console.log(`  Genre cheerio: [${genreLinks.join(' | ')}] → ${genre || 'null'}`);
+    // 3. itemprop ou meta tag
+    if (!genre) genre = $$('[itemprop="genre"]').first().text().trim() || null;
+    if (!genre) genre = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content') || null;
+    console.log(`  Genre: ${genre || 'null'}`);
 
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];

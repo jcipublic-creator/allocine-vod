@@ -372,7 +372,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v110'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v111'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -502,8 +502,10 @@ function renderSeriesCards(series) {
     const saisonsBadge = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
     const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, s.anneeFin || det.derniereAnnee, statut, s.enCours);
-    const createur = det.createur ? `<div class="card-creator">Par <strong>${esc(det.createur)}</strong></div>` : '';
-    const casting  = det.casting  ? `<div class="card-genre" style="font-size:10px">${esc(det.casting)}</div>` : '';
+    const createurVal = s.createur || det.createur || '';
+    const castingVal  = s.casting  || det.casting  || '';
+    const createur = createurVal ? `<div class="card-creator">Par <strong>${esc(createurVal)}</strong></div>` : '';
+    const casting  = castingVal  ? `<div class="card-genre" style="font-size:10px">${esc(castingVal)}</div>` : '';
     const platHtml = s.allocineId && !det.providers
       ? '<span class="pb-loading">…</span>'
       : renderPlatBadges(det.providers || []);
@@ -749,7 +751,7 @@ const SCRAPE_CONFIGS = {
   },
   details: {
     title: '🔄 Rescraper les détails ?',
-    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Recharge les fiches de chaque série :<br><span style="color:var(--muted);font-size:12px">genre, pays, plateformes, casting, statut…</span></p>`,
+    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Recharge les fiches de chaque série :<br><span style="color:var(--muted);font-size:12px">plateformes, pays, nombre de saisons, statut…</span></p>`,
     dateKey: 'lastDetailsScrape', action: () => { closeConfirmSeries(); startDetailsRescrape(); }
   },
   all: {

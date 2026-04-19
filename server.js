@@ -986,6 +986,35 @@ function parseSeries(html) {
   const titleToId = extractSeriesIdsFromTopPage(html);
   const series = [];
   const seen = new Set();
+  const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère/i;
+  const CARD_STOP = new Set(['Avec', 'De', 'Créée par', 'Créé par', 'Créateur', 'Presse', 'Spectateurs', 'Titre original']);
+
+  // Extrait createur + casting d'un tableau de lignes de carte (scan forward)
+  function extractCreatCast(cardLines) {
+    let createur = '', casting = '';
+    for (let ci = 0; ci < cardLines.length; ci++) {
+      const cl = cardLines[ci];
+      if ((cl === 'De' || cl === 'Créée par' || cl === 'Créé par' || cl === 'Créateur') && !createur) {
+        const parts = [];
+        for (let cm = ci + 1; cm < Math.min(cardLines.length, ci + 6); cm++) {
+          if (!cardLines[cm] || cardLines[cm] === ',') continue;
+          if (CARD_STOP.has(cardLines[cm]) || /^\d/.test(cardLines[cm]) || GENRE_RE.test(cardLines[cm])) break;
+          parts.push(cardLines[cm]);
+        }
+        if (parts.length) createur = parts.join(', ');
+      }
+      if (cl === 'Avec' && !casting) {
+        const actors = [];
+        for (let cm = ci + 1; cm < Math.min(cardLines.length, ci + 12); cm++) {
+          if (!cardLines[cm] || cardLines[cm] === ',') continue;
+          if (CARD_STOP.has(cardLines[cm]) || /^\d/.test(cardLines[cm])) break;
+          if (actors.length < 5) actors.push(cardLines[cm]);
+        }
+        if (actors.length) casting = actors.join(', ');
+      }
+    }
+    return { createur, casting };
+  }
 
   // Approche 1 : sélecteurs cheerio (plus fiable si les classes sont stables)
   $('article, li.card, div.card, [class*="entity-card"]').each((_, card) => {
@@ -1017,20 +1046,22 @@ function parseSeries(html) {
     const enCours    = !!depuisM;
     const anneeSortie = depuisM ? depuisM[1] : rangeM ? rangeM[1] : singleM ? singleM[1] : null;
     const anneeFin    = rangeM ? rangeM[2] : null;
-    // Titre original — présent dans le texte de la carte, ne pas afficher mais stocker
-    const origM = allText.match(/Titre original\s*:?\s*(.+?)(?=\s+(?:depuis|[Dd]ès|\d{4}|Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère|$))/i);
-    const titreOriginal = origM ? origM[1].trim() : '';
+    // Titre original — via htmlToLines sur la carte
+    const cardLines = htmlToLines($card.html() || '');
+    const origIdx = cardLines.indexOf('Titre original');
+    const titreOriginal = origIdx >= 0 && cardLines[origIdx + 1] ? cardLines[origIdx + 1] : '';
+    // Créateur + Casting — via htmlToLines (même méthode que les fiches détail)
+    const { createur, casting } = extractCreatCast(cardLines);
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
     const $img = $card.find('img').first();
     const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
     let poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
     if (poster && poster.startsWith('/')) poster = 'https://www.allocine.fr' + poster;
-    series.push({ titre, titreOriginal, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
+    series.push({ titre, titreOriginal, createur, casting, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
   // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
   if (series.length === 0) {
-    const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère/i;
     const SKIP = new Set(['De', 'Avec', 'Titre original', 'Presse', 'Spectateurs',
                           'En cours', 'Terminée', 'Terminé', 'Diffusion', '']);
     const lines = htmlToLines(html);
@@ -1068,6 +1099,8 @@ function parseSeries(html) {
       const genre = genreParts.join(', ');
       if (!titre || seen.has(normalizeTitle(titre))) continue;
       seen.add(normalizeTitle(titre));
+      // Créateur + casting via extractCreatCast sur la région avant "Presse"
+      const { createur, casting } = extractCreatCast(lines.slice(Math.max(0, i - 30), i));
       const synStart = noteSpect !== null ? i + 4 : i + 2;
       let synopsis = '';
       for (let k = synStart; k < Math.min(lines.length, synStart + 10); k++) {
@@ -1075,7 +1108,7 @@ function parseSeries(html) {
         if (lines[k] && lines[k].length > 80 && !/^\d/.test(lines[k])) { synopsis = lines[k]; break; }
       }
       const allocineId = titleToId.get(normalizeTitle(titre)) || null;
-      series.push({ titre, titreOriginal, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
+      series.push({ titre, titreOriginal, createur, casting, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
     }
   }
   return series;

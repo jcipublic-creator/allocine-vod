@@ -1199,8 +1199,10 @@ app.get('/api/series/details', async (req, res) => {
 
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
-      if ((l === 'Genre' || l === 'Genres') && !genre) genre = n;
-      if (l === 'Nationalité' || l === 'Nationalités') pays = n;
+      if (/^Genres?$/i.test(l) && !genre) genre = n;
+      if (/^Genre\s*:(.+)/i.test(l) && !genre) genre = l.replace(/^Genre\s*:\s*/i, '').trim();
+      if (/^Nationalités?$/i.test(l)) pays = n;
+      if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
       if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);
       if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) createur = n;
       if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;

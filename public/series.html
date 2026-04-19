@@ -361,7 +361,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v88'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v89'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -519,6 +519,7 @@ function renderSeriesCards(series) {
       <div class="card-meta">
         ${anneeLabel ? `<span>${esc(anneeLabel)}</span>` : ''}
         ${statutBadge}${saisonsBadge}
+        ${det.pays ? `<span>${flagFor(det.pays)}${esc(det.pays.split(',')[0].trim())}</span>` : ''}
       </div>
       ${(det.genre || s.genre) ? `<div class="card-genre">${esc(det.genre || s.genre)}</div>` : ''}
       ${casting}
@@ -570,7 +571,24 @@ function updateSeriesCard(idx, det) {
     const saisonsBadge = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
     const anneeLabel = buildAnneeLabel(s.anneeSortie, det.derniereAnnee, statut);
-    metaEl.innerHTML = `${anneeLabel ? `<span>${esc(anneeLabel)}</span>` : ''}${statutBadge}${saisonsBadge}`;
+    const paysSpan = det.pays ? `<span>${flagFor(det.pays)}${esc(det.pays.split(',')[0].trim())}</span>` : '';
+    metaEl.innerHTML = `${anneeLabel ? `<span>${esc(anneeLabel)}</span>` : ''}${statutBadge}${saisonsBadge}${paysSpan}`;
+  }
+  // Genre
+  const genreVal = det.genre || (_allSeries[idx] && _allSeries[idx].genre) || '';
+  let genreEl = card.querySelector('.card-genre:not([style])');
+  if (genreVal) {
+    if (genreEl) { genreEl.textContent = genreVal; }
+    else {
+      const infoEl = card.querySelector('.card-info');
+      const metaEl2 = card.querySelector('.card-meta');
+      if (infoEl && metaEl2) {
+        const div = document.createElement('div');
+        div.className = 'card-genre';
+        div.textContent = genreVal;
+        metaEl2.insertAdjacentElement('afterend', div);
+      }
+    }
   }
   // Créateur
   const creatorEl = card.querySelector('.card-creator');

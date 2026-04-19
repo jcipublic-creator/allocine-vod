@@ -1373,9 +1373,12 @@ function parseSeries(html) {
     let genre = [...new Set(genreArr)].join(', ')
       || $card.find('.meta-genre, .genre, [class*="genre"]').first().text().trim().replace(/^s[eé]ries?\s+/i, '').trim();
     // Fallback : scan texte ligne par ligne dans la carte
+    // Utilise une regex ANCRÉE (^ … $) pour que la ligne entière soit un genre,
+    // et non une correspondance partielle (ex: "Criminal" ≠ "Crime", titre original ≠ genre)
     if (!genre) {
-      const cardLines = htmlToLines($card.html() || '');
-      const genreFromLines = cardLines.filter(l => GENRE_RE.test(l) && l.length < 50);
+      const GENRE_STRICT = /^(Comédie dramatique|Comédie romantique|Comédie|Science-Fiction|Super-héros|Superhéros|Mini-série|Soap Opera|Talk[ -]?Show|Drame|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère|Espionnage|Médical|Sport|Guerre|Musical|Téléréalité|Famille|Jeunesse|Reality|Manga)$/i;
+      const cardLinesForGenre = htmlToLines($card.html() || '');
+      const genreFromLines    = cardLinesForGenre.filter(l => GENRE_STRICT.test(l));
       if (genreFromLines.length) genre = [...new Set(genreFromLines)].join(', ');
     }
 

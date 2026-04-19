@@ -1044,6 +1044,37 @@ function downloadXLSX() {
   XLSX.writeFile(wb, 'allocine_vod.xlsx');
 }
 
+// ─── Auto-scrape au chargement ────────────────────────────────────────────────
+/**
+ * Vérifie si les données sont périmées (> AUTO_DAYS jours) et relance le
+ * scraping automatiquement si besoin.
+ * Retourne true si un scraping a été déclenché.
+ */
+async function checkAutoScrapeFilms() {
+  const AUTO_DAYS = 2;
+  const daysSince = iso => iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : Infinity;
+  try {
+    const r = await fetch('/api/health', { signal: AbortSignal.timeout(4000) });
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (d.isScraping) return false; // scraping déjà en cours côté serveur
+    if (daysSince(d.lastScrape) > AUTO_DAYS) {
+      UI.showError('🔄 Mise à jour automatique : scraping de la liste films…');
+      startScrape(); // relance liste + plateformes quand terminé
+      return true;
+    }
+    if (daysSince(d.lastDetailsScrape) > AUTO_DAYS) {
+      UI.showError('🔄 Mise à jour automatique des plateformes films…');
+      _loadGen++; // annule tout chargement de plateformes en cours
+      await fetch('/api/clear-details-cache', { method: 'POST' });
+      Object.keys(_details).forEach(k => delete _details[k]);
+      startPlatformLoading();
+      return true;
+    }
+  } catch(e) {}
+  return false;
+}
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
 (async () => {
   const userInit = await initUser();
@@ -1058,6 +1089,7 @@ function downloadXLSX() {
   if (!hadCache) await loadFilmsFromServer();
   if (_currentUserId) await loadUserdata();
   startAutoScrapeMonitoring();
+  await checkAutoScrapeFilms();
 })();
 </script>
 </body>

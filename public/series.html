@@ -267,6 +267,9 @@ body {
 .info-row:last-of-type { border-bottom: none; }
 .info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .info-row .val { font-size: 12px; color: var(--text); text-align: right; }
+.info-section-title { font-size: 10px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-top: 14px; margin-bottom: 2px; padding-bottom: 4px; border-bottom: 1px solid rgba(240,192,64,.2); }
+.info-section-title:first-child { margin-top: 0; }
+.info-errors { margin-top: 10px; font-size: 11px; color: #e74c3c; line-height: 1.6; }
 
 /* Préférences toggles */
 .prefs-section { margin-bottom: 20px; }
@@ -427,7 +430,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v133';
+const LS_SVERSION = 'vod_series_v134';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1165,18 +1168,31 @@ document.addEventListener('click', () => closeMenu());
 /** Ouvre la modal ℹ avec les données de /api/series/health */
 async function openInfo() {
   document.getElementById('info-modal').classList.add('open');
+  document.getElementById('info-content').innerHTML = 'Chargement…';
   try {
-    const r = await fetch('/api/series/health');
-    const d = await r.json();
-    const fmt = iso => iso
-      ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
-      : '—';
+    const [rf, rs] = await Promise.all([
+      fetch('/api/health',        { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/series/health', { signal: AbortSignal.timeout(4000) }),
+    ]);
+    const f = rf.ok ? await rf.json() : null;
+    const s = rs.ok ? await rs.json() : null;
+    const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
+    const fErrors = f?.lastScrapeErrors || [];
     document.getElementById('info-content').innerHTML = `
-      <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(d.version||'—')}</span></div>
-      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(d.lastScrape)}</span></div>
-      <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(d.lastDetailsScrape)}</span></div>
-      <div class="info-row"><span class="lbl">Séries en base</span><span class="val">${d.cachedSeries} séries</span></div>
-      <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${d.cachedDetails} en mémoire</span></div>
+      <div class="info-section-title">Serveur</div>
+      <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(f?.version || s?.version || '—')}</span></div>
+      <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>
+      <div class="info-section-title">🎬 Films</div>
+      <div class="info-row"><span class="lbl">En base</span><span class="val">${f?.cachedFilms ?? '—'} films</span></div>
+      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(f?.lastScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Erreurs</span><span class="val">${fErrors.length === 0 ? '✅ Aucune' : `⚠️ ${fErrors.length}`}</span></div>
+      ${fErrors.length > 0 ? `<div class="info-errors">${fErrors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
+      <div class="info-section-title">📺 Séries</div>
+      <div class="info-row"><span class="lbl">En base</span><span class="val">${s?.cachedSeries ?? '—'} séries</span></div>
+      <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${s?.cachedDetails ?? '—'} en mémoire</span></div>
+      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(s?.lastScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Scraping détails</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
     `;
   } catch(e) { document.getElementById('info-content').textContent = 'Serveur non disponible.'; }
 }

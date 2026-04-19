@@ -1372,13 +1372,17 @@ function parseSeries(html) {
       .get().filter(v => v && v.length > 1 && v.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(v));
     let genre = [...new Set(genreArr)].join(', ')
       || $card.find('.meta-genre, .genre, [class*="genre"]').first().text().trim().replace(/^s[eé]ries?\s+/i, '').trim();
-    // Fallback : scan texte ligne par ligne dans la carte
-    // Utilise une regex ANCRÉE (^ … $) pour que la ligne entière soit un genre,
-    // et non une correspondance partielle (ex: "Criminal" ≠ "Crime", titre original ≠ genre)
+    // Lignes texte de la carte (calculé une seule fois, réutilisé pour genre/titreOriginal/createur)
+    const cardLines = htmlToLines($card.html() || '');
+
+    // Fallback genre : regex ANCRÉE (^ … $) — la ligne entière doit être un nom de genre,
+    // évite les faux positifs sur titres ("Romance à Paris") ou titres originaux ("Western Union")
     if (!genre) {
       const GENRE_STRICT = /^(Comédie dramatique|Comédie romantique|Comédie|Science-Fiction|Super-héros|Superhéros|Mini-série|Soap Opera|Talk[ -]?Show|Drame|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère|Espionnage|Médical|Sport|Guerre|Musical|Téléréalité|Famille|Jeunesse|Reality|Manga)$/i;
-      const cardLinesForGenre = htmlToLines($card.html() || '');
-      const genreFromLines    = cardLinesForGenre.filter(l => GENRE_STRICT.test(l));
+      // Exclure la ligne qui suit "Titre original" pour ne jamais la confondre avec un genre
+      const origIdxG    = cardLines.indexOf('Titre original');
+      const origTitleLC = origIdxG >= 0 && cardLines[origIdxG + 1] ? cardLines[origIdxG + 1].toLowerCase() : null;
+      const genreFromLines = cardLines.filter(l => GENRE_STRICT.test(l) && (!origTitleLC || l.toLowerCase() !== origTitleLC));
       if (genreFromLines.length) genre = [...new Set(genreFromLines)].join(', ');
     }
 
@@ -1392,9 +1396,8 @@ function parseSeries(html) {
     const anneeFin   = rangeM ? rangeM[2] : null;
 
     // Titre original (stocké dans Redis, non affiché côté client)
-    const cardLines      = htmlToLines($card.html() || '');
-    const origIdx        = cardLines.indexOf('Titre original');
-    const titreOriginal  = origIdx >= 0 && cardLines[origIdx + 1] ? cardLines[origIdx + 1] : '';
+    const origIdx       = cardLines.indexOf('Titre original');
+    const titreOriginal = origIdx >= 0 && cardLines[origIdx + 1] ? cardLines[origIdx + 1] : '';
 
     // Créateur & casting exclusivement depuis les lignes de la carte
     const { createur, casting } = extractCreatCast(cardLines);
@@ -1442,9 +1445,10 @@ function parseSeries(html) {
           continue;
         }
         if (/^\d+\s+saison/.test(line)) continue;
-        if (GENRE_RE.test(line)) { genreParts.unshift(line); continue; }
-        // Si la ligne précédente est "Titre original", c'est le titre original (non FR)
+        // Titre original AVANT le check genre : évite qu'un titre original contenant
+        // un mot de genre (ex. "Romance à Paris", "Western Union") soit ajouté en genre
         if (lines[j - 1] === 'Titre original') { if (!titreOriginal) titreOriginal = line; continue; }
+        if (GENRE_RE.test(line)) { genreParts.unshift(line); continue; }
         titre = line; break;
       }
 

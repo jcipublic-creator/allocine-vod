@@ -1194,11 +1194,12 @@ app.get('/api/series/details', async (req, res) => {
     const html  = resp.data;
     const lines = htmlToLines(html);
 
-    let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
+    let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
+      if ((l === 'Genre' || l === 'Genres') && !genre) genre = n;
       if (l === 'Nationalité' || l === 'Nationalités') pays = n;
       if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);
       if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) createur = n;
@@ -1239,7 +1240,7 @@ app.get('/api/series/details', async (req, res) => {
 
     const providers = extractProviders(html);
     const data = {
-      createur, nbSaisons, statut, derniereAnnee, pays,
+      createur, nbSaisons, statut, derniereAnnee, pays, genre,
       casting: castingArr.slice(0, 5).join(', '),
       providers, allocineId: seriesId, allocineUrl: url,
     };

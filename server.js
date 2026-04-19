@@ -1017,12 +1017,15 @@ function parseSeries(html) {
     const enCours    = !!depuisM;
     const anneeSortie = depuisM ? depuisM[1] : rangeM ? rangeM[1] : singleM ? singleM[1] : null;
     const anneeFin    = rangeM ? rangeM[2] : null;
+    // Titre original — présent dans le texte de la carte, ne pas afficher mais stocker
+    const origM = allText.match(/Titre original\s*:?\s*(.+?)(?=\s+(?:depuis|[Dd]ès|\d{4}|Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère|$))/i);
+    const titreOriginal = origM ? origM[1].trim() : '';
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
     const $img = $card.find('img').first();
     const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
     let poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
     if (poster && poster.startsWith('/')) poster = 'https://www.allocine.fr' + poster;
-    series.push({ titre, titreOriginal: '', genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
+    series.push({ titre, titreOriginal, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
   // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
@@ -1038,7 +1041,7 @@ function parseSeries(html) {
       const noteSpect  = lines[i + 2] === 'Spectateurs' && /^\d[,.]\d$/.test(lines[i + 3] || '')
         ? parseFloat(lines[i + 3].replace(',', '.')) : null;
 
-      let titre = '', anneeSortie = null, anneeFin = null, enCours = false;
+      let titre = '', titreOriginal = '', anneeSortie = null, anneeFin = null, enCours = false;
       const genreParts = [];
       for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
         const line = lines[j];
@@ -1058,6 +1061,8 @@ function parseSeries(html) {
         }
         if (/^\d+\s+saison/.test(line)) continue;
         if (GENRE_RE.test(line)) { genreParts.unshift(line); continue; }
+        // Si la ligne précédente (vers l'avant) est "Titre original", c'est le titre original, pas le titre FR
+        if (lines[j - 1] === 'Titre original') { if (!titreOriginal) titreOriginal = line; continue; }
         titre = line; break;
       }
       const genre = genreParts.join(', ');
@@ -1070,7 +1075,7 @@ function parseSeries(html) {
         if (lines[k] && lines[k].length > 80 && !/^\d/.test(lines[k])) { synopsis = lines[k]; break; }
       }
       const allocineId = titleToId.get(normalizeTitle(titre)) || null;
-      series.push({ titre, titreOriginal: '', genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
+      series.push({ titre, titreOriginal, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
     }
   }
   return series;
@@ -1243,7 +1248,7 @@ app.get('/api/series/details', async (req, res) => {
     const pipePos = [];
     lines.forEach((l, i) => { if (l === '|') pipePos.push(i); });
     if (pipePos.length >= 2) {
-      const STOP_RE = /^(Créée? par|Créateur|Avec|Nationalités?|Saisons?|Statut|Presse|Synopsis)$/i;
+      const STOP_RE = /^(Créée? par|Créateur|Avec|Nationalités?|Saisons?|Statut|Presse|Synopsis|Titre original)$/i;
       const start = pipePos[1] + 1;
       const stop = lines.findIndex((l, i) => i >= start && STOP_RE.test(l));
       // Filtre strict : noms de genre seulement (court, majuscule, pas de chiffre ni ponctuation spéciale)

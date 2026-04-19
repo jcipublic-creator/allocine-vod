@@ -372,7 +372,7 @@ let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, h
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v109'; // sync build — incrémenter si le format change
+const LS_SVERSION = 'vod_series_v110'; // sync build — incrémenter si le format change
 
 // ─── Cache localStorage séries ────────────────────────────────────────────────
 function saveSeriesCache() {
@@ -525,7 +525,6 @@ function renderSeriesCards(series) {
     ${posterHtml}
     <div class="card-info">
       <div class="card-title">${esc(s.titre)}</div>
-      ${s.titreOriginal ? `<div class="card-orig">${esc(s.titreOriginal)}</div>` : ''}
       ${createur}
       <div class="card-meta">
         ${anneeLabelHTML}

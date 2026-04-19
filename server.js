@@ -1111,7 +1111,27 @@ app.get('/api/ping-allocine', async (_req, res) => {
 app.post('/api/clear-details-cache', (_req, res) => {
   const count = detailsCache.size;
   detailsCache.clear();
-  console.log(`🗑️  Cache films vidé (${count} entrées supprimées)`);
+  console.log(`🗑️  Cache plateformes films vidé (${count} entrées supprimées)`);
+  res.json({ ok: true, cleared: count });
+});
+
+/**
+ * POST /api/clear-films
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vide le cache mémoire + Redis de la liste des films.
+ *        Force un nouveau scraping complet de la liste au prochain appel client.
+ *
+ * Réponse: { ok: true, cleared: number }
+ */
+app.post('/api/clear-films', async (_req, res) => {
+  const count  = cachedFilms.length;
+  cachedFilms  = [];
+  lastScrape   = null;
+  if (redis) {
+    try { await redis.del('films'); await redis.del('lastScrape'); }
+    catch(e) { console.warn('Redis del films:', e.message); }
+  }
+  console.log(`🗑️  Cache liste films vidé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });
 

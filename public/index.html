@@ -400,7 +400,8 @@ body {
 </div>
 
 <div class="menu-dropdown" id="menu-dropdown">
-  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper</button>
+  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
+  <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
   <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profils</button>
   <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
   <button class="menu-item" onclick="closeMenu();openInfo()">ℹ Info</button>
@@ -409,7 +410,8 @@ body {
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadCSV()">⬇ Exporter CSV</button>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
   <button class="menu-item desktop-only" style="font-size:13px;color:var(--muted)" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
-  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearCache()">🗑️ Vider le cache</button>
+  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
+  <button class="menu-item" style="font-size:13px;color:var(--muted)" onclick="closeMenu();clearFilmsListCache()">🗑️ Vider cache liste</button>
 </div>
 
 <div class="prog-zone" id="prog-zone">
@@ -773,11 +775,15 @@ async function pingServer() {
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = '🟢';
       btnEl.disabled = false;
+      const btnPlat = document.getElementById('btn-plat');
+      if (btnPlat) btnPlat.disabled = false;
     } else { throw new Error('non-ok'); }
   } catch {
     statusEl.textContent = '🔴 Hors ligne';
     statusEl.style.color = 'var(--orange)';
     btnEl.disabled = true;
+    const btnPlat = document.getElementById('btn-plat');
+    if (btnPlat) btnPlat.disabled = true;
   }
 }
 
@@ -949,13 +955,36 @@ function renderPrefs() {
 }
 
 // ─── Cache ────────────────────────────────────────────────────────────────────
-async function clearCache() {
-  const btn = document.getElementById('btn-run');
+
+/** Vide le cache plateformes (détails films) */
+async function clearDetailsCache() {
   try {
     const r = await fetch('/api/clear-details-cache', { method: 'POST' });
     const d = await r.json();
-    this.showError?.(`✅ Cache vidé — ${d.cleared} entrée(s) supprimées`);
-  } catch(e) {}
+    UI.showError(`✅ Cache plateformes vidé — ${d.cleared} entrée(s) supprimées`);
+  } catch(e) { UI.showError('Erreur lors de la suppression du cache.'); }
+}
+
+/** Vide le cache liste films (Redis + mémoire) */
+async function clearFilmsListCache() {
+  if (!confirm('Vider le cache liste films ? Les films disparaîtront jusqu\'au prochain scraping.')) return;
+  try {
+    const r = await fetch('/api/clear-films', { method: 'POST' });
+    const d = await r.json();
+    UI.showError(`✅ Cache liste vidé — ${d.cleared} film(s) supprimés`);
+    document.getElementById('cards').innerHTML = '';
+  } catch(e) { UI.showError('Erreur lors de la suppression du cache liste.'); }
+}
+
+/** Vide le cache plateformes puis relance le chargement */
+async function rescrapeDetails() {
+  if (!confirm('Rescraper toutes les plateformes films ?')) return;
+  try {
+    await fetch('/api/clear-details-cache', { method: 'POST' });
+    // Vide les détails locaux pour forcer un rechargement complet
+    Object.keys(_details).forEach(k => delete _details[k]);
+    startPlatformLoading();
+  } catch(e) { UI.showError('Erreur lors du rescraping plateformes.'); }
 }
 
 // ─── Tester AlloCiné ─────────────────────────────────────────────────────────

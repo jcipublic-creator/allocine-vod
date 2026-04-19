@@ -1000,7 +1000,7 @@ function parseSeries(html) {
     const notePresse = ratingNotes[0] ?? null;
     const noteSpect  = ratingNotes[1] ?? null;
     if (!notePresse) return;
-    const genreArr = $card.find('a[href*="/genre/"]').map((_, el) => $(el).text().trim()).get().filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
+    const genreArr = $card.find('a[href*="genre-"]').map((_, el) => $(el).text().trim()).get().filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
     const genre    = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
     const allText  = $card.text();
     const yearMatch = allText.match(/(?:Dès\s+)?(\d{4})/);
@@ -1231,9 +1231,9 @@ app.get('/api/series/details', async (req, res) => {
         }
       }
     });
-    // 2. Tous les liens /genre/ de la page (même sélecteur que le scraping liste)
+    // 2. Tous les liens genre- de la page (format AlloCiné : /series-tv/genre-13001/)
     if (!genre) {
-      const gLinks = $$('a[href*="/genre/"]').map((_, el) => $$(el).text().trim()).get()
+      const gLinks = $$('a[href*="genre-"]').map((_, el) => $$(el).text().trim()).get()
         .filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
       if (gLinks.length) genre = [...new Set(gLinks)].join(', ');
     }

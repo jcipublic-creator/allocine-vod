@@ -1209,16 +1209,20 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
-    // Extraction genre via cheerio (liens catégorie sur la fiche série)
+    // Extraction genre via cheerio (liens catégorie sur la fiche série AlloCiné)
     const $$ = cheerio.load(html);
-    const genreLinks = $$('[class*="genre"] a, .meta-body-item a[href*="genre"], [itemprop="genre"]')
-      .map((_, el) => $$(el).text().trim()).get().filter(Boolean);
-    if (genreLinks.length) genre = genreLinks.join(', ');
+    // Sélecteurs par ordre de priorité pour AlloCiné
+    const genreLinks = $$(
+      'a[href*="/series/genre/"], a[href*="genre"], [itemprop="genre"], [class*="genre"] a, .meta-body-item a'
+    ).map((_, el) => $$(el).text().trim()).get()
+      .filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
+    if (genreLinks.length) genre = [...new Set(genreLinks)].join(', ');
     // Fallback : meta tag
     if (!genre) {
       const gMeta = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content');
       if (gMeta) genre = gMeta;
     }
+    console.log(`  Genre cheerio: [${genreLinks.join(' | ')}] → ${genre || 'null'}`);
 
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
@@ -1269,7 +1273,7 @@ app.get('/api/series/details', async (req, res) => {
       casting: castingArr.slice(0, 5).join(', '),
       providers, allocineId: seriesId, allocineUrl: url,
     };
-    if (createur || nbSaisons || providers.length > 0 || pays) setCachedSeriesDetails(cacheKey, data);
+    if (createur || nbSaisons || providers.length > 0 || pays || genre) setCachedSeriesDetails(cacheKey, data);
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Série ${seriesId} → ${pays || '?'} statut:${statut || '?'} saisons:${nbSaisons ?? '?'} | ${pNames}`);
     return res.json(data);

@@ -401,7 +401,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v114';
+const LS_SVERSION = 'vod_series_v115';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -926,16 +926,21 @@ function showError(msg) {
  * Chaque entrée définit le titre, le corps de la modal de confirmation,
  * la clé pour afficher la date du dernier scraping, et l'action à exécuter.
  */
+// Génère les lignes de sources dynamiquement (fenêtre glissante 4 ans, identique au serveur)
+function buildScrapeSourcesBody() {
+  const cur   = new Date().getFullYear();
+  const years = Array.from({ length: 4 }, (_, i) => cur - i);
+  const rows  = years.map(y => `<li>📅 Meilleures presse ${y} (5 pages)</li>`).join('');
+  return `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
+          <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
+            <li>🏆 Top AlloCiné (10 pages)</li>
+            ${rows}</ul>`;
+}
+
 const SCRAPE_CONFIGS = {
   list: {
     title:   '▶ Rescraper la liste ?',
-    body:    `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
-              <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
-                <li>🏆 Top AlloCiné (10 pages)</li>
-                <li>📅 Meilleures presse 2026 (5 pages)</li>
-                <li>📅 Meilleures presse 2025 (5 pages)</li>
-                <li>📅 Meilleures presse 2024 (5 pages)</li>
-                <li>📅 Meilleures presse 2023 (5 pages)</li></ul>`,
+    get body() { return buildScrapeSourcesBody(); }, // calculé à l'ouverture, pas au chargement
     dateKey: 'lastScrape',
     action:  () => { closeConfirmSeries(); startSeriesScrape(); },
   },

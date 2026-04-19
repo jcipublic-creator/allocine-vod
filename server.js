@@ -373,6 +373,28 @@ function extractIdsFromListingPage(html) {
 }
 
 // ─────────────────────────────────────────────────────────────────
+//  Extrait allocineId → poster URL depuis la PAGE DE LISTE AlloCiné VOD
+// ─────────────────────────────────────────────────────────────────
+function extractPostersFromListingPage(html) {
+  const $ = cheerio.load(html);
+  const idToPoster = new Map();
+  $('a[href*="fichefilm-"][href*="telecharger-vod"]').each((_, el) => {
+    const href = $(el).attr('href') || '';
+    const idMatch = href.match(/fichefilm-(\d+)/);
+    if (!idMatch) return;
+    const id = idMatch[1];
+    const $card = $(el).closest('article, li, [class*="card"], [class*="item"]');
+    const $img = ($card.length ? $card : $(el).parent()).find('img').first();
+    const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
+    if (rawSrc && !/blank|placeholder|gif$/i.test(rawSrc)) {
+      const poster = rawSrc.startsWith('/') ? 'https://www.allocine.fr' + rawSrc : rawSrc;
+      idToPoster.set(id, poster);
+    }
+  });
+  return idToPoster;
+}
+
+// ─────────────────────────────────────────────────────────────────
 //  Extrait titre → ID depuis la PAGE DE RECHERCHE AlloCiné
 //  Les liens sont de la forme : /film/fichefilm_gen_cfilm=311364.html
 // ─────────────────────────────────────────────────────────────────
@@ -451,7 +473,8 @@ function extractProviders(html) {
 
 function parseFilms(html) {
   // ── NOUVELLE méthode : IDs extraits directement des liens /fichefilm-XXXXX/
-  const titleToId = extractIdsFromListingPage(html);
+  const titleToId  = extractIdsFromListingPage(html);
+  const idToPoster = extractPostersFromListingPage(html);
 
   const lines = htmlToLines(html);
   const films = [];
@@ -517,10 +540,11 @@ function parseFilms(html) {
       const titleKey    = normalizeTitle(titre);
       const originalKey = normalizeTitle(titreOriginal);
       const allocineId  = titleToId.get(titleKey) || titleToId.get(originalKey) || null;
+      const poster      = allocineId ? (idToPoster.get(allocineId) || null) : null;
 
       films.push({
         titre, titreOriginal, genre, realisateur, acteurs,
-        notePresse, noteSpect, synopsis, allocineId,
+        notePresse, noteSpect, synopsis, allocineId, poster,
       });
     }
   }

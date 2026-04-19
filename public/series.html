@@ -10,6 +10,9 @@
 <link rel="manifest" href="/manifest.json">
 <title>📺 Séries · AlloCiné</title>
 <style>
+/* ══════════════════════════════════════════════════════
+   DESIGN SYSTEM — Variables de couleur et box-sizing
+   ══════════════════════════════════════════════════════ */
 :root {
   --navy:   #0d2137;
   --blue2:  #1a3550;
@@ -32,11 +35,11 @@ body {
   min-height: 100dvh;
 }
 
-/* ── Auto-scrape bar ── */
+/* ── Barre de progression scraping (en haut, 3px, dorée) ── */
 #auto-scrape-bar { position: fixed; top: 0; left: 0; right: 0; z-index: 999; height: 3px; pointer-events: none; }
 #auto-scrape-fill { height: 100%; width: 0%; background: linear-gradient(90deg, var(--gold), #ffe080); transition: width 2s ease; border-radius: 0 2px 2px 0; box-shadow: 0 0 8px rgba(240,192,64,.7); }
 
-/* ── Header ── */
+/* ── Header fixe ── */
 .header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 200;
   height: calc(56px + var(--st)); padding-top: var(--st);
@@ -53,7 +56,7 @@ body {
 .header-title { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
 .header-status { font-size: 11px; color: var(--muted); white-space: nowrap; }
 
-/* Profile badge */
+/* Badge profil actif dans le header */
 #profile-header-badge {
   display: none; align-items: center; gap: 4px;
   background: rgba(240,192,64,.1); border: 1px solid rgba(240,192,64,.25);
@@ -61,7 +64,7 @@ body {
   cursor: pointer; white-space: nowrap; flex-shrink: 0;
 }
 
-/* Menu btn */
+/* Bouton menu hamburger */
 .menu-btn {
   background: none; border: 1px solid var(--blue3); color: var(--muted);
   border-radius: 8px; width: 32px; height: 32px; font-size: 16px;
@@ -70,7 +73,7 @@ body {
 }
 .menu-btn:active, .menu-btn.open { color: var(--gold); border-color: var(--gold); }
 
-/* ── Menu dropdown ── */
+/* ── Menu déroulant ── */
 .menu-dropdown {
   display: none; position: fixed;
   top: calc(56px + var(--st) + 6px); right: 12px;
@@ -90,7 +93,7 @@ body {
 .menu-item:disabled { opacity: .4; cursor: default; }
 .menu-separator { height: 1px; background: rgba(42,79,112,.5); }
 
-/* ── Progress bars ── */
+/* ── Barres de progression (scraping liste + chargement détails) ── */
 .prog-zone { padding: 8px 14px 4px; display: none; }
 .prog-zone.show { display: block; }
 .prog-lbl { font-size: 11px; color: var(--muted); margin-bottom: 4px; }
@@ -98,7 +101,7 @@ body {
 .prog-fill { height: 100%; border-radius: 3px; width: 0%; transition: width .3s; background: var(--gold); }
 .prog-fill.green { background: var(--green); }
 
-/* ── Filter bar ── */
+/* ── Barre de filtres (masquée jusqu'au premier chargement) ── */
 .filter-bar {
   display: none; padding: 8px 12px;
   overflow-x: auto; -webkit-overflow-scrolling: touch;
@@ -120,15 +123,15 @@ body {
 }
 .filter-toggle input:checked + span { border-color: var(--gold); color: var(--gold); background: rgba(240,192,64,.08); }
 
-/* ── Stats ── */
+/* ── Compteur de résultats ── */
 .stats { padding: 6px 14px; font-size: 11px; color: var(--muted); display: none; }
 .stats.show { display: block; }
 
-/* ── Error banner ── */
+/* ── Bandeau d'erreur / message temporaire ── */
 #error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
   border: 1px solid rgba(200,80,80,.4); border-radius: 10px; font-size: 13px; color: #f08080; display: none; }
 
-/* ── Cards ── */
+/* ── Grille de cartes ── */
 .cards { padding: 6px 10px; display: flex; flex-direction: column; gap: 6px; }
 .card {
   background: var(--blue2); border: 1px solid var(--blue3);
@@ -141,16 +144,19 @@ body {
 .card-poster-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--blue3); background: var(--navy); }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
-.card-orig  { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 1px; }
 .card-creator { font-size: 11px; color: var(--text); margin-top: 3px; }
 .card-creator strong { font-weight: 600; }
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+
+/* Badges statut */
 .statut-badge {
   display: inline-block; font-size: 9px; font-weight: 700; border-radius: 6px; padding: 2px 6px;
 }
 .statut-badge.encours  { background: rgba(76,175,125,.2); border: 1px solid rgba(76,175,125,.5); color: #4caf7d; }
 .statut-badge.terminee { background: rgba(112,144,160,.15); border: 1px solid rgba(112,144,160,.35); color: var(--muted); }
 .saisons-badge { font-size: 10px; color: var(--muted); }
+
+/* Label "Depuis XXXX" avec point vert animé pour les séries encore en cours */
 .depuis-label { color: var(--green); font-weight: 600; font-size: 11px; display: inline-flex; align-items: center; gap: 4px; }
 .live-dot {
   display: inline-block; width: 6px; height: 6px; border-radius: 50%;
@@ -161,7 +167,10 @@ body {
   0%, 100% { opacity: 1; transform: scale(1); }
   50%       { opacity: .35; transform: scale(.65); }
 }
+
 .card-genre { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+/* Bloc de notes (presse + spectateurs) */
 .card-scores { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
 .score-block { text-align: center; }
 .score-val { font-size: 17px; font-weight: 700; line-height: 1; }
@@ -170,6 +179,8 @@ body {
 .score-val.muted  { color: var(--muted); font-size: 14px; }
 .score-lbl { font-size: 8px; color: var(--muted); text-transform: uppercase; letter-spacing: .4px; }
 .score-sep { width: 1px; height: 18px; background: var(--blue3); }
+
+/* Badges plateformes */
 .card-plats { margin-top: 6px; display: flex; flex-wrap: wrap; gap: 4px; }
 .pb { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 500; }
 .pb.svod     { background: rgba(76,175,125,.2);  border: 1px solid rgba(76,175,125,.4);  color: #4caf7d; }
@@ -179,13 +190,13 @@ body {
 .pb-loading  { color: var(--muted); font-size: 11px; font-style: italic; }
 .pb-none     { color: var(--muted); font-size: 11px; }
 
-/* Synopsis */
+/* Synopsis tronqué avec "Lire la suite" */
 .card-synopsis-wrap { margin-top: 7px; padding-top: 7px; border-top: 1px solid rgba(42,79,112,.5); font-size: 12px; color: var(--text); line-height: 1.5; }
 .card-synopsis-rest { display: none; }
 .card-synopsis-rest.show { display: inline; }
 .card-more-btn { color: var(--gold); font-size: 11px; cursor: pointer; margin-left: 3px; white-space: nowrap; }
 
-/* Boutons UA */
+/* Boutons d'action utilisateur (Vu / À voir / À suivre / Non) */
 .card-ua { display: flex; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(42,79,112,.5); }
 .ua-btn {
   flex: 1; background: none; border: 1px solid var(--blue3); color: var(--muted);
@@ -196,11 +207,13 @@ body {
 .ua-btn.active-suivre { border-color: #f0c040; color: #f0c040; background: rgba(240,192,64,.12); }
 .ua-btn.active-nope   { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
 
-/* Empty */
+/* Message "Aucun résultat" */
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
 .empty.show { display: block; }
 
-/* ── Modals (bottom sheets) ── */
+/* ══════════════════════════════════════════════════════
+   MODALS (bottom sheets)
+   ══════════════════════════════════════════════════════ */
 #confirm-modal, #info-modal, #prefs-modal, #profiles-modal {
   display: none; position: fixed; inset: 0; z-index: 500;
   background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
@@ -228,13 +241,13 @@ body {
 .btn-cancel  { background: var(--blue3); color: var(--text); }
 .last-scrape-info { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
 
-/* Info rows */
+/* Lignes d'info (modal ℹ) */
 .info-row { display: flex; justify-content: space-between; padding: 9px 0; border-bottom: 1px solid rgba(42,79,112,.4); gap: 12px; }
 .info-row:last-of-type { border-bottom: none; }
 .info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .info-row .val { font-size: 12px; color: var(--text); text-align: right; }
 
-/* Prefs */
+/* Préférences toggles */
 .prefs-section { margin-bottom: 20px; }
 .prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
 .pref-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); }
@@ -258,7 +271,7 @@ body {
 .add-user-input { flex: 1; background: var(--blue2); border: 1px solid var(--blue3); color: var(--text); border-radius: 8px; padding: 10px 12px; font-size: 14px; }
 .add-user-btn { background: var(--gold); color: #000; border: none; border-radius: 8px; padding: 10px 14px; font-size: 14px; font-weight: 700; cursor: pointer; white-space: nowrap; }
 
-/* ── Desktop overrides (> 700px) ── */
+/* ── Responsive desktop (> 700px) ── */
 @media (min-width: 700px) {
   .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 12px; padding: 12px 20px; }
   .header { padding-left: 24px; padding-right: 20px; }
@@ -270,6 +283,7 @@ body {
 <body>
 <div id="auto-scrape-bar"><div id="auto-scrape-fill"></div></div>
 
+<!-- ── Modal : confirmation scraping ── -->
 <div id="confirm-modal">
   <div class="sheet">
     <h3 id="confirm-title">🔄 Lancer le scraping ?</h3>
@@ -282,6 +296,7 @@ body {
   </div>
 </div>
 
+<!-- ── Modal : informations serveur ── -->
 <div id="info-modal" onclick="if(event.target===this)closeInfo()">
   <div class="sheet">
     <h3>ℹ Informations</h3>
@@ -290,6 +305,7 @@ body {
   </div>
 </div>
 
+<!-- ── Modal : sélection de profil ── -->
 <div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
   <div class="sheet">
     <h3>👤 Profils</h3>
@@ -298,6 +314,7 @@ body {
   </div>
 </div>
 
+<!-- ── Modal : préférences d'affichage ── -->
 <div id="prefs-modal" onclick="if(event.target===this)closePrefs()">
   <div class="sheet">
     <h3>🔖 Mes préférences</h3>
@@ -306,6 +323,7 @@ body {
   </div>
 </div>
 
+<!-- ── Header ── -->
 <div class="header">
   <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;">
     <div class="header-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">📺 Séries</div>
@@ -318,10 +336,11 @@ body {
   <button class="menu-btn" id="menu-btn" onclick="toggleMenu(event)">☰</button>
 </div>
 
+<!-- ── Menu déroulant ── -->
 <div class="menu-dropdown" id="menu-dropdown">
-  <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirmSeries('list')" disabled>▶ Rescraper la liste</button>
+  <button class="menu-item" id="btn-run"         onclick="closeMenu();openConfirmSeries('list')"    disabled>▶ Rescraper la liste</button>
   <button class="menu-item" id="btn-run-details" onclick="closeMenu();openConfirmSeries('details')" disabled>🔄 Rescraper les détails</button>
-  <button class="menu-item" id="btn-run-all" onclick="closeMenu();openConfirmSeries('all')" disabled>⚡ Rescraper tout</button>
+  <button class="menu-item" id="btn-run-all"     onclick="closeMenu();openConfirmSeries('all')"     disabled>⚡ Rescraper tout</button>
   <div class="menu-separator"></div>
   <button class="menu-item" onclick="closeMenu();openPrefs()">🔖 Préférences</button>
   <button class="menu-item" onclick="closeMenu();openProfiles()">👤 Profil</button>
@@ -332,6 +351,7 @@ body {
   <button class="menu-item" style="font-size:12px;color:var(--muted)" onclick="closeMenu();confirmClearCache('all')">🗑️ Vider tout le cache</button>
 </div>
 
+<!-- ── Barres de progression ── -->
 <div class="prog-zone" id="prog-zone">
   <div class="prog-lbl" id="prog-lbl">Chargement…</div>
   <div class="prog-track"><div class="prog-fill" id="prog-fill"></div></div>
@@ -341,15 +361,16 @@ body {
   <div class="prog-track"><div class="prog-fill green" id="plat-fill"></div></div>
 </div>
 
+<!-- ── Contenu principal ── -->
 <div id="error-banner"></div>
 <div class="filter-bar" id="filter-bar">
-  <select id="fil-genre" onchange="applySeriesFilters()"><option value="">Tous genres</option></select>
+  <select id="fil-genre"  onchange="applySeriesFilters()"><option value="">Tous genres</option></select>
   <select id="fil-statut" onchange="applySeriesFilters()">
     <option value="">Toutes</option>
     <option value="encours">En cours</option>
     <option value="terminee">Terminée</option>
   </select>
-  <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applySeriesFilters()"><span>🔖 À voir</span></label>
+  <label class="filter-toggle"><input type="checkbox" id="fil-only-voir"   onchange="applySeriesFilters()"><span>🔖 À voir</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-suivre" onchange="applySeriesFilters()"><span>⏳ À suivre</span></label>
   <select id="fil-sort" onchange="applySeriesSort(this.value)">
     <option value="presse">↓ Note presse</option>
@@ -361,20 +382,38 @@ body {
 <div class="cards" id="cards"></div>
 <div class="empty"  id="empty">Aucune série trouvée avec ces critères.</div>
 
+<!-- shared.js : fonctions communes films & séries (profils, userdata, prefs serveur, badges plateformes…) -->
 <script src="/shared.js"></script>
 <script>
-// ─── État ─────────────────────────────────────────────────────────────────────
-let _allSeries   = [];   // tableau affiché (trié)
-let _seriesDet   = {};   // allocineId → détails { createur, nbSaisons, statut, providers, … }
-let _seriesSortBy = 'presse';
+// ══════════════════════════════════════════════════════════════════════════════
+//  ÉTAT GLOBAL
+// ══════════════════════════════════════════════════════════════════════════════
+
+let _allSeries    = [];   // tableau de séries actuellement affiché (trié)
+let _seriesDet    = {};   // allocineId → détails { statut, pays, nbSaisons, providers, … }
+let _seriesSortBy = 'presse'; // critère de tri courant
+
+// Préférences d'affichage (chargées depuis le serveur + localStorage)
 let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
 
+// ── Clés localStorage ─────────────────────────────────────────────────────────
 const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
-const LS_SVERSION = 'vod_series_v112'; // sync build — incrémenter si le format change
+// ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
+const LS_SVERSION = 'vod_series_v114';
 
-// ─── Cache localStorage séries ────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CACHE LOCALSTORAGE
+//  Évite un rechargement complet depuis le serveur à chaque ouverture.
+//  Le cache est invalidé si la version LS_SVERSION change.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Sauvegarde la liste des séries et les détails dans localStorage.
+ * Appelé après chaque chargement réussi depuis le serveur ou un scraping.
+ */
 function saveSeriesCache() {
   try {
     localStorage.setItem(LS_SERIES, JSON.stringify(_allSeries));
@@ -383,9 +422,15 @@ function saveSeriesCache() {
   } catch(e) {}
 }
 
+/**
+ * Charge la liste des séries depuis localStorage.
+ * Si la version est différente de LS_SVERSION, invalide le cache.
+ * @returns {boolean} true si des données ont été chargées et affichées
+ */
 function loadSeriesCache() {
   try {
     if (localStorage.getItem('vod_series_version') !== LS_SVERSION) {
+      // Invalide les anciennes données si le format a changé
       localStorage.removeItem(LS_SERIES);
       localStorage.removeItem(LS_SDET);
       localStorage.removeItem(LS_SDATE);
@@ -395,23 +440,32 @@ function loadSeriesCache() {
     const raw = localStorage.getItem(LS_SERIES);
     if (!raw) return false;
     _allSeries = JSON.parse(raw);
-    const det = localStorage.getItem(LS_SDET);
+    const det  = localStorage.getItem(LS_SDET);
     if (det) _seriesDet = JSON.parse(det);
-    const date = localStorage.getItem(LS_SDATE);
     if (_allSeries.length > 0) {
       renderSeriesCards(_allSeries);
       populateGenreFilter();
       document.getElementById('filter-bar').classList.add('show');
       document.getElementById('stats').classList.add('show');
       const statusEl = document.getElementById('server-status');
-      if (statusEl) statusEl.textContent = '📦';
+      if (statusEl) statusEl.textContent = '📦'; // indique que les données viennent du cache local
       return true;
     }
     return false;
   } catch(e) { return false; }
 }
 
-// ─── Chargement depuis le serveur ─────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CHARGEMENT DEPUIS LE SERVEUR
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Charge la liste complète des séries depuis GET /api/series.
+ * La réponse inclut déjà les détails en cache (statut, pays, providers)
+ * pour éviter des centaines de requêtes individuelles.
+ * Déclenche ensuite startSeriesDetailsLoading() pour compléter les détails manquants.
+ */
 async function loadSeriesFromServer() {
   try {
     const r = await fetch('/api/series');
@@ -419,7 +473,7 @@ async function loadSeriesFromServer() {
     const d = await r.json();
     if (!d.series || d.series.length === 0) return;
     _allSeries = d.series;
-    // Précharge les détails fournis avec la liste
+    // Précharge les détails inclus dans la réponse (index aligné sur series[])
     if (d.details) {
       d.details.forEach((det, i) => {
         if (det && _allSeries[i]?.allocineId) {
@@ -433,22 +487,39 @@ async function loadSeriesFromServer() {
     document.getElementById('filter-bar').classList.add('show');
     document.getElementById('stats').classList.add('show');
     if (d.lastScrape) {
-      const dt = new Date(d.lastScrape);
+      const dt  = new Date(d.lastScrape);
       const lbl = dt.toLocaleDateString('fr-FR') + ' ' + dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
       const statusEl = document.getElementById('server-status');
-      if (statusEl) { statusEl.textContent = `🟢 ${lbl}`; setTimeout(() => { statusEl.textContent = '🟢'; }, 4000); }
+      if (statusEl) {
+        statusEl.textContent = `🟢 ${lbl}`;
+        setTimeout(() => { statusEl.textContent = '🟢'; }, 4000);
+      }
     }
   } catch(e) {
     showError('Impossible de charger les séries depuis le serveur.');
   }
 }
 
-// ─── Chargement des détails (plateformes, etc.) ───────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CHARGEMENT DES DÉTAILS (plateformes, statut, pays…)
+//  Effectue des appels GET /api/series/details pour chaque série dont
+//  les détails ne sont pas encore en cache (_seriesDet).
+//  Les appels sont séquentiels (rate-limit côté serveur).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Génération courante — permet d'annuler un chargement si un nouveau commence */
 let _detLoadGen = 0;
+
+/**
+ * Lance le chargement progressif des détails pour les séries qui en manquent.
+ * Met à jour chaque carte au fur et à mesure des réponses.
+ * Sauvegarde le cache localStorage une fois terminé.
+ */
 async function startSeriesDetailsLoading() {
   const needsFetch = _allSeries.some(s => s.allocineId && !_seriesDet[s.allocineId]);
   if (!needsFetch) return;
-  const gen = ++_detLoadGen;
+  const gen     = ++_detLoadGen;
   const toFetch = _allSeries.filter(s => s.allocineId && !_seriesDet[s.allocineId]);
   if (toFetch.length === 0) return;
 
@@ -457,15 +528,13 @@ async function startSeriesDetailsLoading() {
 
   let done = 0;
   for (const serie of toFetch) {
-    if (gen !== _detLoadGen) break;
+    if (gen !== _detLoadGen) break; // une nouvelle génération a démarré, on arrête
     try {
       const r = await fetch(`/api/series/details?seriesId=${serie.allocineId}`);
       if (r.ok) {
         const det = await r.json();
         _seriesDet[serie.allocineId] = det;
-        // Mettre à jour la carte si visible
-        const idx = _allSeries.indexOf(serie);
-        updateSeriesCard(idx, det);
+        updateSeriesCard(_allSeries.indexOf(serie), det);
       }
     } catch(e) {}
     done++;
@@ -473,6 +542,7 @@ async function startSeriesDetailsLoading() {
     document.getElementById('plat-fill').style.width = pct + '%';
     document.getElementById('plat-count').textContent = `${done} / ${toFetch.length}`;
   }
+
   if (gen === _detLoadGen) {
     document.getElementById('plat-lbl').innerHTML = `📺 Détails chargés <span id="plat-count" style="color:var(--gold)">${toFetch.length}</span>`;
     document.getElementById('plat-fill').style.width = '100%';
@@ -481,19 +551,72 @@ async function startSeriesDetailsLoading() {
   }
 }
 
-// ─── Rendu des cartes ─────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  RENDU DES CARTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Clé de déduplication d'une série (titre normalisé + note presse) */
 function seriesKey(s) { return `${(s.titre||'').toLowerCase()}|${s.notePresse}`; }
 
+/**
+ * Génère le label de date d'une série.
+ * Règles :
+ *   - Série en cours (enCours=true ou statut="En cours") → "Depuis XXXX"
+ *   - Série terminée avec plage                          → "XXXX – XXXX"
+ *   - Série terminée en une saison                       → "XXXX"
+ *
+ * @param {string|null} debut     année de début
+ * @param {string|null} fin       année de fin (ou dernière année connue)
+ * @param {string}      statut    "En cours" | "Terminée" | ""
+ * @param {boolean}     enCours   flag issu du scraping de liste
+ * @returns {string}
+ */
+function buildAnneeLabel(debut, fin, statut, enCours) {
+  const live = enCours || statut === 'En cours';
+  if (!debut) return fin ? (live ? `Depuis ${fin}` : fin) : '';
+  if (live)   return `Depuis ${debut}`;
+  if (fin && fin !== debut) return `${debut} – ${fin}`;
+  return debut;
+}
+
+/**
+ * Retourne le HTML du label de date.
+ * Si la série est en cours, ajoute un point vert animé (classe "live-dot").
+ * @param {string|null} debut
+ * @param {string|null} fin
+ * @param {string}      statut
+ * @param {boolean}     enCours
+ * @returns {string} HTML
+ */
+function buildAnneeLabelHTML(debut, fin, statut, enCours) {
+  const label = buildAnneeLabel(debut, fin, statut, enCours);
+  if (!label) return '';
+  if (label.startsWith('Depuis ')) {
+    return `<span class="depuis-label"><span class="live-dot"></span>${esc(label)}</span>`;
+  }
+  return `<span>${esc(label)}</span>`;
+}
+
+/**
+ * Génère et injecte le HTML de toutes les cartes séries dans le DOM.
+ * Sources des données affichées :
+ *   • titre, genre, createur, casting, annees, synopsis, poster → s.* (scraping liste)
+ *   • statut, nbSaisons, pays, providers                        → det.* (fiches détail)
+ *
+ * @param {Array} series  tableau de séries à afficher
+ */
 function renderSeriesCards(series) {
   const container = document.getElementById('cards');
   container.innerHTML = series.map((s, i) => {
-    const det = _seriesDet[s.allocineId] || {};
-    const url = s.allocineId
+    const det   = _seriesDet[s.allocineId] || {};
+    const url   = s.allocineId
       ? `https://www.allocine.fr/series/ficheserie_gen_cserie=${s.allocineId}.html`
       : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(s.titre)}`;
     const pScore = s.notePresse;
     const sScore = s.noteSpect;
     const statut = det.statut || '';
+
     const statutBadge = statut === 'En cours'
       ? `<span class="statut-badge encours">▶ En cours</span>`
       : statut === 'Terminée'
@@ -501,24 +624,35 @@ function renderSeriesCards(series) {
         : '';
     const saisonsBadge = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
+
+    // Année de fin : priorité à s.anneeFin (liste), sinon det.derniereAnnee (fiche)
     const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, s.anneeFin || det.derniereAnnee, statut, s.enCours);
+
+    // Créateur et casting : uniquement depuis le scraping de liste (s.*)
     const createur = s.createur ? `<div class="card-creator">Par <strong>${esc(s.createur)}</strong></div>` : '';
     const casting  = s.casting  ? `<div class="card-genre" style="font-size:10px">${esc(s.casting)}</div>`  : '';
+
+    // Plateformes : "…" si pas encore chargées, badges si disponibles
     const platHtml = s.allocineId && !det.providers
       ? '<span class="pb-loading">…</span>'
       : renderPlatBadges(det.providers || []);
+
+    // Synopsis tronqué à 120 caractères avec "Lire la suite"
     const synopsis = s.synopsis || '';
-    const LIMIT = 120;
-    const short = synopsis.length > LIMIT ? synopsis.slice(0, synopsis.lastIndexOf(' ', LIMIT)) : synopsis;
-    const rest  = synopsis.length > LIMIT ? synopsis.slice(short.length) : '';
-    const synHtml = synopsis
+    const LIMIT    = 120;
+    const short    = synopsis.length > LIMIT ? synopsis.slice(0, synopsis.lastIndexOf(' ', LIMIT)) : synopsis;
+    const rest     = synopsis.length > LIMIT ? synopsis.slice(short.length) : '';
+    const synHtml  = synopsis
       ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()">
            <span>${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSyn(${i})">… Lire la suite</span>` : ''}
          </div>` : '';
-    const posterSrc = det.poster || s.poster || '';
+
+    // Poster (priorité au poster de la fiche détail, puis celui de la liste)
+    const posterSrc  = det.poster || s.poster || '';
     const posterHtml = posterSrc
       ? `<div class="card-poster"><img src="${esc(posterSrc)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">📺</div></div>`;
+
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="window.open('${url}','_blank')">
   <div class="card-top">
@@ -541,7 +675,9 @@ function renderSeriesCards(series) {
       </div>
       <div class="score-sep"></div>
       <div class="score-block">
-        ${sScore != null ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>` : `<div class="score-val muted">—</div>`}
+        ${sScore != null
+          ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>`
+          : `<div class="score-val muted">—</div>`}
         <div class="score-lbl">Spect.</div>
       </div>
     </div>
@@ -551,59 +687,57 @@ function renderSeriesCards(series) {
   <div id="ua-${i}"></div>
 </div>`;
   }).join('');
-  // Render user actions
+
+  // Injecte les boutons d'action utilisateur après le rendu
   series.forEach((s, i) => renderSeriesUA(s, i));
   applySeriesFilters();
 }
 
-function buildAnneeLabel(debut, fin, statut, enCours) {
-  const live = enCours || statut === 'En cours';
-  if (!debut) return fin ? (live ? `Depuis ${fin}` : fin) : '';
-  if (live) return `Depuis ${debut}`;
-  if (fin && fin !== debut) return `${debut} – ${fin}`;
-  return debut;
-}
-function buildAnneeLabelHTML(debut, fin, statut, enCours) {
-  const label = buildAnneeLabel(debut, fin, statut, enCours);
-  if (!label) return '';
-  if (label.startsWith('Depuis ')) {
-    return `<span class="depuis-label"><span class="live-dot"></span>${esc(label)}</span>`;
-  }
-  return `<span>${esc(label)}</span>`;
-}
-
+/**
+ * Met à jour une carte série existante dans le DOM après réception des détails
+ * (appelé par startSeriesDetailsLoading lors du chargement progressif).
+ * Met à jour : plateformes, statut, saisons, pays, label année.
+ * NE MET PAS À JOUR : genre, créateur, casting (sources = scraping liste uniquement).
+ *
+ * @param {number} idx  index dans _allSeries
+ * @param {Object} det  détails depuis /api/series/details
+ */
 function updateSeriesCard(idx, det) {
   if (idx < 0 || idx >= _allSeries.length) return;
   const s = _allSeries[idx];
-  // Mettre à jour plateformes
+
+  // Plateformes
   const platEl = document.getElementById(`card-plat-${idx}`);
   if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
-  // Mettre à jour statut / saisons
+
+  // Métadonnées (statut, saisons, pays, label année)
   const card = document.getElementById(`card-${idx}`);
   if (!card) return;
   const metaEl = card.querySelector('.card-meta');
   if (metaEl) {
-    const statut = det.statut || '';
+    const statut      = det.statut || '';
     const statutBadge = statut === 'En cours'
       ? `<span class="statut-badge encours">▶ En cours</span>`
       : statut === 'Terminée' ? `<span class="statut-badge terminee">■ Terminée</span>` : '';
-    const saisonsBadge = det.nbSaisons
+    const saisonsBadge   = det.nbSaisons
       ? `<span class="saisons-badge">${det.nbSaisons} saison${det.nbSaisons > 1 ? 's' : ''}</span>` : '';
     const anneeLabelHTML = buildAnneeLabelHTML(s.anneeSortie, s.anneeFin || det.derniereAnnee, statut, s.enCours);
-    const paysSpan = det.pays ? `<span>${flagFor(det.pays)}${esc(det.pays.split(',')[0].trim())}</span>` : '';
-    metaEl.innerHTML = `${anneeLabelHTML}${statutBadge}${saisonsBadge}${paysSpan}`;
+    const paysSpan       = det.pays ? `<span>${flagFor(det.pays)}${esc(det.pays.split(',')[0].trim())}</span>` : '';
+    metaEl.innerHTML     = `${anneeLabelHTML}${statutBadge}${saisonsBadge}${paysSpan}`;
   }
-  // Genre
-  const genreVal = det.genre || (_allSeries[idx] && _allSeries[idx].genre) || '';
-  let genreEl = card.querySelector('.card-genre:not([style])');
+
+  // Genre (depuis les détails si la carte n'en a pas encore)
+  const genreVal  = det.genre || (_allSeries[idx] && _allSeries[idx].genre) || '';
+  let   genreEl   = card.querySelector('.card-genre:not([style])');
   if (genreVal) {
-    if (genreEl) { genreEl.textContent = genreVal; }
-    else {
-      const infoEl = card.querySelector('.card-info');
+    if (genreEl) {
+      genreEl.textContent = genreVal;
+    } else {
+      const infoEl  = card.querySelector('.card-info');
       const metaEl2 = card.querySelector('.card-meta');
       if (infoEl && metaEl2) {
         const div = document.createElement('div');
-        div.className = 'card-genre';
+        div.className   = 'card-genre';
         div.textContent = genreVal;
         metaEl2.insertAdjacentElement('afterend', div);
       }
@@ -612,6 +746,17 @@ function updateSeriesCard(idx, det) {
   // Créateur, casting et genre viennent uniquement du scraping de liste (s.*) — pas mis à jour ici
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  ACTIONS UTILISATEUR (Vu / À voir / À suivre / Non)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Injecte les boutons d'action utilisateur dans la carte série.
+ * L'état actif de chaque bouton reflète _userdata["s:allocineId"].
+ * @param {Object} serie  objet série
+ * @param {number} idx    index dans _allSeries
+ */
 function renderSeriesUA(serie, idx) {
   const el = document.getElementById(`ua-${idx}`);
   if (!el) return;
@@ -619,14 +764,20 @@ function renderSeriesUA(serie, idx) {
   if (!id || !_currentUserId) { el.innerHTML = ''; return; }
   const ud = _userdata[id] || {};
   el.outerHTML = `<div class="card-ua" id="ua-${idx}" onclick="event.stopPropagation()">
-    <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleSeriesUA('${id}',${idx},'vu')">👁 Vu</button>
-    <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleSeriesUA('${id}',${idx},'vouloir')">🔖 À voir</button>
-    <button class="ua-btn ${ud.asuivre ? 'active-suivre' : ''}" onclick="toggleSeriesUA('${id}',${idx},'asuivre')">⏳ À suivre</button>
-    <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleSeriesUA('${id}',${idx},'nonInteresse')">✕ Non</button>
+    <button class="ua-btn ${ud.vu          ? 'active-vu'     : ''}" onclick="toggleSeriesUA('${id}',${idx},'vu')">👁 Vu</button>
+    <button class="ua-btn ${ud.vouloir     ? 'active-voir'   : ''}" onclick="toggleSeriesUA('${id}',${idx},'vouloir')">🔖 À voir</button>
+    <button class="ua-btn ${ud.asuivre     ? 'active-suivre' : ''}" onclick="toggleSeriesUA('${id}',${idx},'asuivre')">⏳ À suivre</button>
+    <button class="ua-btn ${ud.nonInteresse? 'active-nope'   : ''}" onclick="toggleSeriesUA('${id}',${idx},'nonInteresse')">✕ Non</button>
   </div>`;
 }
 
-// Toggle indépendant (pas de dépendance sur _allFilms de shared.js)
+/**
+ * Toggle un état utilisateur pour une série (indépendant des films).
+ * Persiste via saveUserdata() de shared.js → POST /api/userdata.
+ * @param {string} id     clé Redis : "s:allocineId"
+ * @param {number} idx    index dans _allSeries
+ * @param {string} field  "vu" | "vouloir" | "asuivre" | "nonInteresse"
+ */
 function toggleSeriesUA(id, idx, field) {
   if (!_currentUserId) return;
   if (!_userdata[id]) _userdata[id] = {};
@@ -636,20 +787,37 @@ function toggleSeriesUA(id, idx, field) {
   saveUserdata(id);
 }
 
-// ─── Tri ──────────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  TRI
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Trie la liste et re-rend les cartes.
+ * Critères disponibles : "presse" | "spectateurs" | "annee"
+ * @param {string} sortBy
+ */
 function applySeriesSort(sortBy) {
   _seriesSortBy = sortBy || 'presse';
   const sorted = [..._allSeries].sort((a, b) => {
-    if (_seriesSortBy === 'presse')       return b.notePresse - a.notePresse;
-    if (_seriesSortBy === 'spectateurs')  return (b.noteSpect ?? 0) - (a.noteSpect ?? 0);
-    if (_seriesSortBy === 'annee')        return (parseInt(b.anneeSortie) || 0) - (parseInt(a.anneeSortie) || 0);
+    if (_seriesSortBy === 'presse')      return b.notePresse - a.notePresse;
+    if (_seriesSortBy === 'spectateurs') return (b.noteSpect ?? 0) - (a.noteSpect ?? 0);
+    if (_seriesSortBy === 'annee')       return (parseInt(b.anneeSortie) || 0) - (parseInt(a.anneeSortie) || 0);
     return 0;
   });
   _allSeries = sorted;
   renderSeriesCards(sorted);
 }
 
-// ─── Filtres ─────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  FILTRES
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Remplit le sélecteur de genre avec les genres uniques de _allSeries.
+ * Source : s.genre uniquement (scraping liste). Conserve la sélection courante.
+ */
 function populateGenreFilter() {
   const genres = new Set();
   _allSeries.forEach(s => {
@@ -658,46 +826,77 @@ function populateGenreFilter() {
   const sel = document.getElementById('fil-genre');
   const cur = sel.value;
   sel.innerHTML = '<option value="">Tous genres</option>' +
-    [...genres].sort().map(g => `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`).join('');
+    [...genres].sort().map(g =>
+      `<option value="${esc(g.toLowerCase())}"${cur === g.toLowerCase() ? ' selected' : ''}>${esc(g)}</option>`
+    ).join('');
 }
 
+/**
+ * Applique tous les filtres actifs et masque/affiche les cartes en conséquence.
+ * Filtres appliqués :
+ *   1. Genre (depuis s.genre, source liste)
+ *   2. Statut En cours / Terminée (depuis det.statut, source fiche)
+ *   3. Préférences genres : documentaires, animations (depuis _prefs)
+ *   4. Liste personnelle : Vu, Non intéressé, À voir, À suivre
+ *
+ * Met à jour le compteur de résultats et affiche "Aucun résultat" si vide.
+ */
 function applySeriesFilters() {
   const genreFilter  = document.getElementById('fil-genre').value;
   const statutFilter = document.getElementById('fil-statut').value;
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
   const onlySuivre   = document.getElementById('fil-only-suivre')?.checked;
   let visible = 0;
+
   _allSeries.forEach((s, i) => {
     const card = document.getElementById(`card-${i}`);
     if (!card) return;
-    const det  = _seriesDet[s.allocineId] || {};
-    const genreStr = (s.genre || '').toLowerCase();
-    const genres = genreStr.split(',').map(g => g.trim()).filter(Boolean);
-    const ud = _userdata[s.allocineId ? `s:${s.allocineId}` : ''] || {};
 
-    const matchGenre   = !genreFilter || genres.some(g => g.includes(genreFilter));
+    const det      = _seriesDet[s.allocineId] || {};
+    const genreStr = (s.genre || '').toLowerCase();
+    const genres   = genreStr.split(',').map(g => g.trim()).filter(Boolean);
+    const ud       = _userdata[s.allocineId ? `s:${s.allocineId}` : ''] || {};
+
+    // Filtre genre (recherche partielle pour gérer "Science-Fiction", "Sci-Fi"…)
+    const matchGenre = !genreFilter || genres.some(g => g.includes(genreFilter));
+    // Filtre préférences documentaires / animations
     const matchDocAnim = (_prefs.showDocumentaires || !genreStr.includes('documentaire')) &&
                          (_prefs.showAnimations    || !genreStr.includes('animation'));
-    const matchStatut  = !statutFilter ||
-      (statutFilter === 'encours'  && det.statut === 'En cours')  ||
+    // Filtre statut (nécessite det.statut, disponible après chargement des fiches)
+    const matchStatut = !statutFilter ||
+      (statutFilter === 'encours'  && det.statut === 'En cours') ||
       (statutFilter === 'terminee' && det.statut === 'Terminée');
-    const matchListe   = (!_prefs.hideVus || !ud.vu) && (!_prefs.hideNonInteresse || !ud.nonInteresse) &&
-                         (!onlyVoir || !!ud.vouloir) && (!onlySuivre || !!ud.asuivre);
+    // Filtre liste personnelle
+    const matchListe = (!_prefs.hideVus           || !ud.vu) &&
+                       (!_prefs.hideNonInteresse  || !ud.nonInteresse) &&
+                       (!onlyVoir                 || !!ud.vouloir) &&
+                       (!onlySuivre               || !!ud.asuivre);
+
     const ok = matchGenre && matchDocAnim && matchStatut && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });
-  const el = document.getElementById('stats');
-  el.textContent = `${visible} série${visible > 1 ? 's' : ''} affichée${visible > 1 ? 's' : ''} · ${_allSeries.length} au total`;
+
+  document.getElementById('stats').textContent =
+    `${visible} série${visible > 1 ? 's' : ''} affichée${visible > 1 ? 's' : ''} · ${_allSeries.length} au total`;
   document.getElementById('empty').classList.toggle('show', visible === 0 && _allSeries.length > 0);
 }
 
-function applyFilters() { applySeriesFilters(); } // pont pour shared.js
+/** Pont pour shared.js (toggleUA appelle applyFilters()) */
+function applyFilters() { applySeriesFilters(); }
 
-// ─── Poster fallback ──────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  UTILITAIRES UI
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Remplace le poster cassé par le placeholder emoji */
 function posterError(el) { el.parentNode.innerHTML = '<div class="card-poster-ph">📺</div>'; }
 
-// ─── Synopsis toggle ──────────────────────────────────────────────────────────
+/**
+ * Toggle l'affichage du synopsis complet d'une carte.
+ * @param {number} i  index dans _allSeries
+ */
 function toggleSyn(i) {
   const btn  = document.getElementById(`syn-btn-${i}`);
   const rest = document.getElementById(`syn-rest-${i}`);
@@ -706,36 +905,64 @@ function toggleSyn(i) {
   btn.textContent = open ? ' Réduire' : '… Lire la suite';
 }
 
-// ─── Scraping séries (SSE) ────────────────────────────────────────────────────
+/**
+ * Affiche un bandeau d'erreur ou de notification pendant 6 secondes.
+ * @param {string} msg
+ */
+function showError(msg) {
+  const el = document.getElementById('error-banner');
+  el.textContent = msg; el.style.display = 'block';
+  setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SCRAPING SÉRIES (SSE)
+//  Configurations des 3 modes de scraping accessibles depuis le menu.
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Configurations des modes de scraping disponibles dans le menu.
+ * Chaque entrée définit le titre, le corps de la modal de confirmation,
+ * la clé pour afficher la date du dernier scraping, et l'action à exécuter.
+ */
 const SCRAPE_CONFIGS = {
   list: {
-    title: '▶ Rescraper la liste ?',
-    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
-           <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
-             <li>🏆 Top AlloCiné (10 pages)</li>
-             <li>📅 Meilleures presse 2026 (5 pages)</li>
-             <li>📅 Meilleures presse 2025 (5 pages)</li>
-             <li>📅 Meilleures presse 2024 (5 pages)</li>
-             <li>📅 Meilleures presse 2023 (5 pages)</li></ul>`,
-    dateKey: 'lastScrape', action: () => { closeConfirmSeries(); startSeriesScrape(); }
+    title:   '▶ Rescraper la liste ?',
+    body:    `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Les séries seront récupérées depuis :</p>
+              <ul style="font-size:12px;color:var(--muted);line-height:1.8;margin:0 0 8px 16px">
+                <li>🏆 Top AlloCiné (10 pages)</li>
+                <li>📅 Meilleures presse 2026 (5 pages)</li>
+                <li>📅 Meilleures presse 2025 (5 pages)</li>
+                <li>📅 Meilleures presse 2024 (5 pages)</li>
+                <li>📅 Meilleures presse 2023 (5 pages)</li></ul>`,
+    dateKey: 'lastScrape',
+    action:  () => { closeConfirmSeries(); startSeriesScrape(); },
   },
   details: {
-    title: '🔄 Rescraper les détails ?',
-    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Recharge les fiches de chaque série :<br><span style="color:var(--muted);font-size:12px">plateformes, pays, nombre de saisons, statut…</span></p>`,
-    dateKey: 'lastDetailsScrape', action: () => { closeConfirmSeries(); startDetailsRescrape(); }
+    title:   '🔄 Rescraper les détails ?',
+    body:    `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Recharge les fiches de chaque série :<br><span style="color:var(--muted);font-size:12px">plateformes, pays, nombre de saisons, statut…</span></p>`,
+    dateKey: 'lastDetailsScrape',
+    action:  () => { closeConfirmSeries(); startDetailsRescrape(); },
   },
   all: {
-    title: '⚡ Rescraper tout ?',
-    body: `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Relance le scraping complet :<br><span style="color:var(--muted);font-size:12px">liste + toutes les fiches (genre, pays, plateformes…)</span></p>`,
-    dateKey: 'lastScrape', action: () => { closeConfirmSeries(); startAllRescrape(); }
-  }
+    title:   '⚡ Rescraper tout ?',
+    body:    `<p style="font-size:13px;color:var(--text);line-height:1.5;margin-bottom:6px">Relance le scraping complet :<br><span style="color:var(--muted);font-size:12px">liste + toutes les fiches (genre, pays, plateformes…)</span></p>`,
+    dateKey: 'lastScrape',
+    action:  () => { closeConfirmSeries(); startAllRescrape(); },
+  },
 };
 
+/**
+ * Ouvre la modal de confirmation de scraping pour le mode donné.
+ * Charge la date du dernier scraping depuis /api/series/health.
+ * @param {'list'|'details'|'all'} mode
+ */
 function openConfirmSeries(mode = 'list') {
   const cfg = SCRAPE_CONFIGS[mode];
-  document.getElementById('confirm-title').textContent = cfg.title;
-  document.getElementById('confirm-body').innerHTML = cfg.body;
-  document.getElementById('confirm-ok-btn').onclick = cfg.action;
+  document.getElementById('confirm-title').textContent   = cfg.title;
+  document.getElementById('confirm-body').innerHTML      = cfg.body;
+  document.getElementById('confirm-ok-btn').onclick      = cfg.action;
   const el = document.getElementById('confirm-last-scrape');
   fetch('/api/series/health').then(r => r.json()).then(d => {
     const iso = d[cfg.dateKey];
@@ -748,23 +975,32 @@ function openConfirmSeries(mode = 'list') {
 }
 function closeConfirmSeries() { document.getElementById('confirm-modal').classList.remove('open'); }
 
+/**
+ * Lance le scraping SSE de la liste des séries (GET /api/series/scrape).
+ * Affiche les séries au fur et à mesure via renderSeriesCards.
+ * À la fin, lance automatiquement le chargement des détails manquants.
+ */
 function startSeriesScrape() {
   const btn = document.getElementById('btn-run');
   btn.disabled = true; btn.textContent = '⏳ En cours…';
   document.getElementById('prog-zone').classList.add('show');
   document.getElementById('prog-fill').style.width = '0%';
-  document.getElementById('prog-lbl').textContent = 'Scraping des séries…';
+  document.getElementById('prog-lbl').textContent  = 'Scraping des séries…';
 
   _allSeries = [];
   const source = new EventSource('/api/series/scrape');
+
   source.onmessage = (e) => {
     const d = JSON.parse(e.data);
+
     if (d.type === 'progress') {
       const pct = Math.round(d.page / d.total * 100);
       document.getElementById('prog-fill').style.width = pct + '%';
-      document.getElementById('prog-lbl').textContent = `⏳ Page ${d.page}/${d.total}…`;
+      document.getElementById('prog-lbl').textContent  = `⏳ Page ${d.page}/${d.total}…`;
     }
+
     if (d.type === 'series' && d.series?.length) {
+      // Déduplication côté client pendant le streaming
       const seen = new Set(_allSeries.map(s => `${(s.titre||'').toLowerCase()}|${s.notePresse}`));
       d.series.forEach(s => {
         const key = `${(s.titre||'').toLowerCase()}|${s.notePresse}`;
@@ -775,18 +1011,18 @@ function startSeriesScrape() {
       document.getElementById('filter-bar').classList.add('show');
       document.getElementById('stats').classList.add('show');
     }
-    if (d.type === 'done' || d.type === 'error' && d.page >= 1) {
-      if (d.type === 'done') {
-        document.getElementById('prog-fill').style.width = '100%';
-        document.getElementById('prog-lbl').textContent = `✅ ${_allSeries.length} séries récupérées`;
-        applySeriesSort(_seriesSortBy);
-        saveSeriesCache();
-        btn.disabled = false; btn.textContent = '▶ Scraper les séries';
-        source.close();
-        startSeriesDetailsLoading();
-      }
+
+    if (d.type === 'done') {
+      document.getElementById('prog-fill').style.width = '100%';
+      document.getElementById('prog-lbl').textContent  = `✅ ${_allSeries.length} séries récupérées`;
+      applySeriesSort(_seriesSortBy);
+      saveSeriesCache();
+      btn.disabled = false; btn.textContent = '▶ Scraper les séries';
+      source.close();
+      startSeriesDetailsLoading(); // charge les fiches en arrière-plan
     }
   };
+
   source.onerror = () => {
     btn.disabled = false; btn.textContent = '▶ Scraper les séries';
     showError('Erreur de connexion pendant le scraping.');
@@ -794,31 +1030,26 @@ function startSeriesScrape() {
   };
 }
 
-// ─── Info ─────────────────────────────────────────────────────────────────────
-async function openInfo() {
-  document.getElementById('info-modal').classList.add('open');
-  try {
-    const r = await fetch('/api/series/health');
-    const d = await r.json();
-    const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
-    document.getElementById('info-content').innerHTML = `
-      <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(d.version||'—')}</span></div>
-      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(d.lastScrape)}</span></div>
-      <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(d.lastDetailsScrape)}</span></div>
-      <div class="info-row"><span class="lbl">Séries en base</span><span class="val">${d.cachedSeries} séries</span></div>
-      <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${d.cachedDetails} en mémoire</span></div>
-    `;
-  } catch(e) { document.getElementById('info-content').textContent = 'Serveur non disponible.'; }
-}
-function closeInfo() { document.getElementById('info-modal').classList.remove('open'); }
-
-// ─── Vider le cache ───────────────────────────────────────────────────────────
-async function confirmClearCache(mode) {
-  const labels = { list: 'la liste', details: 'les détails', all: 'tout le cache' };
-  if (!confirm(`Vider ${labels[mode]} des séries ?`)) return;
-  await clearSeriesCache(mode);
+/** Re-scrape uniquement les fiches (vide le cache détails + recharge) */
+async function startDetailsRescrape() {
+  await clearSeriesCache('details');
+  startSeriesDetailsLoading();
 }
 
+/** Re-scrape tout : liste + fiches */
+function startAllRescrape() {
+  clearSeriesCache('all').then(() => startSeriesScrape());
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CACHE — VIDER
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Vide le cache (liste, détails, ou les deux) côté serveur ET localStorage.
+ * @param {'list'|'details'|'all'} mode
+ */
 async function clearSeriesCache(mode = 'details') {
   try {
     if (mode === 'list' || mode === 'all') {
@@ -834,25 +1065,25 @@ async function clearSeriesCache(mode = 'details') {
     saveSeriesCache();
     const msgs = { list: '✅ Cache liste vidé.', details: '✅ Cache détails vidé.', all: '✅ Cache complet vidé.' };
     showError(msgs[mode]);
-    if (mode === 'list' || mode === 'all') { document.getElementById('cards').innerHTML = ''; }
+    if (mode === 'list' || mode === 'all') document.getElementById('cards').innerHTML = '';
   } catch(e) { showError('Erreur lors de la suppression du cache.'); }
 }
 
-// Rescraper les détails uniquement (vide le cache + relance le chargement)
-async function startDetailsRescrape() {
-  await clearSeriesCache('details');
-  startSeriesDetailsLoading();
+/** Demande confirmation avant de vider le cache */
+async function confirmClearCache(mode) {
+  const labels = { list: 'la liste', details: 'les détails', all: 'tout le cache' };
+  if (!confirm(`Vider ${labels[mode]} des séries ?`)) return;
+  await clearSeriesCache(mode);
 }
 
-// Rescraper tout (liste + détails)
-function startAllRescrape() {
-  clearSeriesCache('all').then(() => startSeriesScrape());
-}
 
-// ─── Menu ─────────────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  MENU
+// ══════════════════════════════════════════════════════════════════════════════
+
 function toggleMenu(e) {
   e.stopPropagation();
-  const dd = document.getElementById('menu-dropdown');
+  const dd  = document.getElementById('menu-dropdown');
   const btn = document.getElementById('menu-btn');
   const open = dd.classList.toggle('open');
   btn.classList.toggle('open', open);
@@ -861,10 +1092,47 @@ function closeMenu() {
   document.getElementById('menu-dropdown').classList.remove('open');
   document.getElementById('menu-btn').classList.remove('open');
 }
+// Ferme le menu quand on clique ailleurs
 document.addEventListener('click', () => closeMenu());
 
-// ─── Préférences ──────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INFORMATIONS SERVEUR
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Ouvre la modal ℹ avec les données de /api/series/health */
+async function openInfo() {
+  document.getElementById('info-modal').classList.add('open');
+  try {
+    const r = await fetch('/api/series/health');
+    const d = await r.json();
+    const fmt = iso => iso
+      ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
+      : '—';
+    document.getElementById('info-content').innerHTML = `
+      <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(d.version||'—')}</span></div>
+      <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(d.lastScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(d.lastDetailsScrape)}</span></div>
+      <div class="info-row"><span class="lbl">Séries en base</span><span class="val">${d.cachedSeries} séries</span></div>
+      <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${d.cachedDetails} en mémoire</span></div>
+    `;
+  } catch(e) { document.getElementById('info-content').textContent = 'Serveur non disponible.'; }
+}
+function closeInfo() { document.getElementById('info-modal').classList.remove('open'); }
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PRÉFÉRENCES
+//  Synchronisées entre localStorage (rapide) et le serveur (source de vérité).
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Clé localStorage des prefs (différente par profil) */
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
+
+/**
+ * Charge les préférences : d'abord depuis localStorage (immédiat),
+ * puis depuis le serveur (GET /api/prefs) pour écraser si différentes.
+ */
 function loadPrefs() {
   _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
@@ -875,14 +1143,20 @@ function loadPrefs() {
     applySeriesFilters();
   });
 }
+
+/** Sauvegarde locale + serveur (POST /api/prefs) */
 function savePrefs() {
   localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
   saveServerPrefs(_prefs);
 }
+
+/** Met à jour une préférence et re-applique les filtres immédiatement */
 function setPref(key, val) { _prefs[key] = val; savePrefs(); applySeriesFilters(); }
 
 function openPrefs()  { renderPrefs(); document.getElementById('prefs-modal').classList.add('open'); }
 function closePrefs() { document.getElementById('prefs-modal').classList.remove('open'); }
+
+/** Génère le HTML de la modal préférences */
 function renderPrefs() {
   const row = (key, label) => `
     <div class="pref-row">
@@ -900,12 +1174,17 @@ function renderPrefs() {
     </div>
     <div class="prefs-section">
       <div class="prefs-section-title">Ma liste</div>
-      ${row('hideVus',           'Masquer les séries déjà vues')}
-      ${row('hideNonInteresse',  'Masquer les "Non intéressé"')}
+      ${row('hideVus',          'Masquer les séries déjà vues')}
+      ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
     </div>`;
 }
 
-// ─── Profils ──────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PROFILS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/** Affiche le nom du profil actif dans le badge du header */
 function updateProfileBadge() {
   if (!_currentUserId) return;
   loadUsers().then(list => {
@@ -913,11 +1192,12 @@ function updateProfileBadge() {
     if (!u) return;
     const name  = document.getElementById('profile-name-serie');
     const badge = document.getElementById('profile-header-badge');
-    if (name) name.textContent = u.name;
+    if (name)  name.textContent  = u.name;
     if (badge) badge.style.display = 'flex';
   }).catch(() => {});
 }
 
+/** Ouvre la modal de sélection de profil et charge la liste depuis /api/users */
 async function openProfiles() {
   document.getElementById('profiles-modal').classList.add('open');
   document.getElementById('profiles-content').innerHTML = '<p style="color:var(--muted);font-size:13px;padding:10px 0">Chargement…</p>';
@@ -926,6 +1206,11 @@ async function openProfiles() {
 }
 function closeProfiles() { document.getElementById('profiles-modal').classList.remove('open'); }
 
+/**
+ * Génère le HTML de la liste des profils.
+ * @param {Object[]} list        tableau de profils { id, name }
+ * @param {boolean}  firstLaunch affiche un message de bienvenue si true
+ */
 function renderProfiles(list, firstLaunch = false) {
   const intro = firstLaunch
     ? '<p style="font-size:13px;color:var(--text);margin-bottom:16px;line-height:1.5">Bienvenue ! Choisis ton profil.</p>' : '';
@@ -933,7 +1218,9 @@ function renderProfiles(list, firstLaunch = false) {
     const isActive = u.id === _currentUserId;
     return `<div class="profile-row ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfile('${u.id}')"`}>
       <span class="profile-name">${esc(u.name)}</span>
-      ${isActive ? '<span class="profile-badge-active">● Actif</span>' : '<span class="profile-badge-switch">Sélectionner →</span>'}
+      ${isActive
+        ? '<span class="profile-badge-active">● Actif</span>'
+        : '<span class="profile-badge-switch">Sélectionner →</span>'}
     </div>`;
   }).join('');
   document.getElementById('profiles-content').innerHTML = `
@@ -948,6 +1235,11 @@ function renderProfiles(list, firstLaunch = false) {
     </div>`;
 }
 
+/**
+ * Change de profil actif : met à jour les préférences et les données utilisateur,
+ * puis re-rend les cartes pour actualiser les boutons d'action.
+ * @param {string} userId
+ */
 async function selectProfile(userId) {
   switchUser(userId);
   loadPrefs();
@@ -955,12 +1247,13 @@ async function selectProfile(userId) {
   await loadUserdata();
   closeProfiles();
   updateProfileBadge();
-  renderSeriesCards(_allSeries); // re-render UA
+  renderSeriesCards(_allSeries);
 }
 
+/** Crée un nouveau profil et le sélectionne automatiquement */
 async function onAddUser() {
   const input = document.getElementById('new-user-name');
-  const name = input?.value.trim();
+  const name  = input?.value.trim();
   if (!name) { input?.focus(); return; }
   input.disabled = true;
   try {
@@ -975,65 +1268,92 @@ async function onAddUser() {
   } catch(e) { input.disabled = false; input.focus(); }
 }
 
-// ─── Erreur ───────────────────────────────────────────────────────────────────
-function showError(msg) {
-  const el = document.getElementById('error-banner');
-  el.textContent = msg; el.style.display = 'block';
-  setTimeout(() => { el.style.display = 'none'; }, 6000);
-}
 
-// ─── Ping serveur ─────────────────────────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════════════════════
+//  PING SERVEUR
+//  Vérifie que le serveur répond et active/désactive les boutons de scraping.
+// ══════════════════════════════════════════════════════════════════════════════
+
 async function pingServer() {
-  const statusEl = document.getElementById('server-status');
-  const btnEl    = document.getElementById('btn-run');
+  const statusEl      = document.getElementById('server-status');
   const scrapeButtons = ['btn-run', 'btn-run-details', 'btn-run-all'].map(id => document.getElementById(id));
   try {
     const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-    if (r.ok) { statusEl.textContent = '🟢'; statusEl.style.color = 'var(--green)'; scrapeButtons.forEach(b => b && (b.disabled = false)); }
-    else throw new Error();
-  } catch { statusEl.textContent = '🔴'; statusEl.style.color = 'var(--orange)'; scrapeButtons.forEach(b => b && (b.disabled = true)); }
+    if (r.ok) {
+      statusEl.textContent = '🟢';
+      statusEl.style.color = 'var(--green)';
+      scrapeButtons.forEach(b => b && (b.disabled = false));
+    } else throw new Error();
+  } catch {
+    statusEl.textContent = '🔴';
+    statusEl.style.color = 'var(--orange)';
+    scrapeButtons.forEach(b => b && (b.disabled = true));
+  }
 }
 
-// L'objet UI est requis par shared.js (toggleUA l'utilise)
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INTERFACE SHARED.JS
+//  Objet UI requis par shared.js pour les callbacks (toggleUA, etc.).
+//  Les méthodes inutilisées ici sont des stubs vides.
+// ══════════════════════════════════════════════════════════════════════════════
+
 const UI = {
-  renderFilms()          {},
-  reapplyAfterSort()     {},
+  renderFilms()           {},
+  reapplyAfterSort()      {},
   renderUserActions(film, idx) { renderSeriesUA(film, idx); },
-  getPlatEl()            { return null; },
-  onPlatStart()          {},
-  onPlatProgress()       {},
-  onPlatDone()           {},
-  onDetailFetched()      {},
-  onScrapeStart()        {},
-  onScrapeProgress()     {},
-  onScrapeDone()         {},
-  onScrapeError()        {},
-  onCacheLoaded()        {},
-  onFilmsFromServer()    {},
-  populateGenreFilter()  { populateGenreFilter(); },
-  updateSortButtons()    {},
-  reapplyUserActions()   { _allSeries.forEach((s, i) => renderSeriesUA(s, i)); },
-  applyFilters()         { applySeriesFilters(); },
-  showError(msg)         { showError(msg); },
-  showAutoScrapeBar()    {},
-  hideAutoScrapeBar()    {},
-  showUserPicker(users)  { renderProfiles(users, true); document.getElementById('profiles-modal').classList.add('open'); },
+  getPlatEl()             { return null; },
+  onPlatStart()           {},
+  onPlatProgress()        {},
+  onPlatDone()            {},
+  onDetailFetched()       {},
+  onScrapeStart()         {},
+  onScrapeProgress()      {},
+  onScrapeDone()          {},
+  onScrapeError()         {},
+  onCacheLoaded()         {},
+  onFilmsFromServer()     {},
+  populateGenreFilter()   { populateGenreFilter(); },
+  updateSortButtons()     {},
+  reapplyUserActions()    { _allSeries.forEach((s, i) => renderSeriesUA(s, i)); },
+  applyFilters()          { applySeriesFilters(); },
+  showError(msg)          { showError(msg); },
+  showAutoScrapeBar()     {},
+  hideAutoScrapeBar()     {},
+  showUserPicker(users)   { renderProfiles(users, true); document.getElementById('profiles-modal').classList.add('open'); },
 };
 
-// ─── Init ─────────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  INITIALISATION
+//  Séquence au chargement de la page :
+//    1. Initialise le profil utilisateur (shared.js → /api/users)
+//    2. Charge les préférences
+//    3. Tente de charger depuis localStorage (affichage immédiat)
+//    4. Ping le serveur (active les boutons de scraping)
+//    5. Charge les userdata si profil connu
+//    6. Si pas de cache local → charge depuis le serveur
+//       Sinon → rafraîchit les détails manquants en arrière-plan
+// ══════════════════════════════════════════════════════════════════════════════
+
 (async () => {
-  const userInit = await initUser();
+  const userInit = await initUser(); // shared.js — charge ou crée le profil
   if (userInit.mode === 'pick') {
-    UI.showUserPicker(userInit.users);
+    UI.showUserPicker(userInit.users); // premier lancement : affiche le sélecteur de profil
   } else {
     updateProfileBadge();
   }
+
   loadPrefs();
-  const hadCache = loadSeriesCache();
-  await pingServer();
-  if (_currentUserId) await loadUserdata();
-  if (!hadCache) await loadSeriesFromServer();
-  else startSeriesDetailsLoading(); // rafraîchit les détails manquants
+  const hadCache = loadSeriesCache(); // affichage immédiat si données en cache
+  await pingServer();                 // vérifie la disponibilité du serveur
+  if (_currentUserId) await loadUserdata(); // charge les notes utilisateur
+
+  if (!hadCache) {
+    await loadSeriesFromServer();           // premier chargement : récupère tout
+  } else {
+    startSeriesDetailsLoading();            // cache présent : complète les détails manquants
+  }
 })();
 </script>
 </body>

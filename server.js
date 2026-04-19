@@ -1,92 +1,149 @@
+// ══════════════════════════════════════════════════════════════════════════════
+//  AlloCiné VOD Scraper — server.js
+//  ─────────────────────────────────────────────────────────────────────────────
+//  Serveur Express déployé sur Railway (port 3009).
+//  Scrape AlloCiné avec Axios + Cheerio, persiste via Upstash Redis.
+//
+//  ┌─ DOMAINE FILMS ─────────────────────────────────────────────────────────┐
+//  │  Pages scraping  : allocine.fr/vod/films/decennie-2020/annee-XXXX/     │
+//  │  Pages détail    : allocine.fr/film/fichefilm_gen_cfilm=XXXXX.html      │
+//  │  Flux            : /api/scrape (SSE) → Redis['films']                  │
+//  │  Consultation    : /api/films + /api/details                            │
+//  └─────────────────────────────────────────────────────────────────────────┘
+//  ┌─ DOMAINE SÉRIES ────────────────────────────────────────────────────────┐
+//  │  Pages scraping  : Top AlloCiné + presse par année (glissant 4 ans)    │
+//  │  Pages détail    : allocine.fr/series/ficheserie_gen_cserie=XXXXX.html  │
+//  │  Flux            : /api/series/scrape (SSE) → Redis['series']          │
+//  │  Consultation    : /api/series + /api/series/details                   │
+//  └─────────────────────────────────────────────────────────────────────────┘
+//
+//  Clés Redis :
+//    films                  → liste complète films (JSON)
+//    details                → cache fiches films   { "id:XXXXX": { pays, annee, providers } }
+//    series                 → liste complète séries (JSON)
+//    series_details         → cache fiches séries  { "sid:XXXXX": { statut, pays, ... } }
+//    users                  → profils              { userId: { id, name, createdAt } }
+//    userdata               → notes par profil     { userId: { allocineId: { vu, vouloir, ... } } }
+//    prefs                  → préférences UI        { userId: { showDocumentaires, ... } }
+//    lastScrape             → ISO horodatage dernier scraping films
+//    lastDetailsScrape      → ISO horodatage dernier scraping plateformes films
+//    lastSeriesScrape       → ISO horodatage dernier scraping séries
+//    lastSeriesDetailsScrape→ ISO horodatage dernier scraping fiches séries
+// ══════════════════════════════════════════════════════════════════════════════
+
+'use strict';
+
 const express = require('express');
-const axios = require('axios');
-const path = require('path');
-const fs = require('fs');
+const axios   = require('axios');
+const path    = require('path');
+const fs      = require('fs');
 const cheerio = require('cheerio');
 const { Redis } = require('@upstash/redis');
 
-const app = express();
-const PORT = Number(process.env.PORT || 3009);
-const TOTAL_PAGES = Number(process.env.TOTAL_PAGES || 25);
-const DETAILS_TTL_MS    = 1000 * 60 * 60 * 24; // 24h
-const AUTO_SCRAPE_DAYS  = 3;                   // re-scraper si cache > 3 jours
-let   isScraping        = false;
-let   scrapeProgress    = { current: 0, total: 0, annee: '' };
-const BUILD = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 1 — CONFIGURATION & CONSTANTES
+// ══════════════════════════════════════════════════════════════════════════════
+
+const app       = express();
+const PORT      = Number(process.env.PORT || 3009);
+const TOTAL_PAGES      = Number(process.env.TOTAL_PAGES || 25); // pages de films VOD par année
+const DETAILS_TTL_MS   = 1000 * 60 * 60 * 24;       // 24h  — durée de validité des fiches films
+const AUTO_SCRAPE_DAYS = 3;                          // re-scraper films si cache > 3 jours
+const DATA_DIR         = process.env.DATA_DIR || __dirname; // répertoire pour le fallback JSON local
+
+// Version du build (incrémentée par le hook pre-commit)
+const BUILD   = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
 const VERSION = `v9.2.${BUILD}`;
 const SERVER_START = new Date().toISOString();
-const DATA_DIR = process.env.DATA_DIR || __dirname;
+
+// ── État global Films ──────────────────────────────────────────────────────
+let cachedFilms      = [];   // dernière liste de films scrapés (en mémoire + Redis)
+let lastScrape       = null; // ISO — dernier scraping liste films
+let lastDetailsScrape= null; // ISO — dernier scraping plateformes films
+let isScraping       = false;
+let scrapeProgress   = { current: 0, total: 0, annee: '' };
 let lastScrapeErrors = [];
 
-// ── Séries ────────────────────────────────────────────────────────────────────
-const _currentYear = new Date().getFullYear();
-const _historyYears = Array.from({ length: 4 }, (_, i) => _currentYear - i); // [2026, 2025, 2024, 2023]
+// ── Sources Séries (fenêtre glissante 4 ans) ───────────────────────────────
+// Génère dynamiquement : Top AlloCiné + presse de l'année courante et les 3 ans précédents.
+const _currentYear   = new Date().getFullYear();
+const _historyYears  = Array.from({ length: 4 }, (_, i) => _currentYear - i); // ex: [2026,2025,2024,2023]
 const SERIES_SOURCES = [
   { label: 'Top AlloCiné', baseUrl: 'https://www.allocine.fr/series/top/', pages: 10 },
   ..._historyYears.map(y => ({
-    label: `Presse ${y}`,
+    label:   `Presse ${y}`,
     baseUrl: `https://www.allocine.fr/series-tv/presse/decennie-${Math.floor(y / 10) * 10}/annee-${y}/`,
-    pages: 5,
+    pages:   5,
   })),
 ];
-const SERIES_PAGES           = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
-const SERIES_DETAILS_TTL_MS  = 1000 * 60 * 60 * 24 * 7; // 7 jours
-let cachedSeries             = [];
-let lastSeriesScrape         = null;
-let lastSeriesDetailsScrape  = null;
-let isScrapingSeries         = false;
-let seriesProgress           = { current: 0, total: 0 };
-let lastSeriesScrapeErrors   = [];
-const seriesDetailsCache     = new Map();
+const SERIES_PAGES          = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
+const SERIES_DETAILS_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 jours — durée de validité des fiches séries
+
+// ── État global Séries ─────────────────────────────────────────────────────
+let cachedSeries            = [];   // dernière liste de séries scrapées
+let lastSeriesScrape        = null; // ISO — dernier scraping liste séries
+let lastSeriesDetailsScrape = null; // ISO — dernier scraping fiches séries
+let isScrapingSeries        = false;
+let seriesProgress          = { current: 0, total: 0 };
+let lastSeriesScrapeErrors  = [];
+const seriesDetailsCache    = new Map(); // clé: "sid:XXXXX" → { value, cachedAt }
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
-// ─────────────────────────────────────────────────────────────────
-//  Base de données utilisateur (vu / vouloir / nonInteresse)
-//  Stockée dans Upstash Redis si dispo, sinon fichier local
-// ─────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 2 — BASE DE DONNÉES UTILISATEURS (Redis + fallback fichier local)
+//
+//  Trois tables en mémoire (synchronisées avec Redis) :
+//    users    : profils        { userId → { id, name, createdAt } }
+//    userdata : notes par film { userId → { allocineId → { vu, vouloir, nonInteresse, asuivre } } }
+//    prefsDB  : préférences UI { userId → { showDocumentaires, showAnimations, hideVus, hideNonInteresse } }
+// ══════════════════════════════════════════════════════════════════════════════
+
 const redis = process.env.UPSTASH_REDIS_REST_URL
-  ? new Redis({
-      url:   process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
-    })
-  : null;
+  ? new Redis({ url: process.env.UPSTASH_REDIS_REST_URL, token: process.env.UPSTASH_REDIS_REST_TOKEN })
+  : null; // null si pas de Redis configuré → mode fichier local uniquement
 
-// Cache mémoire local (évite trop d'appels Redis)
 let users    = {};  // { userId: { id, name, createdAt } }
-let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse } } }
+let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse, asuivre } } }
 let prefsDB  = {};  // { userId: { showDocumentaires, showAnimations, hideVus, hideNonInteresse } }
-let lastScrape = null;        // timestamp ISO du dernier scraping liste films
-let lastDetailsScrape = null; // timestamp ISO du dernier scraping plateformes
-let cachedFilms = [];  // derniers films scrapés, persistés dans Redis
 
-// Détecte si userdata est dans l'ancien format plat { allocineId: { vu,... } }
-// (avant multi-utilisateurs) — les valeurs ont directement un champ booléen `vu`
+/**
+ * Détecte l'ancien format plat mono-utilisateur :
+ * { allocineId: { vu: true, vouloir: false, ... } }  ← avant multi-profils
+ */
 function isOldUserdataFormat(data) {
   if (!data || typeof data !== 'object') return false;
   return Object.values(data).some(v => v && typeof v === 'object' && typeof v.vu === 'boolean');
 }
 
-// Migre l'ancien format vers le nouveau sous un profil "Mon profil"
+/**
+ * Migre l'ancien format plat vers le nouveau format multi-profils
+ * en créant un profil par défaut "Mon profil" (renommé "JC" par seedDefaultProfiles).
+ */
 function migrateUserdata(old) {
   const defaultId = 'user_default';
   users[defaultId] = users[defaultId] || { id: defaultId, name: 'Mon profil', createdAt: new Date().toISOString() };
   userdata = { [defaultId]: old };
-  console.log(`🔄 Migration userdata → format multi-utilisateurs (${Object.keys(old).length} entrées sous "${users[defaultId].name}")`);
+  console.log(`🔄 Migration userdata → format multi-utilisateurs (${Object.keys(old).length} entrées)`);
 }
 
+/**
+ * Charge toutes les données persistées au démarrage du serveur.
+ * Ordre de priorité : Redis → fichier local userdata.json (backup).
+ * Si des données sont trouvées en fichier local mais pas en Redis, elles y sont resynchronisées.
+ */
 async function loadUserdata() {
-  // 1. Essayer Redis en priorité
   if (redis) {
     try {
-      // Charger la liste des profils
+      // Profils utilisateurs
       const usersRaw = await redis.get('users');
       if (usersRaw) {
         users = typeof usersRaw === 'string' ? JSON.parse(usersRaw) : usersRaw;
         console.log(`👤 Profils Redis chargés (${Object.keys(users).length} profils)`);
       }
-      // Charger les données utilisateur
+      // Notes utilisateurs (avec migration si ancien format)
       const data = await redis.get('userdata');
       if (data) {
         const parsed = typeof data === 'string' ? JSON.parse(data) : data;
@@ -99,36 +156,40 @@ async function loadUserdata() {
           console.log(`📂 Userdata Redis chargé (${Object.keys(userdata).length} profils)`);
         }
       }
+      // Préférences UI
       const prefsRaw = await redis.get('prefs');
       if (prefsRaw) {
         prefsDB = typeof prefsRaw === 'string' ? JSON.parse(prefsRaw) : prefsRaw;
         console.log(`🔖 Prefs Redis chargées (${Object.keys(prefsDB).length} profils)`);
       }
-      const ts = await redis.get('lastScrape');
-      if (ts) lastScrape = ts;
-      const tsD = await redis.get('lastDetailsScrape');
-      if (tsD) lastDetailsScrape = tsD;
+      // Horodatages scraping films
+      const ts  = await redis.get('lastScrape');       if (ts)  lastScrape        = ts;
+      const tsD = await redis.get('lastDetailsScrape');if (tsD) lastDetailsScrape = tsD;
+      // Liste de films
       const films = await redis.get('films');
       if (films) {
         cachedFilms = typeof films === 'string' ? JSON.parse(films) : films;
         console.log(`🎬 Films Redis chargés (${cachedFilms.length} films)`);
       }
+      // Cache détails films
       const details = await redis.get('details');
       if (details) {
         const obj = typeof details === 'string' ? JSON.parse(details) : details;
         Object.entries(obj).forEach(([k, v]) => detailsCache.set(k, v));
         console.log(`📋 détailsCache Redis chargé (${detailsCache.size} entrées)`);
       }
-      // Séries
+      // Liste de séries
       const seriesRaw = await redis.get('series');
       if (seriesRaw) {
         cachedSeries = typeof seriesRaw === 'string' ? JSON.parse(seriesRaw) : seriesRaw;
         console.log(`📺 Séries Redis chargées (${cachedSeries.length} séries)`);
       }
+      // Horodatages scraping séries
       const seriesTsRaw = await redis.get('lastSeriesScrape');
       if (seriesTsRaw) lastSeriesScrape = seriesTsRaw;
       const seriesDetailsTsRaw = await redis.get('lastSeriesDetailsScrape');
       if (seriesDetailsTsRaw) lastSeriesDetailsScrape = seriesDetailsTsRaw;
+      // Cache détails séries
       const seriesDetailsRaw = await redis.get('series_details');
       if (seriesDetailsRaw) {
         const sdObj = typeof seriesDetailsRaw === 'string' ? JSON.parse(seriesDetailsRaw) : seriesDetailsRaw;
@@ -137,19 +198,16 @@ async function loadUserdata() {
       }
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
-  // 2. Fallback fichier local si Redis vide ou absent
+
+  // Fallback fichier local si Redis vide ou absent
   if (Object.keys(userdata).length === 0) {
     const file = path.join(DATA_DIR, 'userdata.json');
     try {
       if (fs.existsSync(file)) {
         const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
-        if (isOldUserdataFormat(parsed)) {
-          migrateUserdata(parsed);
-        } else {
-          userdata = parsed;
-        }
+        if (isOldUserdataFormat(parsed)) migrateUserdata(parsed);
+        else userdata = parsed;
         console.log(`📂 Fallback userdata.json chargé`);
-        // Resynchronise vers Redis si possible
         if (redis) {
           redis.set('users',    JSON.stringify(users)).catch(() => {});
           redis.set('userdata', JSON.stringify(userdata)).catch(() => {});
@@ -160,6 +218,7 @@ async function loadUserdata() {
   }
 }
 
+// Sauvegarde des horodatages de scraping
 async function saveLastScrape() {
   lastScrape = new Date().toISOString();
   if (redis) {
@@ -168,6 +227,7 @@ async function saveLastScrape() {
   }
 }
 
+// Sauvegarde des profils dans Redis
 async function saveUsers() {
   if (redis) {
     try { await redis.set('users', JSON.stringify(users)); }
@@ -175,6 +235,7 @@ async function saveUsers() {
   }
 }
 
+// Sauvegarde des préférences UI dans Redis
 async function savePrefsData() {
   if (redis) {
     try { await redis.set('prefs', JSON.stringify(prefsDB)); }
@@ -182,41 +243,59 @@ async function savePrefsData() {
   }
 }
 
+/**
+ * Sauvegarde les notes utilisateurs :
+ *   1. Toujours dans le fichier local userdata.json (backup de secours)
+ *   2. Dans Redis si disponible
+ */
 async function saveUserdataFile() {
-  // Toujours sauvegarder dans le fichier local (backup)
   try {
     fs.writeFileSync(path.join(DATA_DIR, 'userdata.json'), JSON.stringify(userdata, null, 2), 'utf8');
   } catch(e) { console.warn('Erreur sauvegarde fichier local:', e.message); }
-  // Et dans Redis si disponible
   if (redis) {
     try { await redis.set('userdata', JSON.stringify(userdata)); }
     catch(e) { console.warn('Erreur sauvegarde Redis:', e.message); }
   }
 }
 
-const detailsCache = new Map();
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 3 — HTTP & CACHE
+//
+//  • BROWSER_HEADERS : headers qui imitent un vrai navigateur (évite le blocage)
+//  • rateLimitedFetch : file d'attente sérialisée (max 1 req / ALLO_DELAY ms)
+//                       + pause longue tous les ALLO_BURST_EVERY requêtes
+//  • pageCache : cache en mémoire des pages de liste (TTL 20 min, évite de
+//                re-télécharger si l'utilisateur relance un scraping)
+//  • detailsCache : cache en mémoire des fiches films (TTL 24h, sauvegardé
+//                   dans Redis avec un debounce de 8s)
+// ══════════════════════════════════════════════════════════════════════════════
+
+const detailsCache = new Map(); // clé: "id:XXXXX" ou "q:titre" → { value, cachedAt }
+
+/** Headers imitant Chrome 124 sur Mac — réduit le risque de soft-block AlloCiné */
 const BROWSER_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Connection': 'keep-alive',
+  'User-Agent':       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+  'Accept':           'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'Accept-Language':  'fr-FR,fr;q=0.9,en-US;q=0.8,en;q=0.7',
+  'Accept-Encoding':  'gzip, deflate, br',
+  'Connection':       'keep-alive',
   'Upgrade-Insecure-Requests': '1',
-  'Sec-Fetch-Dest': 'document',
-  'Sec-Fetch-Mode': 'navigate',
-  'Sec-Fetch-Site': 'none',
+  'Sec-Fetch-Dest':   'document',
+  'Sec-Fetch-Mode':   'navigate',
+  'Sec-Fetch-Site':   'none',
 };
 
+/** Instance Axios commune avec timeout 15s et acceptance des 4xx (pour les gérer manuellement) */
 const http = axios.create({
   headers: BROWSER_HEADERS,
   timeout: 15000,
   validateStatus: (status) => status >= 200 && status < 500,
 });
 
-// Cache des pages de liste (évite de re-scraper si l'utilisateur relance)
-const pageCache = new Map();
-const PAGE_TTL_MS = 1000 * 60 * 20; // 20 min
+// ── Cache des pages de liste (20 min) ────────────────────────────────────────
+const pageCache   = new Map();
+const PAGE_TTL_MS = 1000 * 60 * 20;
 
 function getCachedPage(key) {
   const c = pageCache.get(key);
@@ -230,7 +309,13 @@ function setCachedPage(key, html) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-// Fetch avec retry automatique sur 429
+/**
+ * Effectue une requête GET avec retry automatique.
+ * Sur 429 (rate limit AlloCiné), attend 60s avant de réessayer.
+ * Sur erreur réseau, backoff exponentiel (3s, 6s, 9s…).
+ * @param {string} url
+ * @param {number} retries  nombre de tentatives supplémentaires après la première (défaut 4)
+ */
 async function fetchWithRetry(url, retries = 4) {
   for (let attempt = 0; attempt <= retries; attempt++) {
     try {
@@ -238,7 +323,7 @@ async function fetchWithRetry(url, retries = 4) {
         headers: { ...BROWSER_HEADERS, Referer: 'https://www.allocine.fr/' },
       });
       if (resp.status === 429) {
-        const wait = 60000; // 60s fixes — AlloCiné lève le ban après ~1 min
+        const wait = 60000; // AlloCiné lève le ban après ~1 min
         console.warn(`429 — attente ${wait / 1000}s (tentative ${attempt + 1}/${retries + 1})…`);
         if (attempt === retries) throw Object.assign(new Error('HTTP 429 après toutes les tentatives'), { response: resp });
         await sleep(wait);
@@ -256,41 +341,42 @@ async function fetchWithRetry(url, retries = 4) {
   throw new Error('fetchWithRetry: toutes les tentatives épuisées');
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  File d'attente pour les requêtes vers AlloCiné
-//  → garantit max 1 requête toutes les ALLO_DELAY ms, même si
-//    plusieurs /api/details arrivent en même temps.
-// ─────────────────────────────────────────────────────────────────
-const ALLO_DELAY      = 900;  // ms entre chaque requête vers AlloCiné
-const ALLO_BURST_EVERY = 50;  // toutes les N requêtes, pause longue
-const ALLO_BURST_PAUSE = 12000; // 12s de cooldown pour éviter le ban
-let _alloQueue   = Promise.resolve();
+// ── File d'attente sérialisée pour AlloCiné ───────────────────────────────────
+// Toutes les requêtes vers AlloCiné passent par rateLimitedFetch, qui :
+//   • les sérialise (1 seule requête active à la fois)
+//   • impose un délai minimal de ALLO_DELAY ms entre chaque requête
+//   • fait une pause longue (ALLO_BURST_PAUSE) toutes les ALLO_BURST_EVERY requêtes
+const ALLO_DELAY       = 900;   // ms entre chaque requête
+const ALLO_BURST_EVERY = 50;    // pause longue toutes les N requêtes
+const ALLO_BURST_PAUSE = 12000; // 12s de cooldown anti-ban
+
+let _alloQueue    = Promise.resolve();
 let _alloReqCount = 0;
 
+/**
+ * Enchaîne la requête dans la file d'attente sérialisée.
+ * La queue avance même si un ticket échoue (catch sur _alloQueue).
+ */
 function rateLimitedFetch(url) {
   const ticket = _alloQueue.then(async () => {
     _alloReqCount++;
-    // Pause longue tous les ALLO_BURST_EVERY requêtes
     if (_alloReqCount % ALLO_BURST_EVERY === 0) {
       console.log(`⏸  Cooldown anti-429 (${_alloReqCount} requêtes) — pause ${ALLO_BURST_PAUSE / 1000}s…`);
       await sleep(ALLO_BURST_PAUSE);
     }
     const resp = await fetchWithRetry(url);
-    await sleep(ALLO_DELAY); // pause normale APRÈS la réponse
+    await sleep(ALLO_DELAY);
     return resp;
   });
-  // La queue avance même si ce ticket échoue
   _alloQueue = ticket.catch(() => sleep(ALLO_DELAY));
   return ticket;
 }
 
+// ── Cache des fiches films (24h, sauvegardé dans Redis en différé) ────────────
 function getCachedDetails(key) {
   const cached = detailsCache.get(key);
   if (!cached) return null;
-  if (Date.now() - cached.cachedAt > DETAILS_TTL_MS) {
-    detailsCache.delete(key);
-    return null;
-  }
+  if (Date.now() - cached.cachedAt > DETAILS_TTL_MS) { detailsCache.delete(key); return null; }
   return cached.value;
 }
 
@@ -302,7 +388,7 @@ function setCachedDetails(key, value) {
   scheduleDetailsBackup();
 }
 
-// Sauvegarde différée du cache détails dans Redis (debounce 8s)
+/** Debounce 8s — évite de saturer Redis en cas d'appels en rafale à /api/details */
 let _detailsBackupTimer = null;
 function scheduleDetailsBackup() {
   clearTimeout(_detailsBackupTimer);
@@ -320,6 +406,27 @@ async function saveDetailsCache() {
   } catch(e) { console.warn('Erreur sauvegarde détailsCache:', e.message); }
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 4 — UTILITAIRES DE PARSING TEXTE
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Convertit un bloc HTML en tableau de lignes de texte nettoyées.
+ * Utilisé pour parser à la fois les pages de liste et les fiches détail.
+ *
+ * Étapes :
+ *   1. Supprime <script> et <style>
+ *   2. Convertit <br> en saut de ligne
+ *   3. Ajoute des sauts de ligne autour des balises bloc (div, p, li…)
+ *   4. Supprime toutes les balises HTML restantes
+ *   5. Décode les entités HTML (&amp; &nbsp; &#xxx;…)
+ *   6. Découpe en lignes, trim, filtre les lignes vides
+ *   7. Cas spécial : fusionne les lignes "X VOD" (ex: "Titre\n VOD" → "Titre VOD")
+ *
+ * @param  {string} html
+ * @returns {string[]} lignes de texte non vides
+ */
 function htmlToLines(html) {
   const text = html
     .replace(/<script[\s\S]*?<\/script>/gi, '')
@@ -327,10 +434,10 @@ function htmlToLines(html) {
     .replace(/<br\s*\/?>/gi, '\n')
     .replace(/<\/?(div|p|li|ul|ol|span|a|h[1-6]|header|footer|nav|section|article|td|th|tr|button|label)[^>]*>/gi, '\n')
     .replace(/<[^>]+>/g, '')
-    .replace(/&amp;/g, '&')
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g,    '&')
+    .replace(/&lt;/g,     '<')
+    .replace(/&gt;/g,     '>')
+    .replace(/&nbsp;/g,   ' ')
     .replace(/&#(\d+);/g, (_, c) => String.fromCharCode(parseInt(c, 10)))
     .replace(/&[a-z]+;/gi, '');
 
@@ -339,7 +446,8 @@ function htmlToLines(html) {
     .map((line) => line.trim())
     .filter(Boolean);
 
-  for (let i = lines.length - 1; i > 0; i -= 1) {
+  // Fusionne "VOD" orphelin avec la ligne précédente (artefact des pages de liste films)
+  for (let i = lines.length - 1; i > 0; i--) {
     if (lines[i] === 'VOD') {
       lines[i - 1] = `${lines[i - 1]} VOD`;
       lines.splice(i, 1);
@@ -349,6 +457,13 @@ function htmlToLines(html) {
   return lines;
 }
 
+/**
+ * Normalise un titre pour comparaison insensible à la casse, aux accents
+ * et à la ponctuation. Utilisé pour faire correspondre titres AlloCiné
+ * avec les titres extraits des pages de liste.
+ * @param  {string} value
+ * @returns {string} titre normalisé (ex: "L'Été meurtrier" → "l ete meurtrier")
+ */
 function normalizeTitle(value) {
   return String(value || '')
     .normalize('NFD')
@@ -361,22 +476,28 @@ function normalizeTitle(value) {
     .replace(/\s+/g, ' ');
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  Extrait titre → ID depuis la PAGE DE LISTE AlloCiné VOD
-//  Les liens sont de la forme : /film/fichefilm-311364/telecharger-vod/
-//  (différent de la page film : fichefilm_gen_cfilm=311364.html)
-// ─────────────────────────────────────────────────────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 5 — SCRAPING FILMS : EXTRACTION & PARSING
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Extrait un mapping titre → allocineId depuis une PAGE DE LISTE VOD.
+ * Les liens ont la forme : /film/fichefilm-XXXXX/telecharger-vod/
+ * Le texte du lien est "Titre du film VOD" → on retire " VOD".
+ * Utilisé pour associer les films parsés (lignes de texte) à leur ID AlloCiné.
+ * @param  {string} html
+ * @returns {Map<string, string>} normalizeTitle(titre) → allocineId
+ */
 function extractIdsFromListingPage(html) {
   const $ = cheerio.load(html);
   const titleToId = new Map();
 
-  // Liens VOD sur la page de liste : /film/fichefilm-XXXXX/telecharger-vod/
   $('a[href*="fichefilm-"][href*="telecharger-vod"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
+    const href    = $(el).attr('href') || '';
     const idMatch = href.match(/fichefilm-(\d+)/);
     if (!idMatch) return;
 
-    // Le texte du lien est "Titre du film VOD" → on retire " VOD"
     const rawText = $(el).text().trim().replace(/\s+VOD$/i, '').trim();
     if (!rawText) return;
 
@@ -388,53 +509,59 @@ function extractIdsFromListingPage(html) {
   return titleToId;
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  Extrait allocineId → poster URL depuis la PAGE DE LISTE AlloCiné VOD
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Extrait un mapping allocineId → URL du poster depuis une PAGE DE LISTE VOD.
+ * Cherche l'image dans l'article/li parent du lien VOD.
+ * @param  {string} html
+ * @returns {Map<string, string>} allocineId → URL poster
+ */
 function extractPostersFromListingPage(html) {
   const $ = cheerio.load(html);
   const idToPoster = new Map();
+
   $('a[href*="fichefilm-"][href*="telecharger-vod"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
+    const href    = $(el).attr('href') || '';
     const idMatch = href.match(/fichefilm-(\d+)/);
     if (!idMatch) return;
-    const id = idMatch[1];
+    const id   = idMatch[1];
     const $card = $(el).closest('article, li, [class*="card"], [class*="item"]');
-    const $img = ($card.length ? $card : $(el).parent()).find('img').first();
+    const $img  = ($card.length ? $card : $(el).parent()).find('img').first();
     const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
     if (rawSrc && !/blank|placeholder|gif$/i.test(rawSrc)) {
       const poster = rawSrc.startsWith('/') ? 'https://www.allocine.fr' + rawSrc : rawSrc;
       idToPoster.set(id, poster);
     }
   });
+
   return idToPoster;
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  Extrait titre → ID depuis la PAGE DE RECHERCHE AlloCiné
-//  Les liens sont de la forme : /film/fichefilm_gen_cfilm=311364.html
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Extrait un mapping titre → allocineId depuis la PAGE DE RECHERCHE AlloCiné.
+ * Les liens ont la forme : /film/fichefilm_gen_cfilm=XXXXX.html
+ * Utilisé en fallback quand un film n'a pas d'ID depuis la page de liste.
+ * @param  {string} html
+ * @returns {Map<string, string>} normalizeTitle(titre) → allocineId
+ */
 function extractIdsFromSearchPage(html) {
   const $ = cheerio.load(html);
   const titleToId = new Map();
 
   $('a[href*="fichefilm_gen_cfilm="]').each((_, el) => {
-    const href = $(el).attr('href') || '';
+    const href    = $(el).attr('href') || '';
     const idMatch = href.match(/fichefilm_gen_cfilm=(\d+)/);
     if (!idMatch) return;
 
+    // Essaie plusieurs sources de texte pour trouver le titre
     const texts = [
       $(el).text(),
       $(el).attr('title'),
       $(el).find('img').attr('alt'),
       $(el).closest('article, li, div').find('h2, h3, .meta-title, .meta-title-link').first().text(),
     ];
-
-    const title = texts
-      .map((v) => String(v || '').trim())
-      .find((v) => v && !/^image:/i.test(v));
-
+    const title = texts.map((v) => String(v || '').trim()).find((v) => v && !/^image:/i.test(v));
     if (!title) return;
+
     const key = normalizeTitle(title);
     if (!key || titleToId.has(key)) return;
     titleToId.set(key, idMatch[1]);
@@ -443,7 +570,7 @@ function extractIdsFromSearchPage(html) {
   return titleToId;
 }
 
-// Plateformes à ne pas afficher
+/** Plateformes à exclure de l'affichage (boutiques achats unitaires, services niches) */
 const PROVIDERS_BLACKLIST = new Set([
   'universciné', 'universcine', 'rakuten tv', 'filmo', 'viva',
   'google play', 'microsoft', 'xbox', 'crunchyroll', 'molotov',
@@ -455,9 +582,14 @@ const PROVIDERS_BLACKLIST = new Set([
   'blu-ray', 'dvd',
 ]);
 
-// ─────────────────────────────────────────────────────────────────
-//  Extrait les plateformes VOD/streaming depuis la page fiche film
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Extrait les plateformes VOD/streaming depuis la page fiche d'un film ou d'une série.
+ * Classe chaque plateforme en : svod | location | achat | vod (générique).
+ * La classification prioritaire utilise le texte parent de la tuile ;
+ * la classification secondaire (fallback) est par nom de plateforme.
+ * @param  {string} html
+ * @returns {{ name: string, type: 'svod'|'location'|'achat'|'vod' }[]}
+ */
 function extractProviders(html) {
   const $ = cheerio.load(html);
   const providers = [];
@@ -466,18 +598,16 @@ function extractProviders(html) {
   $('.provider-tile-primary').each((_, el) => {
     const name = $(el).text().trim();
     if (!name || seen.has(name)) return;
-    // Ignorer les plateformes de la liste noire
     if (PROVIDERS_BLACKLIST.has(name.toLowerCase())) return;
     seen.add(name);
 
     const tileText = $(el).parent().text().toLowerCase();
-
     let type = 'vod';
-    if (/inclus|abonnement|svod/i.test(tileText))      type = 'svod';
-    else if (/location/i.test(tileText))                type = 'location';
-    else if (/achat/i.test(tileText))                   type = 'achat';
+    if (/inclus|abonnement|svod/i.test(tileText))     type = 'svod';
+    else if (/location/i.test(tileText))               type = 'location';
+    else if (/achat/i.test(tileText))                  type = 'achat';
 
-    // Détection complémentaire par nom de plateforme
+    // Fallback par nom : plateformes clairement SVOD
     if (type === 'vod' && /netflix|prime video|disney\+|canal\+|ocs|paramount\+|crunchyroll|apple tv\+|molotov|arte|france\.tv/i.test(name))
       type = 'svod';
 
@@ -487,39 +617,50 @@ function extractProviders(html) {
   return providers;
 }
 
+/**
+ * Parse une page de liste de films VOD AlloCiné.
+ * Stratégie :
+ *   1. Extrait le mapping titre→ID et ID→poster via les liens /fichefilm-
+ *   2. Parcourt les lignes de texte en cherchant le motif "Presse" + note
+ *   3. Remonte vers le titre (ligne se terminant par " VOD")
+ *   4. Extrait genre, réalisateur, acteurs, titre original dans le segment entre titre et note
+ *   5. Cherche un synopsis après la note
+ *   6. Associe l'ID AlloCiné et le poster par correspondance de titre normalisé
+ *
+ * @param  {string} html
+ * @returns {Array<{ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster }>}
+ */
 function parseFilms(html) {
-  // ── NOUVELLE méthode : IDs extraits directement des liens /fichefilm-XXXXX/
   const titleToId  = extractIdsFromListingPage(html);
   const idToPoster = extractPostersFromListingPage(html);
+  const lines      = htmlToLines(html);
+  const films      = [];
 
-  const lines = htmlToLines(html);
-  const films = [];
-
-  for (let i = 0; i < lines.length; i += 1) {
-    if (!(lines[i] === 'Presse' && lines[i + 1] && /^\d[,.]\d$/.test(lines[i + 1]))) {
-      continue;
-    }
+  for (let i = 0; i < lines.length; i++) {
+    // Ancre : "Presse" suivi d'une note de la forme "X,X"
+    if (!(lines[i] === 'Presse' && lines[i + 1] && /^\d[,.]\d$/.test(lines[i + 1]))) continue;
 
     const notePresse = parseFloat(lines[i + 1].replace(',', '.'));
-    const noteSpect = lines[i + 2] === 'Spectateurs' && lines[i + 3] && /^\d[,.]\d$/.test(lines[i + 3])
-      ? parseFloat(lines[i + 3].replace(',', '.'))
-      : null;
+    const noteSpect  = lines[i + 2] === 'Spectateurs' && lines[i + 3] && /^\d[,.]\d$/.test(lines[i + 3])
+      ? parseFloat(lines[i + 3].replace(',', '.')) : null;
 
     let titre = '', genre = '', realisateur = '', acteurs = '', titreOriginal = '';
     let titleIdx = -1;
 
-    for (let j = i - 1; j >= Math.max(0, i - 20); j -= 1) {
+    // Remonte pour trouver le titre (ligne se terminant par " VOD")
+    for (let j = i - 1; j >= Math.max(0, i - 20); j--) {
       if (lines[j].endsWith(' VOD')) { titleIdx = j; break; }
     }
 
     if (titleIdx >= 0) {
-      titre = lines[titleIdx].slice(0, -4).trim();
-      const seg = lines.slice(titleIdx + 1, i);
-      const deIdx   = seg.indexOf('De');
-      const avecIdx = seg.indexOf('Avec');
-      const origIdx = seg.indexOf('Titre original');
-      const pipeIdx = seg.findIndex((line) => line === '|');
+      titre = lines[titleIdx].slice(0, -4).trim(); // retire " VOD"
+      const seg    = lines.slice(titleIdx + 1, i);
+      const deIdx  = seg.indexOf('De');
+      const avecIdx= seg.indexOf('Avec');
+      const origIdx= seg.indexOf('Titre original');
+      const pipeIdx= seg.findIndex((line) => line === '|');
 
+      // Genre : entre le premier "|" et "De"
       if (pipeIdx >= 0 && deIdx > pipeIdx) {
         genre = seg
           .slice(pipeIdx + 1, deIdx)
@@ -542,13 +683,13 @@ function parseFilms(html) {
       if (origIdx >= 0 && seg[origIdx + 1]) titreOriginal = seg[origIdx + 1];
     }
 
+    // Synopsis : première ligne longue (> 80 chars) après la note
     let synopsis = '';
     const synStart = lines[i + 2] === 'Spectateurs' ? i + 4 : i + 2;
-    for (let k = synStart; k < Math.min(lines.length, synStart + 12); k += 1) {
+    for (let k = synStart; k < Math.min(lines.length, synStart + 12); k++) {
       if (lines[k].endsWith(' VOD')) break;
       if (lines[k].length > 80 && !/^\d/.test(lines[k]) && !lines[k].startsWith('Dès ')) {
-        synopsis = lines[k];
-        break;
+        synopsis = lines[k]; break;
       }
     }
 
@@ -557,33 +698,51 @@ function parseFilms(html) {
       const originalKey = normalizeTitle(titreOriginal);
       const allocineId  = titleToId.get(titleKey) || titleToId.get(originalKey) || null;
       const poster      = allocineId ? (idToPoster.get(allocineId) || null) : null;
-
-      films.push({
-        titre, titreOriginal, genre, realisateur, acteurs,
-        notePresse, noteSpect, synopsis, allocineId, poster,
-      });
+      films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster });
     }
   }
 
   return films;
 }
 
+/**
+ * Déduplique et trie les films par note presse décroissante.
+ * La déduplication utilise la clé "titre|notePresse".
+ * @param  {Array}  films
+ * @param  {number} noteMin  note presse minimale (les films en dessous sont filtrés)
+ */
 function dedupeAndSortFilms(films, noteMin) {
   const seen = new Set();
   return films
     .filter((film) => {
       const key = `${film.titre.toLowerCase()}|${film.notePresse}`;
       if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
+      seen.add(key); return true;
     })
     .filter((film) => film.notePresse >= noteMin)
     .sort((a, b) => b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr'));
 }
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 6 — API FILMS
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/films
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne la liste complète des films en cache (issue du dernier scraping),
+ *        accompagnée des détails en cache (plateformes, pays, année) pour chaque film.
+ *        Permet au client d'afficher les données sans effectuer de requêtes individuelles.
+ *
+ * Réponse : {
+ *   films:     Film[]      — liste de films triés par note presse
+ *   lastScrape: string|null — ISO date du dernier scraping
+ *   count:     number       — nombre de films
+ *   details:   (Detail|null)[] — détails indexés par position (même ordre que films[])
+ * }
+ */
 app.get('/api/films', (_req, res) => {
-  // Inclure les détails en cache (plateformes, pays, année) indexés par position
-  // → le client n'a plus besoin de 500 requêtes individuelles /api/details
   const details = cachedFilms.map(film => {
     const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
     return getCachedDetails(key) || null;
@@ -591,16 +750,32 @@ app.get('/api/films', (_req, res) => {
   res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length, details });
 });
 
-// ─── Profils utilisateurs ─────────────────────────────────────────────────────
+/**
+ * GET /api/users
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne la liste de tous les profils utilisateurs.
+ *
+ * Réponse : { id, name, createdAt }[]
+ */
 app.get('/api/users', (_req, res) => {
   res.json(Object.values(users));
 });
 
+/**
+ * POST /api/users
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Crée un nouveau profil utilisateur.
+ *
+ * Body   : { name: string }
+ * Réponse: { id, name, createdAt }
+ * Erreur : 400 si name manquant ou vide
+ */
 app.post('/api/users', async (req, res) => {
   const { name } = req.body;
   if (!name || typeof name !== 'string' || !name.trim())
     return res.status(400).json({ error: 'name requis' });
-  const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+  const id   = Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const user = { id, name: name.trim(), createdAt: new Date().toISOString() };
   users[id]    = user;
   userdata[id] = userdata[id] || {};
@@ -610,13 +785,31 @@ app.post('/api/users', async (req, res) => {
   res.json(user);
 });
 
-// ─── Préférences d'affichage (par profil, serveur comme source de vérité) ────
+/**
+ * GET /api/prefs?userId=…
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne les préférences d'affichage d'un profil utilisateur.
+ *        Le serveur est la source de vérité (synchronisé avec le localStorage client).
+ *
+ * Params : userId (query)
+ * Réponse: { showDocumentaires, showAnimations, hideVus, hideNonInteresse }
+ * Erreur : 400 si userId manquant
+ */
 app.get('/api/prefs', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId requis' });
   res.json(prefsDB[userId] || {});
 });
 
+/**
+ * POST /api/prefs
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Sauvegarde les préférences d'affichage d'un profil utilisateur.
+ *
+ * Body   : { userId: string, ...prefs }
+ * Réponse: { ok: true }
+ * Erreur : 400 si userId manquant
+ */
 app.post('/api/prefs', async (req, res) => {
   const { userId, ...userPrefs } = req.body;
   if (!userId) return res.status(400).json({ error: 'userId requis' });
@@ -625,20 +818,40 @@ app.post('/api/prefs', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Données utilisateur (Vu / À voir / Non) ─────────────────────────────────
+/**
+ * GET /api/userdata?userId=…
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne toutes les notes d'un profil utilisateur
+ *        (vu, à voir, non intéressé, à suivre) pour tous les films/séries annotés.
+ *
+ * Params : userId (query)
+ * Réponse: { allocineId: { vu, vouloir, nonInteresse, asuivre } }
+ * Erreur : 400 si userId manquant
+ */
 app.get('/api/userdata', (req, res) => {
   const { userId } = req.query;
   if (!userId) return res.status(400).json({ error: 'userId requis' });
   res.json(userdata[userId] || {});
 });
 
+/**
+ * POST /api/userdata
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Met à jour la note d'un utilisateur pour un film ou une série.
+ *        Si toutes les valeurs booléennes sont false, l'entrée est supprimée
+ *        (pas de stockage inutile d'entrées "vides").
+ *
+ * Body   : { userId, id, vu, vouloir, nonInteresse, asuivre }
+ * Réponse: { ok: true }
+ * Erreur : 400 si userId ou id manquant
+ */
 app.post('/api/userdata', async (req, res) => {
   const { userId, id, vu, vouloir, nonInteresse, asuivre } = req.body;
   if (!userId || !id) return res.status(400).json({ error: 'userId et id requis' });
   if (!userdata[userId]) userdata[userId] = {};
   const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse, asuivre: !!asuivre };
   if (!entry.vu && !entry.vouloir && !entry.nonInteresse && !entry.asuivre) {
-    delete userdata[userId][id];
+    delete userdata[userId][id]; // purge les entrées entièrement vides
   } else {
     userdata[userId][id] = entry;
   }
@@ -646,6 +859,16 @@ app.post('/api/userdata', async (req, res) => {
   res.json({ ok: true });
 });
 
+/**
+ * GET /api/health
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne les informations de santé du serveur films.
+ *        Utilisé par le client pour savoir si le serveur répond et activer
+ *        les boutons de scraping dans l'UI.
+ *
+ * Réponse: { ok, port, totalPages, cachedDetails, cachedFilms, lastScrape,
+ *            lastDetailsScrape, version, serverStart, lastScrapeErrors }
+ */
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true, port: PORT, totalPages: TOTAL_PAGES,
@@ -656,20 +879,48 @@ app.get('/api/health', (_req, res) => {
   });
 });
 
+/**
+ * GET /api/scrape-status
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne l'état d'avancement du scraping films en cours.
+ *        Utilisé par le client pour afficher une barre de progression.
+ *
+ * Réponse: { isScraping, pct (0-100), annee }
+ */
 app.get('/api/scrape-status', (_req, res) => {
   const pct = scrapeProgress.total
     ? Math.round(scrapeProgress.current / scrapeProgress.total * 100) : 0;
   res.json({ isScraping, pct, annee: scrapeProgress.annee });
 });
 
+/**
+ * GET /api/scrape?annees=2026,2025&noteMin=3.5
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Lance le scraping des pages VOD AlloCiné pour les années demandées.
+ *        Répond en Server-Sent Events (SSE) pour envoyer les films au fur
+ *        et à mesure de leur extraction, sans attendre la fin.
+ *        À la fin, persiste la liste dédupliquée dans Redis.
+ *
+ * Params (query) :
+ *   annees   : ex "2026,2025" (défaut "2025"). Aussi accepte l'ancien param ?annee=
+ *   noteMin  : note presse minimale 0-5 (défaut 3.5)
+ *
+ * Événements SSE :
+ *   { type: 'progress', page, total, annee }
+ *   { type: 'films',    films[], annee, page, total }
+ *   { type: 'error',    page, message }
+ *   { type: 'done',     totalFilms, lastScrape }
+ *
+ * Erreur : 429 si scraping déjà en cours
+ */
 app.get('/api/scrape', async (req, res) => {
   if (isScraping) return res.status(429).json({ error: 'Scraping déjà en cours' });
   isScraping = true;
-  // Accepte annees=2023,2024,2025 ou l'ancien param annee=2025 (rétrocompat)
+
+  // Support des deux formats : annees=2023,2024 ou l'ancien annee=2025
   const anneesParam = String(req.query.annees || req.query.annee || '2025').trim();
   const annees = anneesParam.split(',').map(s => s.trim()).filter(s => /^\d{4}$/.test(s));
-  if (annees.length === 0)
-    return res.status(400).json({ error: 'annees invalide' });
+  if (annees.length === 0) return res.status(400).json({ error: 'annees invalide' });
 
   const noteMin = parseFloat(String(req.query.noteMin || '3.5'));
   if (Number.isNaN(noteMin) || noteMin < 0 || noteMin > 5)
@@ -680,15 +931,15 @@ app.get('/api/scrape', async (req, res) => {
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-  const allFilms = [];
-  const totalPages = annees.length * TOTAL_PAGES;
-  let globalPage = 0;
-  lastScrapeErrors = []; // réinitialise les erreurs
+  const send        = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const allFilms    = [];
+  const totalPages  = annees.length * TOTAL_PAGES;
+  let   globalPage  = 0;
+  lastScrapeErrors  = [];
 
   for (const annee of annees) {
     const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
-    for (let page = 1; page <= TOTAL_PAGES; page += 1) {
+    for (let page = 1; page <= TOTAL_PAGES; page++) {
       globalPage++;
       send({ type: 'progress', page: globalPage, total: totalPages, annee });
       const url = base + page;
@@ -701,13 +952,10 @@ app.get('/api/scrape', async (req, res) => {
           html = response.data;
           setCachedPage(url, html);
         }
-        const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
-        // Filtre noteMin côté serveur avant d'envoyer
+        const raw   = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
         const films = raw.filter(f => f.notePresse >= noteMin);
         allFilms.push(...raw);
-        const withId = films.filter(f => f.allocineId).length;
-        console.log(`[${annee}] Page ${page}/${TOTAL_PAGES} → ${films.length} films (${withId} avec ID)`);
-        // Envoyer les films de cette page immédiatement
+        console.log(`[${annee}] Page ${page}/${TOTAL_PAGES} → ${films.length} films`);
         send({ type: 'films', films, annee, page: globalPage, total: totalPages });
       } catch (error) {
         const message = error.response ? `HTTP ${error.response.status}` : error.code || error.message;
@@ -720,10 +968,8 @@ app.get('/api/scrape', async (req, res) => {
   }
 
   const result = dedupeAndSortFilms(allFilms, noteMin);
-  const withId = result.filter(f => f.allocineId).length;
+  cachedFilms  = result;
   await saveLastScrape();
-  // Persiste les films pour les nouveaux visiteurs
-  cachedFilms = result;
   if (redis) {
     try { await redis.set('films', JSON.stringify(result)); }
     catch(e) { console.warn('Erreur sauvegarde films Redis:', e.message); }
@@ -731,9 +977,29 @@ app.get('/api/scrape', async (req, res) => {
   send({ type: 'done', totalFilms: result.length, lastScrape });
   res.end();
   isScraping = false;
-  console.log(`✅ ${result.length} films (${withId} avec ID, note >= ${noteMin}) — années: ${annees.join(', ')}`);
+  console.log(`✅ ${result.length} films (note >= ${noteMin}) — années: ${annees.join(', ')}`);
 });
 
+/**
+ * GET /api/details?allocineId=XXXXX  ou  ?q=Titre%20du%20film
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Récupère les détails d'un film depuis sa fiche AlloCiné :
+ *        pays de production, année, URL et plateformes disponibles (VOD/SVOD/location).
+ *        Le résultat est mis en cache 24h en mémoire et dans Redis.
+ *
+ *        Stratégie de résolution de l'ID :
+ *          1. allocineId fourni → requête directe sur la fiche
+ *          2. Sinon → recherche AlloCiné (?q=...) pour trouver l'ID
+ *
+ *        Détection soft-block : si la page retournée ne contient pas les
+ *        marqueurs attendus, la réponse n'est pas mise en cache.
+ *
+ * Params (query) :
+ *   allocineId : ID numérique AlloCiné (prioritaire)
+ *   q          : titre du film (fallback si pas d'ID)
+ *
+ * Réponse: { pays, annee, allocineId, allocineUrl, providers[], error? }
+ */
 app.get('/api/details', async (req, res) => {
   const allocineId = String(req.query.allocineId || '').trim();
   const query      = String(req.query.q || '').trim();
@@ -747,18 +1013,17 @@ app.get('/api/details', async (req, res) => {
     console.log(`Cache détails: ${cacheKey} → ${cached.providers?.length || 0} plateformes`);
     return res.json(cached);
   }
-  console.log(`Fetch détails: ${cacheKey}`);
 
   try {
     let resolvedId = allocineId;
 
     if (!resolvedId) {
-      // Fallback : recherche par titre
+      // Recherche par titre → récupère l'ID depuis la page de résultats
       const searchUrl  = `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(query)}`;
       const searchResp = await rateLimitedFetch(searchUrl);
       const titleToId  = extractIdsFromSearchPage(searchResp.data);
       resolvedId = titleToId.get(normalizeTitle(query)) || null;
-
+      // Dernier recours : premier ID trouvé dans le HTML brut
       if (!resolvedId) {
         const idMatch = searchResp.data.match(/fichefilm_gen_cfilm=(\d+)/);
         resolvedId = idMatch ? idMatch[1] : null;
@@ -774,27 +1039,26 @@ app.get('/api/details', async (req, res) => {
     const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${resolvedId}.html`;
     const filmResp = await rateLimitedFetch(filmUrl);
 
-    // Vérifier que la page renvoyée est bien une fiche film AlloCiné (pas un CAPTCHA / soft-block)
+    // Vérifie que la page est bien une fiche film (pas un CAPTCHA ou une page vide)
     const isValidPage = /fichefilm_gen_cfilm|provider-tile|Titre original|Année de production/i.test(filmResp.data);
     if (!isValidPage) {
-      console.warn(`Fiche ${resolvedId} → page suspecte (soft-block ?), résultat non mis en cache`);
+      console.warn(`Fiche ${resolvedId} → page suspecte (soft-block ?), non mise en cache`);
       return res.json({ pays: null, annee: null, allocineId: resolvedId, allocineUrl: filmUrl, providers: [], error: 'soft_block' });
     }
 
-    // Pays & année
+    // Pays et année de production (via scan de lignes)
     const lines = htmlToLines(filmResp.data);
     let pays = null, annee = null;
-    for (let i = 0; i < lines.length - 1; i += 1) {
+    for (let i = 0; i < lines.length - 1; i++) {
       if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
       if (lines[i] === 'Année de production') annee = lines[i + 1];
       if (pays && annee) break;
     }
 
-    // Plateformes streaming / VOD
     const providers = extractProviders(filmResp.data);
-
     const data = { pays, annee, allocineId: resolvedId, allocineUrl: filmUrl, providers };
-    // Ne mettre en cache que si on a au moins trouvé pays ou annee (sinon la page est peut-être vide)
+
+    // Ne pas mettre en cache une page vide (fiche introuvable)
     if (pays || annee || providers.length > 0) {
       setCachedDetails(cacheKey, data);
       if (query && !allocineId) setCachedDetails(`id:${resolvedId}`, data);
@@ -808,18 +1072,22 @@ app.get('/api/details', async (req, res) => {
     const status  = error.response?.status;
     const message = status ? `HTTP ${status}` : error.code || error.message;
     console.error(`Détails "${query || allocineId}" erreur: ${message}`);
-    // On informe le client de la vraie cause de l'erreur
     return res.status(200).json({
       pays: null, annee: null,
-      allocineId: allocineId || null,
-      allocineUrl: null,
-      providers: [],
+      allocineId: allocineId || null, allocineUrl: null, providers: [],
       error: status === 429 ? 'rate_limited' : message,
     });
   }
 });
 
-// Endpoint de test : vérifie que AlloCiné répond correctement
+/**
+ * GET /api/ping-allocine
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vérifie que AlloCiné répond correctement (sans passer par la file
+ *        d'attente, pour un test rapide). Utilisé pour le diagnostic.
+ *
+ * Réponse: { ok: bool, status: number|null, message?: string }
+ */
 app.get('/api/ping-allocine', async (_req, res) => {
   try {
     const r = await fetchWithRetry('https://www.allocine.fr/', 0);
@@ -830,18 +1098,35 @@ app.get('/api/ping-allocine', async (_req, res) => {
   }
 });
 
-// Vider le cache des détails (utile quand des résultats vides ont été mis en cache par erreur)
+/**
+ * POST /api/clear-details-cache
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vide le cache mémoire des fiches films (pays, année, plateformes).
+ *        Utile quand des résultats vides ont été mis en cache à la suite d'un
+ *        soft-block AlloCiné, ou pour forcer un re-fetch des plateformes.
+ *
+ * Réponse: { ok: true, cleared: number }
+ */
 app.post('/api/clear-details-cache', (_req, res) => {
   const count = detailsCache.size;
   detailsCache.clear();
-  console.log(`🗑️  Cache vidé (${count} entrées supprimées)`);
+  console.log(`🗑️  Cache films vidé (${count} entrées supprimées)`);
   res.json({ ok: true, cleared: count });
 });
 
-// ─── Auto-scrape si le cache a plus de AUTO_SCRAPE_DAYS jours ────────────────
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 7 — AUTO-SCRAPE & PROFILS PAR DÉFAUT
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Déclenche automatiquement un scraping complet des films si le cache
+ * a plus de AUTO_SCRAPE_DAYS jours.
+ * Appelé au démarrage du serveur puis toutes les 24h via setInterval.
+ */
 async function autoScrapeIfStale() {
   if (isScraping) return;
-  const ageMs  = lastScrape ? Date.now() - new Date(lastScrape).getTime() : Infinity;
+  const ageMs   = lastScrape ? Date.now() - new Date(lastScrape).getTime() : Infinity;
   const ageDays = ageMs / 86400000;
 
   if (ageDays < AUTO_SCRAPE_DAYS) {
@@ -853,13 +1138,13 @@ async function autoScrapeIfStale() {
   console.log(`\n🔄 Auto-scrape déclenché — dernier scraping il y a ${label}`);
   isScraping = true;
 
-  const annees  = ['2026', '2025', '2024', '2023'];
-  const noteMin = 3.5;
-  const allFilms = [];
-  lastScrapeErrors = [];
+  const annees     = ['2026', '2025', '2024', '2023'];
+  const noteMin    = 3.5;
+  const allFilms   = [];
   const totalPages = annees.length * TOTAL_PAGES;
-  let globalPage = 0;
-  scrapeProgress = { current: 0, total: totalPages, annee: '' };
+  let   globalPage = 0;
+  lastScrapeErrors = [];
+  scrapeProgress   = { current: 0, total: totalPages, annee: '' };
 
   try {
     for (const annee of annees) {
@@ -870,11 +1155,7 @@ async function autoScrapeIfStale() {
         const url = base + page;
         try {
           let html = getCachedPage(url);
-          if (!html) {
-            const r = await fetchWithRetry(url);
-            html = r.data;
-            setCachedPage(url, html);
-          }
+          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
           const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
           allFilms.push(...raw);
           console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
@@ -887,7 +1168,7 @@ async function autoScrapeIfStale() {
     }
 
     const result = dedupeAndSortFilms(allFilms, noteMin);
-    cachedFilms = result;
+    cachedFilms  = result;
     await saveLastScrape();
     if (redis) {
       try { await redis.set('films', JSON.stringify(result)); }
@@ -895,16 +1176,20 @@ async function autoScrapeIfStale() {
     }
     console.log(`✅ Auto-scrape terminé — ${result.length} films\n`);
   } finally {
-    isScraping = false;
+    isScraping     = false;
     scrapeProgress = { current: 0, total: 0, annee: '' };
   }
 }
 
-// Crée les profils par défaut s'ils n'existent pas encore (idempotent)
+/**
+ * Crée les profils famille par défaut s'ils n'existent pas encore.
+ * Idempotent : peut être appelé à chaque démarrage sans risque de duplication.
+ * Renomme aussi le profil migré "Mon profil" en "JC".
+ */
 async function seedDefaultProfiles() {
   let changed = false;
 
-  // Renomme le profil migré "Mon profil" → "JC"
+  // Renomme le profil migré depuis l'ancien format mono-utilisateur
   if (users['user_default'] && users['user_default'].name === 'Mon profil') {
     users['user_default'].name = 'JC';
     console.log('👤 Profil renommé : "Mon profil" → "JC"');
@@ -931,26 +1216,32 @@ async function seedDefaultProfiles() {
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-//  Séries — cache mémoire, parseur, API
-// ─────────────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 8 — SCRAPING SÉRIES : CACHE, EXTRACTION & PARSING
+// ══════════════════════════════════════════════════════════════════════════════
+
+// ── Cache des fiches séries (7 jours, sauvegardé en Redis en différé) ─────────
 function getCachedSeriesDetails(key) {
   const c = seriesDetailsCache.get(key);
   if (!c) return null;
   if (Date.now() - c.cachedAt > SERIES_DETAILS_TTL_MS) { seriesDetailsCache.delete(key); return null; }
   return c.value;
 }
+
 function setCachedSeriesDetails(key, value) {
   seriesDetailsCache.set(key, { value, cachedAt: Date.now() });
   lastSeriesDetailsScrape = new Date().toISOString();
   scheduleSeriesDetailsBackup();
 }
+
+/** Debounce 8s — évite de saturer Redis en cas d'appels en rafale à /api/series/details */
 let _seriesDetailsBackupTimer = null;
 function scheduleSeriesDetailsBackup() {
   clearTimeout(_seriesDetailsBackupTimer);
   _seriesDetailsBackupTimer = setTimeout(saveSeriesDetailsCache, 8000);
 }
+
 async function saveSeriesDetailsCache() {
   if (!redis) return;
   try {
@@ -962,12 +1253,19 @@ async function saveSeriesDetailsCache() {
   } catch(e) { console.warn('Erreur sauvegarde seriesDetailsCache:', e.message); }
 }
 
-// Extrait les IDs de séries depuis la page de liste
+/**
+ * Extrait le mapping titre normalisé → allocineId depuis une page de liste de séries.
+ * Les liens peuvent avoir deux formes :
+ *   /series/ficheserie_gen_cserie=XXXXX.html  (ancienne URL)
+ *   /series/ficheserie-XXXXX/                 (nouvelle URL)
+ * @param  {string} html
+ * @returns {Map<string, string>} normalizeTitle(titre) → allocineId
+ */
 function extractSeriesIdsFromTopPage(html) {
   const $ = cheerio.load(html);
   const titleToId = new Map();
   $('a[href*="ficheserie"]').each((_, el) => {
-    const href = $(el).attr('href') || '';
+    const href    = $(el).attr('href') || '';
     const idMatch = href.match(/ficheserie[_-]gen_cserie=(\d+)/) || href.match(/ficheserie-(\d+)/);
     if (!idMatch) return;
     const texts = [$(el).text().trim(), $(el).attr('title') || '', $(el).find('img').attr('alt') || ''];
@@ -980,16 +1278,41 @@ function extractSeriesIdsFromTopPage(html) {
   return titleToId;
 }
 
-// Parse une page de liste des meilleures séries AlloCiné
+/**
+ * Parse une page de liste des meilleures séries AlloCiné.
+ *
+ * Architecture de la donnée :
+ *   • genre, createur, casting → UNIQUEMENT depuis la carte de liste (htmlToLines + extractCreatCast)
+ *   • enCours, anneeSortie, anneeFin → depuis le texte de la carte ("Depuis XXXX" / "XXXX – XXXX")
+ *   • titreOriginal → stocké mais NON affiché (évite la pollution du filtre genre)
+ *   • statut, pays, nbSaisons, providers → depuis /api/series/details (fiche individuelle)
+ *
+ * Deux approches :
+ *   1. Sélecteurs Cheerio sur les éléments article/card (plus fiable si HTML stable)
+ *   2. Fallback texte : scan ligne par ligne (robuste aux changements de DOM)
+ *
+ * @param  {string} html
+ * @returns {Array<{ titre, titreOriginal, createur, casting, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster }>}
+ */
 function parseSeries(html) {
-  const $ = cheerio.load(html);
+  const $         = cheerio.load(html);
   const titleToId = extractSeriesIdsFromTopPage(html);
-  const series = [];
-  const seen = new Set();
+  const series    = [];
+  const seen      = new Set();
+
+  /** Regex de détection des noms de genres connus AlloCiné */
   const GENRE_RE = /Drame|Comédie|Action|Thriller|Aventure|Animation|Fantastique|Science|Horreur|Policier|Crime|Biopic|Romance|Historique|Documentaire|Western|Mystère/i;
+
+  /** Tokens qui indiquent la fin d'une section créateur ou casting lors du scan */
   const CARD_STOP = new Set(['Avec', 'De', 'Créée par', 'Créé par', 'Créateur', 'Presse', 'Spectateurs', 'Titre original']);
 
-  // Extrait createur + casting d'un tableau de lignes de carte (scan forward)
+  /**
+   * Extrait le créateur et le casting d'un tableau de lignes (carte de liste).
+   * Scan forward : dès qu'une ligne "De" / "Créée par" est trouvée, collecte
+   * les noms suivants jusqu'à un token CARD_STOP ou un chiffre ou un genre.
+   * @param  {string[]} cardLines
+   * @returns {{ createur: string, casting: string }}
+   */
   function extractCreatCast(cardLines) {
     let createur = '', casting = '';
     for (let ci = 0; ci < cardLines.length; ci++) {
@@ -1016,17 +1339,20 @@ function parseSeries(html) {
     return { createur, casting };
   }
 
-  // Approche 1 : sélecteurs cheerio (plus fiable si les classes sont stables)
+  // ── Approche 1 : sélecteurs Cheerio (plus fiable si les classes sont stables) ──
   $('article, li.card, div.card, [class*="entity-card"]').each((_, card) => {
     const $card = $(card);
     const $link = $card.find('a[href*="ficheserie"]').first();
     if (!$link.length) return;
-    const href = $link.attr('href') || '';
-    const idMatch = href.match(/ficheserie[_-]gen_cserie=(\d+)/) || href.match(/ficheserie-(\d+)/);
-    const allocineId = idMatch ? idMatch[1] : null;
-    const titre = ($link.attr('title') || $link.text()).trim();
+
+    const href      = $link.attr('href') || '';
+    const idMatch   = href.match(/ficheserie[_-]gen_cserie=(\d+)/) || href.match(/ficheserie-(\d+)/);
+    const allocineId= idMatch ? idMatch[1] : null;
+    const titre     = ($link.attr('title') || $link.text()).trim();
     if (!titre || seen.has(normalizeTitle(titre))) return;
     seen.add(normalizeTitle(titre));
+
+    // Notes presse & spectateurs (sélecteur stareval-note, ordre d'apparition)
     const ratingNotes = [];
     $card.find('.stareval-note').each((_, el) => {
       const n = parseFloat($(el).text().replace(',', '.'));
@@ -1034,33 +1360,44 @@ function parseSeries(html) {
     });
     const notePresse = ratingNotes[0] ?? null;
     const noteSpect  = ratingNotes[1] ?? null;
-    if (!notePresse) return;
+    if (!notePresse) return; // pas de note = pas une vraie carte série
+
+    // Genre via liens /genre-XXXXX (plus fiable que le texte libre)
     const genreArr = $card.find('a[href*="genre-"]')
       .map((_, el) => $(el).text().trim().replace(/^s[eé]ries?\s+/i, '').trim())
       .get().filter(v => v && v.length > 1 && v.length < 40 && /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ]/.test(v));
     const genre = [...new Set(genreArr)].join(', ') || $card.find('.meta-genre').text().trim();
-    const allText  = $card.text();
-    const depuisM  = allText.match(/[Dd]epuis\s+(\d{4})/);
-    const rangeM   = !depuisM && allText.match(/(\d{4})\s*[-–—]\s*(\d{4})/);
-    const singleM  = !depuisM && !rangeM && allText.match(/(\d{4})/);
+
+    // Dates : "Depuis XXXX" → enCours=true ; "XXXX – XXXX" → range ; "XXXX" → date unique
+    const allText    = $card.text();
+    const depuisM    = allText.match(/[Dd]epuis\s+(\d{4})/);
+    const rangeM     = !depuisM && allText.match(/(\d{4})\s*[-–—]\s*(\d{4})/);
+    const singleM    = !depuisM && !rangeM && allText.match(/(\d{4})/);
     const enCours    = !!depuisM;
-    const anneeSortie = depuisM ? depuisM[1] : rangeM ? rangeM[1] : singleM ? singleM[1] : null;
-    const anneeFin    = rangeM ? rangeM[2] : null;
-    // Titre original — via htmlToLines sur la carte
-    const cardLines = htmlToLines($card.html() || '');
-    const origIdx = cardLines.indexOf('Titre original');
-    const titreOriginal = origIdx >= 0 && cardLines[origIdx + 1] ? cardLines[origIdx + 1] : '';
-    // Créateur + Casting — via htmlToLines (même méthode que les fiches détail)
+    const anneeSortie= depuisM ? depuisM[1] : rangeM ? rangeM[1] : singleM ? singleM[1] : null;
+    const anneeFin   = rangeM ? rangeM[2] : null;
+
+    // Titre original (stocké dans Redis, non affiché côté client)
+    const cardLines      = htmlToLines($card.html() || '');
+    const origIdx        = cardLines.indexOf('Titre original');
+    const titreOriginal  = origIdx >= 0 && cardLines[origIdx + 1] ? cardLines[origIdx + 1] : '';
+
+    // Créateur & casting exclusivement depuis les lignes de la carte
     const { createur, casting } = extractCreatCast(cardLines);
+
     const synopsis = $card.find('.synopsis-short, [class*="synopsis"]').first().text().trim();
-    const $img = $card.find('img').first();
+
+    // Poster (préfère data-src pour le lazy-loading)
+    const $img   = $card.find('img').first();
     const rawSrc = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
-    let poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
+    let poster   = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
     if (poster && poster.startsWith('/')) poster = 'https://www.allocine.fr' + poster;
+
     series.push({ titre, titreOriginal, createur, casting, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId, poster });
   });
 
-  // Approche 2 (fallback) : lignes de texte — même principe que parseFilms mais sans " VOD"
+  // ── Approche 2 (fallback) : scan de lignes de texte ───────────────────────
+  // Même logique que parseFilms mais adapté aux séries (pas de marqueur " VOD")
   if (series.length === 0) {
     const SKIP = new Set(['De', 'Avec', 'Titre original', 'Presse', 'Spectateurs',
                           'En cours', 'Terminée', 'Terminé', 'Diffusion', '']);
@@ -1092,14 +1429,15 @@ function parseSeries(html) {
         }
         if (/^\d+\s+saison/.test(line)) continue;
         if (GENRE_RE.test(line)) { genreParts.unshift(line); continue; }
-        // Si la ligne précédente (vers l'avant) est "Titre original", c'est le titre original, pas le titre FR
+        // Si la ligne précédente est "Titre original", c'est le titre original (non FR)
         if (lines[j - 1] === 'Titre original') { if (!titreOriginal) titreOriginal = line; continue; }
         titre = line; break;
       }
+
       const genre = genreParts.join(', ');
       if (!titre || seen.has(normalizeTitle(titre))) continue;
       seen.add(normalizeTitle(titre));
-      // Créateur + casting via extractCreatCast sur la région avant "Presse"
+
       const { createur, casting } = extractCreatCast(lines.slice(Math.max(0, i - 30), i));
       const synStart = noteSpect !== null ? i + 4 : i + 2;
       let synopsis = '';
@@ -1107,13 +1445,19 @@ function parseSeries(html) {
         if (lines[k] === 'Presse') break;
         if (lines[k] && lines[k].length > 80 && !/^\d/.test(lines[k])) { synopsis = lines[k]; break; }
       }
+
       const allocineId = titleToId.get(normalizeTitle(titre)) || null;
       series.push({ titre, titreOriginal, createur, casting, genre, anneeSortie, anneeFin, enCours, notePresse, noteSpect, synopsis, allocineId });
     }
   }
+
   return series;
 }
 
+/**
+ * Déduplique et trie les séries par note presse décroissante.
+ * La déduplication utilise la clé "titre|notePresse".
+ */
 function dedupeAndSortSeries(series) {
   const seen = new Set();
   return series
@@ -1125,8 +1469,25 @@ function dedupeAndSortSeries(series) {
     .sort((a, b) => b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr'));
 }
 
-// ── Routes séries ─────────────────────────────────────────────────────────────
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 9 — API SÉRIES
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/series
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne la liste complète des séries en cache, accompagnée des
+ *        détails en cache (statut, pays, nbSaisons, providers) pour chaque série.
+ *        Même logique que /api/films : tout en une seule requête pour le client.
+ *
+ * Réponse : {
+ *   series:    Serie[]      — liste triée par note presse
+ *   lastScrape: string|null — ISO date du dernier scraping liste
+ *   count:     number
+ *   details:   (SerieDetail|null)[] — indexé par position (même ordre que series[])
+ * }
+ */
 app.get('/api/series', (_req, res) => {
   const details = cachedSeries.map(s => {
     const key = s.allocineId ? `sid:${s.allocineId}` : null;
@@ -1135,65 +1496,73 @@ app.get('/api/series', (_req, res) => {
   res.json({ series: cachedSeries, lastScrape: lastSeriesScrape, count: cachedSeries.length, details });
 });
 
+/**
+ * GET /api/series/health
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne les informations de santé du module séries.
+ *        Utilisé par le client pour activer les boutons de scraping et
+ *        afficher les dates du dernier scraping dans la modal "Info".
+ *
+ * Réponse: { ok, cachedSeries, cachedDetails, lastScrape, lastDetailsScrape,
+ *            isScrapingSeries, version, lastScrapeErrors }
+ */
 app.get('/api/series/health', (_req, res) => {
   res.json({
-    ok: true, cachedSeries: cachedSeries.length, cachedDetails: seriesDetailsCache.size,
-    lastScrape: lastSeriesScrape, lastDetailsScrape: lastSeriesDetailsScrape,
-    isScrapingSeries, version: VERSION,
+    ok: true,
+    cachedSeries:    cachedSeries.length,
+    cachedDetails:   seriesDetailsCache.size,
+    lastScrape:      lastSeriesScrape,
+    lastDetailsScrape: lastSeriesDetailsScrape,
+    isScrapingSeries,
+    version:         VERSION,
     lastScrapeErrors: lastSeriesScrapeErrors,
   });
 });
 
-app.get('/api/series/debug-genres', (_req, res) => {
-  // Données des détails (Redis series_details)
-  const detSample = [];
-  let detWith = 0, detWithout = 0;
-  for (const [key, det] of seriesDetailsCache) {
-    if (det.genre) detWith++; else detWithout++;
-    if (detSample.length < 10) detSample.push({ key, genre: det.genre || null, pays: det.pays || null });
-  }
-  // Données de la liste (cachedSeries)
-  const listWith  = cachedSeries.filter(s => s.genre).length;
-  const listWithout = cachedSeries.length - listWith;
-  const listSample = cachedSeries.slice(0, 10).map(s => ({ titre: s.titre, genre: s.genre || null }));
-  res.json({
-    details: { total: seriesDetailsCache.size, withGenre: detWith, withoutGenre: detWithout, sample: detSample },
-    list:    { total: cachedSeries.length, withGenre: listWith, withoutGenre: listWithout, sample: listSample },
-  });
-});
-
-app.get('/api/series/providers', (_req, res) => {
-  const counts = {};
-  for (const [, det] of seriesDetailsCache) {
-    (det.providers || []).forEach(p => {
-      if (!counts[p.name]) counts[p.name] = { name: p.name, type: p.type, count: 0 };
-      counts[p.name].count++;
-    });
-  }
-  const list = Object.values(counts).sort((a, b) => b.count - a.count);
-  res.json({ providers: list, totalDetails: seriesDetailsCache.size });
-});
-
+/**
+ * GET /api/series/scrape-status
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne l'état d'avancement du scraping séries en cours.
+ *
+ * Réponse: { isScraping, pct (0-100) }
+ */
 app.get('/api/series/scrape-status', (_req, res) => {
   const pct = seriesProgress.total
     ? Math.round(seriesProgress.current / seriesProgress.total * 100) : 0;
   res.json({ isScraping: isScrapingSeries, pct });
 });
 
+/**
+ * GET /api/series/scrape
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Lance le scraping des pages de liste AlloCiné pour les séries.
+ *        Parcourt toutes les sources définies dans SERIES_SOURCES :
+ *          - Top AlloCiné (10 pages)
+ *          - Presse par année sur la fenêtre glissante 4 ans (5 pages chacune)
+ *        Répond en SSE, persiste dans Redis à la fin.
+ *
+ * Événements SSE :
+ *   { type: 'progress', page, total, source }
+ *   { type: 'series',   series[], page, total }
+ *   { type: 'error',    page, message }
+ *   { type: 'done',     totalSeries, lastScrape }
+ *
+ * Erreur : 429 si scraping déjà en cours
+ */
 app.get('/api/series/scrape', async (req, res) => {
   if (isScrapingSeries) return res.status(429).json({ error: 'Scraping déjà en cours' });
-  isScrapingSeries = true;
+  isScrapingSeries      = true;
   lastSeriesScrapeErrors = [];
-  seriesProgress = { current: 0, total: SERIES_PAGES };
+  seriesProgress         = { current: 0, total: SERIES_PAGES };
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const send = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const send      = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   const allSeries = [];
-  let globalPage = 0;
+  let   globalPage = 0;
 
   for (const source of SERIES_SOURCES) {
     console.log(`[series] Source: ${source.label}`);
@@ -1220,9 +1589,9 @@ app.get('/api/series/scrape', async (req, res) => {
     }
   }
 
-  const result = dedupeAndSortSeries(allSeries);
-  cachedSeries = result;
-  lastSeriesScrape = new Date().toISOString();
+  const result      = dedupeAndSortSeries(allSeries);
+  cachedSeries      = result;
+  lastSeriesScrape  = new Date().toISOString();
   if (redis) {
     try {
       await redis.set('series', JSON.stringify(result));
@@ -1235,37 +1604,41 @@ app.get('/api/series/scrape', async (req, res) => {
   console.log(`✅ ${result.length} séries scrapées`);
 });
 
-//// Debug : montre les posters du cache series (pour vérifier l'extraction)
-app.get('/api/series/debug-posters', (_req, res) => {
-  const sample = cachedSeries.slice(0, 20).map(s => ({ titre: s.titre, poster: s.poster || null }));
-  res.json({ total: cachedSeries.length, withPoster: cachedSeries.filter(s => s.poster).length, sample });
-});
-
-/// Debug : montre les lignes brutes extraites d'une fiche série
-app.get('/api/series/debug-lines', async (req, res) => {
-  const seriesId = String(req.query.seriesId || '').trim();
-  if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
-  try {
-    const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
-    const resp = await rateLimitedFetch(url);
-    const lines = htmlToLines(resp.data);
-    // Filtre les 200 premières lignes non vides qui pourraient contenir des métadonnées
-    const relevant = lines.slice(0, 300).filter(l =>
-      /\d{4}|saison|statut|nationalit|créa|avec|depuis|en cours/i.test(l) || l.length < 60
-    );
-    res.json({ seriesId, url, relevant, total: lines.length });
-  } catch(e) { res.status(500).json({ error: e.message }); }
-});
-
+/**
+ * GET /api/series/details?seriesId=XXXXX
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Récupère les données complémentaires d'une série depuis sa fiche AlloCiné :
+ *          • statut (En cours / Terminée)
+ *          • pays de production
+ *          • nombre de saisons
+ *          • dernière année connue (pour afficher la plage de dates)
+ *          • plateformes de streaming disponibles
+ *
+ *        NOTE : genre, créateur et casting NE SONT PAS utilisés côté client
+ *        depuis cet endpoint — ils viennent exclusivement du scraping de liste (s.*).
+ *        L'endpoint les extrait quand même et les stocke pour éventuel debug.
+ *
+ *        Le résultat est mis en cache 7 jours (seriesDetailsCache + Redis).
+ *
+ * Params (query) :
+ *   seriesId : ID numérique AlloCiné de la série (obligatoire)
+ *
+ * Réponse: { createur, nbSaisons, statut, derniereAnnee, pays, genre,
+ *            casting, providers[], allocineId, allocineUrl, error? }
+ * Erreur : 400 si seriesId manquant
+ */
 app.get('/api/series/details', async (req, res) => {
   const seriesId = String(req.query.seriesId || '').trim();
   if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
 
   const cacheKey = `sid:${seriesId}`;
-  const cached = getCachedSeriesDetails(cacheKey);
-  // Servir depuis le cache seulement si l'entrée est récente (a le champ genre)
-  if (cached && cached.derniereAnnee && 'genre' in cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
-  if (cached) console.log(`Cache série obsolète (sans genre), re-fetch: ${seriesId}`);
+  const cached   = getCachedSeriesDetails(cacheKey);
+  // Vérifie que le cache est complet (contient le champ genre, ajouté dans une version récente)
+  if (cached && cached.derniereAnnee && 'genre' in cached) {
+    console.log(`Cache série: ${seriesId}`);
+    return res.json(cached);
+  }
+  if (cached) console.log(`Cache série incomplet, re-fetch: ${seriesId}`);
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -1276,44 +1649,49 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
-    // Extraction genre — même structure que les films : [statut] [année] | [durée] | [genre1] , [genre2] Créée par…
-    const $$ = cheerio.load(html);
+    // Extraction genre — structure pipe : [statut] [année] | [durée] | [genre1] , [genre2] Créée par…
     const pipePos = [];
     lines.forEach((l, i) => { if (l === '|') pipePos.push(i); });
     if (pipePos.length >= 2) {
       const STOP_RE = /^(Créée? par|Créateur|Avec|Nationalités?|Saisons?|Statut|Presse|Synopsis|Titre original)$/i;
-      const start = pipePos[1] + 1;
-      const stop = lines.findIndex((l, i) => i >= start && STOP_RE.test(l));
-      // Filtre strict : noms de genre seulement (court, majuscule, pas de chiffre ni ponctuation spéciale)
+      const start   = pipePos[1] + 1;
+      const stop    = lines.findIndex((l, i) => i >= start && STOP_RE.test(l));
+      // Filtre strict : genre doit commencer par une majuscule, pas de chiffres, longueur courte
       const GENRE_NAME_RE = /^[A-ZÀÂÄÉÈÊËÎÏÔÙÛÜŸÆŒ][a-zA-ZÀ-ÿ\s\-]{1,25}$/;
-      const parts = lines.slice(start, stop > 0 ? stop : start + 6)
+      const parts   = lines.slice(start, stop > 0 ? stop : start + 6)
         .filter(l => l !== ',' && GENRE_NAME_RE.test(l));
       if (parts.length) genre = parts.join(', ');
     }
 
+    // Extraction des autres champs par scan de lignes
     for (let i = 0; i < lines.length - 1; i++) {
       const l = lines[i], n = lines[i + 1];
-      if (/^Nationalités?$/i.test(l)) pays = n;
-      if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
-      if (l === 'Saisons' && /^\d+$/.test(n)) nbSaisons = parseInt(n);
+      if (/^Nationalités?$/i.test(l))                             pays = n;
+      if (/^Nationalité\s*:(.+)/i.test(l) && !pays)              pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
+      if (l === 'Saisons' && /^\d+$/.test(n))                    nbSaisons = parseInt(n);
+
+      // Créateur(s) : collecte plusieurs noms séparés par des virgules
       if ((l === 'Créée par' || l === 'Créé par' || l === 'Créateur') && !createur) {
-        // Collecter tous les créateurs (séparés par "," sur des lignes distinctes)
         const creators = [];
         for (let k = i + 1; k < Math.min(lines.length, i + 6); k++) {
-          if (!lines[k] || lines[k] === ',' ) continue;
+          if (!lines[k] || lines[k] === ',') continue;
           if (/^(Avec|Nationalités?|Saisons?|Statut|Presse|Titre original|\d)/.test(lines[k])) break;
           creators.push(lines[k]);
         }
         if (creators.length) createur = creators.join(', ');
       }
+
       if (l === 'Statut') statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
+
+      // Casting : 5 acteurs max
       if (l === 'Avec' && castingArr.length === 0) {
         for (let k = i + 1; k < Math.min(lines.length, i + 8); k++) {
           if (['De', 'Avec', 'Nationalité', 'Nationalités', 'Saisons', 'Statut', 'Presse', 'Titre original'].includes(lines[k])) break;
           if (lines[k] && lines[k] !== ',' && !/^\d/.test(lines[k])) castingArr.push(lines[k].replace(/,$/, ''));
         }
       }
-      // Plage d'années ex: "2008 - 2013", "2019 - en cours", "2020 − 2023" (tirets variés)
+
+      // Plage d'années — ex: "2008 - 2013", "2019 - en cours", "2020 − 2023"
       if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
         const parts = l.split(/\s*[-–—−]\s*/);
         const yB = parts[1]?.match(/\d{4}/)?.[0];
@@ -1326,7 +1704,7 @@ app.get('/api/series/details', async (req, res) => {
         const m = l.match(/^[Dd]epuis\s+(\d{4})$/);
         if (m) derniereAnnee = m[1];
       }
-      // Ligne contenant une plage d'années dans du texte ex: "Série de 2020 à 2023"
+      // Plage dans du texte : "Série de 2020 à 2023"
       if (!derniereAnnee) {
         const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/);
         if (m) {
@@ -1334,7 +1712,7 @@ app.get('/api/series/details', async (req, res) => {
           if (y >= 1950 && y <= 2030) derniereAnnee = m[2];
         }
       }
-      // Année isolée ex: "2020" (série courte sans plage)
+      // Année isolée : "2020"
       if (!derniereAnnee && /^\d{4}$/.test(l)) {
         const y = parseInt(l);
         if (y >= 1950 && y <= 2030) derniereAnnee = l;
@@ -1344,13 +1722,18 @@ app.get('/api/series/details', async (req, res) => {
     const providers = extractProviders(html);
     const data = {
       createur, nbSaisons, statut, derniereAnnee, pays, genre,
-      casting: castingArr.slice(0, 5).join(', '),
+      casting:  castingArr.slice(0, 5).join(', '),
       providers, allocineId: seriesId, allocineUrl: url,
     };
-    if (createur || nbSaisons || providers.length > 0 || pays || genre) setCachedSeriesDetails(cacheKey, data);
+
+    // Ne met en cache que si on a trouvé au moins une info utile
+    if (createur || nbSaisons || providers.length > 0 || pays || genre)
+      setCachedSeriesDetails(cacheKey, data);
+
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Série ${seriesId} → ${pays || '?'} statut:${statut || '?'} saisons:${nbSaisons ?? '?'} | ${pNames}`);
     return res.json(data);
+
   } catch(e) {
     const status = e.response?.status;
     return res.json({
@@ -1361,33 +1744,61 @@ app.get('/api/series/details', async (req, res) => {
   }
 });
 
-// Vide le cache des détails (fiches séries : genre, pays, plateformes…)
+/**
+ * POST /api/series/clear-cache
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vide le cache mémoire + Redis des fiches séries (statut, pays, plateformes…).
+ *        Utile pour forcer un re-fetch des fiches après un soft-block ou une
+ *        mise à jour des informations sur AlloCiné.
+ *
+ * Réponse: { ok: true, cleared: number }
+ */
 app.post('/api/series/clear-cache', async (_req, res) => {
   const count = seriesDetailsCache.size;
   seriesDetailsCache.clear();
-  if (redis) { try { await redis.del('series_details'); } catch(e) { console.warn('Redis del series_details:', e.message); } }
+  if (redis) {
+    try { await redis.del('series_details'); }
+    catch(e) { console.warn('Redis del series_details:', e.message); }
+  }
   console.log(`🗑️  Cache détails séries vidé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });
 
-// Vide le cache de la liste des séries
+/**
+ * POST /api/series/clear-list
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vide le cache mémoire + Redis de la liste des séries.
+ *        Force un nouveau scraping complet de la liste au prochain appel client.
+ *
+ * Réponse: { ok: true, cleared: number }
+ */
 app.post('/api/series/clear-list', async (_req, res) => {
-  const count = cachedSeries.length;
+  const count  = cachedSeries.length;
   cachedSeries = [];
   lastSeriesScrape = null;
-  if (redis) { try { await redis.del('series'); await redis.del('lastSeriesScrape'); } catch(e) { console.warn('Redis del series:', e.message); } }
+  if (redis) {
+    try { await redis.del('series'); await redis.del('lastSeriesScrape'); }
+    catch(e) { console.warn('Redis del series:', e.message); }
+  }
   console.log(`🗑️  Cache liste séries vidé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });
 
-// Vide les deux caches
+/**
+ * POST /api/series/clear-all
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vide à la fois le cache de la liste et le cache des fiches séries.
+ *        Équivalent à clear-list + clear-cache en une seule requête.
+ *
+ * Réponse: { ok: true, clearedList: number, clearedDetails: number }
+ */
 app.post('/api/series/clear-all', async (_req, res) => {
-  const detCount = seriesDetailsCache.size;
+  const detCount  = seriesDetailsCache.size;
   const listCount = cachedSeries.length;
   seriesDetailsCache.clear();
-  cachedSeries = [];
-  lastSeriesScrape = null;
-  lastSeriesDetailsScrape = null;
+  cachedSeries             = [];
+  lastSeriesScrape         = null;
+  lastSeriesDetailsScrape  = null;
   if (redis) {
     try { await redis.del('series_details'); } catch(e) {}
     try { await redis.del('series'); await redis.del('lastSeriesScrape'); } catch(e) {}
@@ -1396,14 +1807,122 @@ app.post('/api/series/clear-all', async (_req, res) => {
   res.json({ ok: true, clearedList: listCount, clearedDetails: detCount });
 });
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 10 — API DE DEBUG (diagnostic & vérification)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * GET /api/series/debug-genres
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Statistiques de couverture des genres dans les deux sources :
+ *          - cache de la liste (s.genre, depuis le scraping de liste)
+ *          - cache des détails (det.genre, depuis les fiches individuelles)
+ *        Permet de vérifier que l'extraction de genre fonctionne correctement.
+ *
+ * Réponse: { details: { total, withGenre, withoutGenre, sample[] },
+ *            list:    { total, withGenre, withoutGenre, sample[] } }
+ */
+app.get('/api/series/debug-genres', (_req, res) => {
+  const detSample = [];
+  let detWith = 0, detWithout = 0;
+  for (const [key, det] of seriesDetailsCache) {
+    if (det.genre) detWith++; else detWithout++;
+    if (detSample.length < 10) detSample.push({ key, genre: det.genre || null, pays: det.pays || null });
+  }
+  const listWith    = cachedSeries.filter(s => s.genre).length;
+  const listWithout = cachedSeries.length - listWith;
+  const listSample  = cachedSeries.slice(0, 10).map(s => ({ titre: s.titre, genre: s.genre || null }));
+  res.json({
+    details: { total: seriesDetailsCache.size, withGenre: detWith,  withoutGenre: detWithout, sample: detSample },
+    list:    { total: cachedSeries.length,      withGenre: listWith, withoutGenre: listWithout, sample: listSample },
+  });
+});
+
+/**
+ * GET /api/series/providers
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Statistiques des plateformes de streaming présentes dans le cache des fiches.
+ *        Utile pour vérifier quelles plateformes sont détectées et leur fréquence.
+ *
+ * Réponse: { providers: { name, type, count }[], totalDetails: number }
+ */
+app.get('/api/series/providers', (_req, res) => {
+  const counts = {};
+  for (const [, det] of seriesDetailsCache) {
+    (det.providers || []).forEach(p => {
+      if (!counts[p.name]) counts[p.name] = { name: p.name, type: p.type, count: 0 };
+      counts[p.name].count++;
+    });
+  }
+  const list = Object.values(counts).sort((a, b) => b.count - a.count);
+  res.json({ providers: list, totalDetails: seriesDetailsCache.size });
+});
+
+/**
+ * GET /api/series/debug-posters
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vérifie l'extraction des posters depuis le scraping de liste.
+ *        Affiche les 20 premières séries avec ou sans poster.
+ *
+ * Réponse: { total, withPoster, sample: { titre, poster }[] }
+ */
+app.get('/api/series/debug-posters', (_req, res) => {
+  const sample = cachedSeries.slice(0, 20).map(s => ({ titre: s.titre, poster: s.poster || null }));
+  res.json({
+    total:      cachedSeries.length,
+    withPoster: cachedSeries.filter(s => s.poster).length,
+    sample,
+  });
+});
+
+/**
+ * GET /api/series/debug-lines?seriesId=XXXXX
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Télécharge une fiche série et affiche les lignes de texte extraites
+ *        par htmlToLines(). Permet de déboguer l'extraction de données
+ *        (statut, pays, années, genres, créateurs…) depuis une fiche spécifique.
+ *
+ * Params (query) :
+ *   seriesId : ID numérique AlloCiné de la série (obligatoire)
+ *
+ * Réponse: { seriesId, url, relevant: string[], total: number }
+ * Erreur : 400 si seriesId manquant, 500 si erreur réseau
+ */
+app.get('/api/series/debug-lines', async (req, res) => {
+  const seriesId = String(req.query.seriesId || '').trim();
+  if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
+  try {
+    const url      = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
+    const resp     = await rateLimitedFetch(url);
+    const lines    = htmlToLines(resp.data);
+    // Filtre les 300 premières lignes pouvant contenir des métadonnées utiles
+    const relevant = lines.slice(0, 300).filter(l =>
+      /\d{4}|saison|statut|nationalit|créa|avec|depuis|en cours/i.test(l) || l.length < 60
+    );
+    res.json({ seriesId, url, relevant, total: lines.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 11 — DÉMARRAGE DU SERVEUR
+// ══════════════════════════════════════════════════════════════════════════════
+
 app.listen(PORT, () => {
   console.log('\n🎬 AlloCiné VOD Scraper v9 démarré !');
-  console.log(`   ➜ Ouvrez : http://localhost:${PORT}`);
-  console.log(`   ➜ Santé  : http://localhost:${PORT}/api/health\n`);
+  console.log(`   ➜ Application  : http://localhost:${PORT}`);
+  console.log(`   ➜ Santé films  : http://localhost:${PORT}/api/health`);
+  console.log(`   ➜ Santé séries : http://localhost:${PORT}/api/series/health\n`);
 
-  // Chargement Redis → profils par défaut → auto-scrape si besoin
+  // Séquence d'initialisation :
+  //   1. Charge Redis (films, séries, utilisateurs, prefs, caches)
+  //   2. Crée les profils par défaut s'ils n'existent pas
+  //   3. Lance un auto-scrape des films si le cache est périmé
   loadUserdata()
     .then(() => seedDefaultProfiles())
     .then(() => autoScrapeIfStale());
+
+  // Vérifie toutes les 24h si un auto-scrape est nécessaire
   setInterval(() => autoScrapeIfStale(), 24 * 60 * 60 * 1000);
 });

@@ -1216,28 +1216,31 @@ app.get('/api/series/details', async (req, res) => {
     let createur = null, nbSaisons = null, statut = null, derniereAnnee = null, pays = null, genre = null;
     const castingArr = [];
 
-    // Extraction genre via cheerio — même approche que le scraping de liste
+    // Extraction genre via cheerio (format AlloCiné : liens /series-tv/genre-XXXXX/)
     const $$ = cheerio.load(html);
-    // 1. Liens genre dans un bloc meta-body-item (structure fiche AlloCiné)
+    // Collecte tous les liens genre de la fiche (plusieurs genres possibles)
+    const genreSet = [];
+    // 1. D'abord dans les blocs meta-body-item qui portent le label "Genre"
     $$('.meta-body-item').each((_, el) => {
-      if (genre) return;
       const label = $$(el).find('.light').text().trim();
       if (/^genres?$/i.test(label)) {
-        const links = $$(el).find('a').map((_, a) => $$(a).text().trim()).get().filter(Boolean);
-        if (links.length) genre = links.join(', ');
-        else {
-          const txt = $$(el).text().replace(label, '').replace(/[\n,]+/g, ', ').trim();
-          if (txt) genre = txt;
-        }
+        $$(el).find('a[href*="genre-"]').each((_, a) => {
+          const t = $$(a).text().trim();
+          if (t && !genreSet.includes(t)) genreSet.push(t);
+        });
       }
     });
-    // 2. Tous les liens genre- de la page (format AlloCiné : /series-tv/genre-13001/)
-    if (!genre) {
-      const gLinks = $$('a[href*="genre-"]').map((_, el) => $$(el).text().trim()).get()
-        .filter(v => v && v.length > 1 && v.length < 40 && !/^\d/.test(v));
-      if (gLinks.length) genre = [...new Set(gLinks)].join(', ');
+    // 2. Si rien trouvé via label, prendre tous les liens genre- de la page (≤ 6 pour éviter la nav)
+    if (!genreSet.length) {
+      $$('a[href*="genre-"]').each((_, el) => {
+        const t = $$(el).text().trim();
+        if (t && t.length > 1 && t.length < 40 && !/^\d/.test(t) && !genreSet.includes(t)) genreSet.push(t);
+      });
+      // Trop de résultats = liens de navigation globale, on ignore
+      if (genreSet.length > 6) genreSet.length = 0;
     }
-    // 3. itemprop ou meta tag
+    if (genreSet.length) genre = genreSet.join(', ');
+    // 3. itemprop ou meta tag en dernier recours
     if (!genre) genre = $$('[itemprop="genre"]').first().text().trim() || null;
     if (!genre) genre = $$('meta[property="video:genre"]').attr('content') || $$('meta[name="genre"]').attr('content') || null;
     console.log(`  Genre: ${genre || 'null'}`);

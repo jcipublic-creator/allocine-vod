@@ -1220,55 +1220,111 @@ app.post('/api/clear-films', requireSecret, async (_req, res) => {
  */
 async function autoScrapeIfStale() {
   if (isScraping) return;
-  const ageMs   = lastScrape ? Date.now() - new Date(lastScrape).getTime() : Infinity;
-  const ageDays = ageMs / 86400000;
 
-  if (ageDays < AUTO_SCRAPE_DAYS) {
-    console.log(`⏭️  Auto-scrape ignoré — dernier scraping il y a ${ageDays.toFixed(1)}j`);
+  const ageListMs   = lastScrape        ? Date.now() - new Date(lastScrape).getTime()        : Infinity;
+  const ageDetMs    = lastDetailsScrape ? Date.now() - new Date(lastDetailsScrape).getTime() : Infinity;
+  const ageListDays = ageListMs  / 86400000;
+  const ageDetDays  = ageDetMs   / 86400000;
+
+  const listStale = ageListDays >= AUTO_SCRAPE_DAYS;
+  const detStale  = ageDetDays  >= AUTO_SCRAPE_DAYS;
+
+  if (!listStale && !detStale) {
+    console.log(`⏭️  Auto-scrape films ignoré — liste il y a ${ageListDays.toFixed(1)}j, plateformes il y a ${ageDetDays.toFixed(1)}j`);
     return;
   }
 
-  const label = lastScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
-  console.log(`\n🔄 Auto-scrape déclenché — dernier scraping il y a ${label}`);
   isScraping = true;
 
-  const annees     = ['2026', '2025', '2024', '2023'];
-  const noteMin    = 3.5;
-  const allFilms   = [];
-  const totalPages = annees.length * TOTAL_PAGES;
-  let   globalPage = 0;
-  lastScrapeErrors = [];
-  scrapeProgress   = { current: 0, total: totalPages, annee: '' };
-
   try {
-    for (const annee of annees) {
-      const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
-      for (let page = 1; page <= TOTAL_PAGES; page++) {
-        globalPage++;
-        scrapeProgress = { current: globalPage, total: totalPages, annee };
-        const url = base + page;
-        try {
-          let html = getCachedPage(url);
-          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
-          const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
-          allFilms.push(...raw);
-          console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
-        } catch(e) {
-          console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
-          lastScrapeErrors.push({ page, annee, message: e.message });
+    // ── 1. Scrape la liste si périmée ──────────────────────────────────────
+    if (listStale) {
+      const label = lastScrape ? `${ageListDays.toFixed(1)} jour(s)` : 'jamais';
+      console.log(`\n🔄 Auto-scrape films (liste) — dernier il y a ${label}`);
+
+      const annees     = ['2026', '2025', '2024', '2023'];
+      const noteMin    = 3.5;
+      const allFilms   = [];
+      const totalPages = annees.length * TOTAL_PAGES;
+      let   globalPage = 0;
+      lastScrapeErrors = [];
+      scrapeProgress   = { current: 0, total: totalPages, annee: '' };
+
+      try {
+        for (const annee of annees) {
+          const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
+          for (let page = 1; page <= TOTAL_PAGES; page++) {
+            globalPage++;
+            scrapeProgress = { current: globalPage, total: totalPages, annee };
+            const url = base + page;
+            try {
+              let html = getCachedPage(url);
+              if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+              const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
+              allFilms.push(...raw);
+              console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
+            } catch(e) {
+              console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
+              lastScrapeErrors.push({ page, annee, message: e.message });
+            }
+            await sleep(1500 + Math.random() * 500);
+          }
         }
-        await sleep(1500 + Math.random() * 500);
+        const result = dedupeAndSortFilms(allFilms, noteMin);
+        cachedFilms  = result;
+        await saveLastScrape();
+        if (redis) {
+          try { await redis.set('films', JSON.stringify(result)); }
+          catch(e) { console.warn('[auto] Erreur sauvegarde films Redis:', e.message); }
+        }
+        console.log(`✅ Auto-scrape films (liste) terminé — ${result.length} films\n`);
+      } catch(e) { console.error('[auto] Erreur liste films:', e.message); }
+    }
+
+    // ── 2. Scrape les plateformes si périmées (ou si liste vient d'être rescrapée) ──
+    if (detStale || listStale) {
+      const toFetch = cachedFilms.filter(f => f.allocineId);
+      if (toFetch.length > 0) {
+        const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
+        console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+        let done = 0;
+        for (const film of toFetch) {
+          const cacheKey = `id:${film.allocineId}`;
+          if (detStale) detailsCache.delete(cacheKey); // force le rafraîchissement
+          if (getCachedDetails(cacheKey)) { done++; continue; }
+          try {
+            const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
+            const filmResp = await rateLimitedFetch(filmUrl);
+            const html     = filmResp.data;
+            const isValid  = /fichefilm_gen_cfilm|provider-tile|Titre original|Année de production/i.test(html);
+            if (!isValid) {
+              console.warn(`[auto] Fiche film ${film.allocineId} → page suspecte, ignorée`);
+            } else {
+              const lines = htmlToLines(html);
+              let pays = null, annee = null;
+              for (let i = 0; i < lines.length - 1; i++) {
+                if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
+                if (lines[i] === 'Année de production') annee = lines[i + 1];
+                if (pays && annee) break;
+              }
+              const providers = extractProviders(html);
+              const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
+              if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
+            }
+          } catch(e) { console.warn(`[auto] Détail film ${film.allocineId}: ${e.message}`); }
+          done++;
+          if (done % 50 === 0) console.log(`[auto] Plateformes: ${done}/${toFetch.length}`);
+        }
+        lastDetailsScrape = new Date().toISOString();
+        if (redis) {
+          try {
+            await saveDetailsCache();
+            await redis.set('lastDetailsScrape', lastDetailsScrape);
+          } catch(e) { console.warn('[auto] Erreur Redis plateformes:', e.message); }
+        }
+        console.log(`✅ Auto-scrape films (plateformes) terminé — ${done} fiches\n`);
       }
     }
-
-    const result = dedupeAndSortFilms(allFilms, noteMin);
-    cachedFilms  = result;
-    await saveLastScrape();
-    if (redis) {
-      try { await redis.set('films', JSON.stringify(result)); }
-      catch(e) { console.warn('Erreur sauvegarde films Redis (auto-scrape):', e.message); }
-    }
-    console.log(`✅ Auto-scrape terminé — ${result.length} films\n`);
   } finally {
     isScraping     = false;
     scrapeProgress = { current: 0, total: 0, annee: '' };

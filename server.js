@@ -2298,8 +2298,8 @@ function parseBesteverFilms(html, decade) {
     const $imgThumb = $card.find('img.thumbnail-img').first();
     const $imgAny   = $card.find('img').first();
     const $img      = $imgThumb.length ? $imgThumb : $imgAny;
-    const rawSrc    = $img.attr('src') || $img.attr('data-src') || $img.attr('data-lazy-src') || '';
-    const poster    = rawSrc && !/blank|placeholder/i.test(rawSrc) ? rawSrc : null;
+    const rawSrc    = $img.attr('data-src') || $img.attr('data-lazy-src') || $img.attr('data-original') || $img.attr('src') || '';
+    const poster    = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
 
     // Notes presse & spectateurs
     let notePresse = null, noteSpect = null;

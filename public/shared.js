@@ -44,7 +44,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v151'; // incrémenter si le format du cache change
+const LS_VERSION = 'vod_cache_v152'; // incrémenter si le format du cache change
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -524,4 +524,104 @@ async function loadFilmsFromServer() {
     console.warn('[server] Impossible de charger les films:', e.message);
     return false;
   }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Modal ℹ Info — commun aux 3 pages (Films / Séries / Best ever)
+// ─────────────────────────────────────────────────────────────────────────────
+let _infoData         = null;
+let _infoRefreshTimer = null;
+
+async function _fetchInfoData() {
+  try {
+    const [rf, rs, rb, rst] = await Promise.all([
+      fetch('/api/health',          { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/series/health',   { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/bestever/health', { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/scraping-status', { signal: AbortSignal.timeout(4000) }),
+    ]);
+    _infoData = {
+      films:    rf.ok  ? await rf.json()  : null,
+      series:   rs.ok  ? await rs.json()  : null,
+      bestever: rb.ok  ? await rb.json()  : null,
+      status:   rst.ok ? await rst.json() : null,
+    };
+  } catch(e) { _infoData = null; }
+}
+
+function _startInfoRefresh() {
+  _stopInfoRefresh();
+  _infoRefreshTimer = setInterval(async () => {
+    if (!document.getElementById('info-modal')?.classList.contains('open')) { _stopInfoRefresh(); return; }
+    if (!_infoData?.status?.phase) return;
+    try {
+      const r = await fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) { _infoData.status = await r.json(); renderInfo(); }
+    } catch(e) {}
+  }, 3000);
+}
+function _stopInfoRefresh() {
+  if (_infoRefreshTimer) { clearInterval(_infoRefreshTimer); _infoRefreshTimer = null; }
+}
+
+async function openInfo() {
+  document.getElementById('info-modal').classList.add('open');
+  document.getElementById('info-content').innerHTML = 'Chargement…';
+  await _fetchInfoData();
+  renderInfo();
+  _startInfoRefresh();
+}
+function closeInfo() {
+  document.getElementById('info-modal').classList.remove('open');
+  _stopInfoRefresh();
+}
+
+function renderInfo() {
+  const el = document.getElementById('info-content');
+  if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
+  const fmt = iso => iso
+    ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
+    : '—';
+  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, st = _infoData.status;
+  const fErrors = f?.lastScrapeErrors || [];
+
+  function progressBlock(info) {
+    if (!info?.active) return '';
+    const pct   = info.pct ?? 0;
+    const extra = info.annee ? ` · ${info.annee}` : (info.total ? ` · ${info.total} entrées` : '');
+    return `<div class="info-progress">
+      <div class="info-progress-label"><span>En cours${extra}</span><span>${pct}%</span></div>
+      <div class="info-progress-bar-wrap"><div class="info-progress-bar" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+  function badge(active) {
+    return active ? '<span class="info-scraping-badge">⟳ en cours</span>' : '';
+  }
+
+  el.innerHTML = `
+    <div class="info-section-title">Serveur</div>
+    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(f?.version || s?.version || b?.version || '—')}</span></div>
+    <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>
+    <div class="info-section-title">🎬 Films récents</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${f?.cachedFilms ?? '—'} films</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.filmsList?.active)}</span><span class="val">${fmt(f?.lastScrape)}</span></div>
+    ${progressBlock(st?.filmsList)}
+    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.filmsDetails?.active)}</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.filmsDetails)}
+    ${fErrors.length > 0 ? `<div class="info-row"><span class="lbl">Erreurs</span><span class="val">⚠️ ${fErrors.length}</span></div><div class="info-errors">${fErrors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
+    <div class="info-section-title">📺 Séries</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${s?.cachedSeries ?? '—'} séries</span></div>
+    <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${s?.cachedDetails ?? '—'} en mémoire</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.seriesList?.active)}</span><span class="val">${fmt(s?.lastScrape)}</span></div>
+    ${progressBlock(st?.seriesList)}
+    <div class="info-row"><span class="lbl">Scraping détails${badge(st?.seriesDetails?.active)}</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.seriesDetails)}
+    <div class="info-section-title">🏆 Best ever</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${b?.cachedFilms ?? '—'} films</span></div>
+    <div class="info-row"><span class="lbl">Pages / décennie</span><span class="val">${b?.pagesPerDecade ?? '—'} × ${b?.decades?.length ?? '—'} décennies</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.besteverList?.active)}</span><span class="val">${fmt(b?.lastScrape)}</span></div>
+    ${progressBlock(st?.besteverList)}
+    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.besteverDetails)}
+  `;
 }

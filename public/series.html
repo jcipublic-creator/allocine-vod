@@ -451,7 +451,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v141';
+const LS_SVERSION = 'vod_series_v142';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1496,17 +1496,36 @@ async function pingServer() {
   const statusEl      = document.getElementById('server-status');
   const scrapeButtons = ['btn-run', 'btn-run-details', 'btn-run-all'].map(id => document.getElementById(id));
   try {
-    const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
-    if (r.ok) {
+    const [rf, rs] = await Promise.all([
+      fetch('/api/health',        { signal: AbortSignal.timeout(3000) }),
+      fetch('/api/series/health', { signal: AbortSignal.timeout(3000) }),
+    ]);
+    if (rf.ok) {
       statusEl.textContent = '🟢';
       statusEl.style.color = 'var(--green)';
       scrapeButtons.forEach(b => b && (b.disabled = false));
+      return rs.ok ? await rs.json() : null; // ← données series/health pour la fraîcheur
     } else throw new Error();
   } catch {
     statusEl.textContent = '🔴';
     statusEl.style.color = 'var(--orange)';
     scrapeButtons.forEach(b => b && (b.disabled = true));
+    return null;
   }
+}
+
+/**
+ * Retourne true si le serveur a scrapé séries liste ou détails
+ * plus récemment que le cache localStorage.
+ */
+function isSeriesCacheStale(seriesHealth) {
+  if (!seriesHealth) return false;
+  const cacheDate = localStorage.getItem(LS_SDATE);
+  if (!cacheDate) return false;
+  const cached = new Date(cacheDate).getTime();
+  const srvList = seriesHealth.lastScrape        ? new Date(seriesHealth.lastScrape).getTime()        : 0;
+  const srvDet  = seriesHealth.lastDetailsScrape ? new Date(seriesHealth.lastDetailsScrape).getTime() : 0;
+  return srvList > cached || srvDet > cached;
 }
 
 
@@ -1567,14 +1586,20 @@ const UI = {
   }
 
   loadPrefs();
-  const hadCache = loadSeriesCache(); // affichage immédiat si données en cache
-  await pingServer();                 // vérifie la disponibilité du serveur
+  const hadCache     = loadSeriesCache(); // affichage immédiat si données en cache
+  const seriesHealth = await pingServer(); // vérifie la disponibilité du serveur
   if (_currentUserId) await loadUserdata(); // charge les notes utilisateur
 
-  if (!hadCache) {
-    await loadSeriesFromServer();         // premier chargement : récupère tout
+  if (!hadCache || isSeriesCacheStale(seriesHealth)) {
+    if (hadCache) {
+      localStorage.removeItem(LS_SERIES);
+      localStorage.removeItem(LS_SDET);
+      localStorage.removeItem(LS_SDATE);
+      console.log('[cache] Séries : données serveur plus récentes — rechargement');
+    }
+    await loadSeriesFromServer();         // premier chargement ou rechargement
   } else {
-    startSeriesDetailsLoading();          // cache présent : complète les détails manquants
+    startSeriesDetailsLoading();          // cache frais : complète les détails manquants
   }
 })();
 </script>

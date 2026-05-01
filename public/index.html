@@ -826,6 +826,7 @@ async function pingServer() {
       btnEl.disabled = false;
       const btnPlat = document.getElementById('btn-plat');
       if (btnPlat) btnPlat.disabled = false;
+      return d; // ← données health pour la vérification de fraîcheur
     } else { throw new Error('non-ok'); }
   } catch {
     statusEl.textContent = '🔴 Hors ligne';
@@ -833,7 +834,22 @@ async function pingServer() {
     btnEl.disabled = true;
     const btnPlat = document.getElementById('btn-plat');
     if (btnPlat) btnPlat.disabled = true;
+    return null;
   }
+}
+
+/**
+ * Retourne true si le serveur a scrapé films liste ou plateformes
+ * plus récemment que le cache localStorage.
+ */
+function isFilmsCacheStale(health) {
+  if (!health) return false;
+  const cacheDate = localStorage.getItem(LS_DATE);
+  if (!cacheDate) return false;
+  const cached = new Date(cacheDate).getTime();
+  const srvList = health.lastScrape        ? new Date(health.lastScrape).getTime()        : 0;
+  const srvDet  = health.lastDetailsScrape ? new Date(health.lastDetailsScrape).getTime() : 0;
+  return srvList > cached || srvDet > cached;
 }
 
 // ─── Indicateur scraping header ───────────────────────────────────────────────
@@ -1241,8 +1257,16 @@ function downloadXLSX() {
   }
   loadPrefs();
   const hadCache = loadCache();
-  await pingServer();
-  if (!hadCache) await loadFilmsFromServer();
+  const health   = await pingServer();
+  if (!hadCache || isFilmsCacheStale(health)) {
+    if (hadCache) {
+      localStorage.removeItem(LS_FILMS);
+      localStorage.removeItem(LS_DETAILS);
+      localStorage.removeItem(LS_DATE);
+      console.log('[cache] Films : données serveur plus récentes — rechargement');
+    }
+    await loadFilmsFromServer();
+  }
   if (_currentUserId) await loadUserdata();
   startAutoScrapeMonitoring();
 })();

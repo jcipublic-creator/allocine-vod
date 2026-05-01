@@ -728,13 +728,13 @@ function renderCards(films) {
       ? `<div class="card-poster"><img src="${esc(f.poster)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">🎬</div></div>`;
     const yearTxt = f.anneeSortie || f.anneeReelle || '';
-    const decadePill = f.decade ? `<span class="decade-pill" id="decade-pill-${i}">Années ${esc(f.decade)}${yearTxt ? ' · ' + esc(yearTxt) : ''}</span>` : `<span id="decade-pill-${i}"></span>`;
+    const yearPill = yearTxt ? `<span class="decade-pill" id="decade-pill-${i}">${esc(yearTxt)}</span>` : `<span id="decade-pill-${i}"></span>`;
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">
-      <div class="card-title">${esc(f.titre)}${decadePill}</div>
+      <div class="card-title">${esc(f.titre)}${yearPill}</div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
       <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}</div>
       ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
@@ -781,11 +781,12 @@ function updateCardMeta(i, data) {
   if (data.annee) {
     const film = _allFilms[i];
     if (film) film.anneeReelle = data.annee;
-    // Met à jour le pill décennie avec l'année réelle si elle n'était pas déjà connue
+    // Met à jour le pill année si elle n'était pas déjà connue
     if (film && !film.anneeSortie) {
       const pillEl = document.getElementById(`decade-pill-${i}`);
-      if (pillEl && film.decade) {
-        pillEl.textContent = `Années ${film.decade} · ${data.annee}`;
+      if (pillEl) {
+        pillEl.textContent = data.annee;
+        pillEl.className = 'decade-pill';
       }
     }
   }

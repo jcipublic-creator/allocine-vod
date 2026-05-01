@@ -1210,255 +1210,278 @@ app.post('/api/clear-films', requireSecret, async (_req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  SECTION 7 — AUTO-SCRAPE & PROFILS PAR DÉFAUT
+//  SECTION 7 — AUTO-SCRAPE NOCTURNE (4 phases indépendantes)
+//
+//  Chaque phase vérifie si son cache est périmé (> AUTO_SCRAPE_DAYS jours).
+//  Le scheduler planifie les 4 phases à 3h00, 3h15, 3h30, 3h45 heure Paris.
+//  Au démarrage du serveur, les 4 phases sont aussi vérifiées en séquence
+//  pour rattraper un éventuel downtime.
 // ══════════════════════════════════════════════════════════════════════════════
 
 /**
- * Déclenche automatiquement un scraping complet des films si le cache
- * a plus de AUTO_SCRAPE_DAYS jours.
- * Appelé au démarrage du serveur puis toutes les 24h via setInterval.
+ * Calcule les millisecondes jusqu'à la prochaine occurrence de hh:mm heure Paris.
+ * Fonctionne correctement en CET (UTC+1) et CEST (UTC+2).
  */
-async function autoScrapeIfStale() {
-  if (isScraping) return;
+function msTillParis(h, m) {
+  const now      = new Date();
+  const parisNow = new Date(now.toLocaleString('en-US', { timeZone: 'Europe/Paris' }));
+  const target   = new Date(parisNow);
+  target.setHours(h, m, 0, 0);
+  if (target <= parisNow) target.setDate(target.getDate() + 1);
+  // Reconvertit target (exprimé en "faux UTC Paris") vers le vrai UTC
+  return target.getTime() + (now.getTime() - parisNow.getTime()) - now.getTime();
+}
 
-  const ageListMs   = lastScrape        ? Date.now() - new Date(lastScrape).getTime()        : Infinity;
-  const ageDetMs    = lastDetailsScrape ? Date.now() - new Date(lastDetailsScrape).getTime() : Infinity;
-  const ageListDays = ageListMs  / 86400000;
-  const ageDetDays  = ageDetMs   / 86400000;
-
-  const listStale = ageListDays >= AUTO_SCRAPE_DAYS;
-  const detStale  = ageDetDays  >= AUTO_SCRAPE_DAYS;
-
-  if (!listStale && !detStale) {
-    console.log(`⏭️  Auto-scrape films ignoré — liste il y a ${ageListDays.toFixed(1)}j, plateformes il y a ${ageDetDays.toFixed(1)}j`);
-    return;
+/**
+ * Planifie les 4 scraping nocturnes à 3h00, 3h15, 3h30, 3h45 heure Paris.
+ * Chaque scraping ne s'exécute que si le cache dépasse AUTO_SCRAPE_DAYS jours.
+ * Se reprogramme automatiquement chaque nuit.
+ */
+function scheduleNightlyScraping() {
+  function run() {
+    const label = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
+    console.log(`\n🌙 Scraping nocturne — démarrage à ${label} (heure Paris)`);
+    autoScrapeFilmsListIfStale();                                                        // 3h00
+    setTimeout(() => autoScrapeFilmsDetailsIfStale(),    15 * 60 * 1000);               // 3h15
+    setTimeout(() => autoScrapeSeriesListIfStale(),      30 * 60 * 1000);               // 3h30
+    setTimeout(() => autoScrapeSeriesDetailsIfStale(),   45 * 60 * 1000);               // 3h45
+    // Reprogramme pour demain 3h00
+    setTimeout(run, msTillParis(3, 0));
   }
+  const delay = msTillParis(3, 0);
+  console.log(`🕒 Prochain scraping nocturne dans ${(delay / 3600000).toFixed(1)}h (3h00 heure Paris)`);
+  setTimeout(run, delay);
+}
 
+// ── Phase 1 : liste des films ──────────────────────────────────────────────
+/**
+ * Scrape la liste des films si lastScrape > AUTO_SCRAPE_DAYS jours.
+ * Déclenché au démarrage et chaque nuit à 3h00 par scheduleNightlyScraping().
+ */
+async function autoScrapeFilmsListIfStale() {
+  if (isScraping) return;
+  const ageDays = lastScrape ? (Date.now() - new Date(lastScrape).getTime()) / 86400000 : Infinity;
+  if (ageDays < AUTO_SCRAPE_DAYS) {
+    console.log(`⏭️  Films liste OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
   isScraping = true;
-
   try {
-    // ── 1. Scrape la liste si périmée ──────────────────────────────────────
-    if (listStale) {
-      const label = lastScrape ? `${ageListDays.toFixed(1)} jour(s)` : 'jamais';
-      console.log(`\n🔄 Auto-scrape films (liste) — dernier il y a ${label}`);
-
-      const annees     = ['2026', '2025', '2024', '2023'];
-      const noteMin    = 3.5;
-      const allFilms   = [];
-      const totalPages = annees.length * TOTAL_PAGES;
-      let   globalPage = 0;
-      lastScrapeErrors = [];
-      scrapeProgress   = { current: 0, total: totalPages, annee: '' };
-
-      try {
-        for (const annee of annees) {
-          const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
-          for (let page = 1; page <= TOTAL_PAGES; page++) {
-            globalPage++;
-            scrapeProgress = { current: globalPage, total: totalPages, annee };
-            const url = base + page;
-            try {
-              let html = getCachedPage(url);
-              if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
-              const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
-              allFilms.push(...raw);
-              console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
-            } catch(e) {
-              console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
-              lastScrapeErrors.push({ page, annee, message: e.message });
-            }
-            await sleep(1500 + Math.random() * 500);
-          }
+    const label      = lastScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
+    console.log(`\n🔄 Auto-scrape films (liste) — dernier il y a ${label}`);
+    const annees     = ['2026', '2025', '2024', '2023'];
+    const allFilms   = [];
+    const totalPages = annees.length * TOTAL_PAGES;
+    let   globalPage = 0;
+    lastScrapeErrors = [];
+    scrapeProgress   = { current: 0, total: totalPages, annee: '' };
+    for (const annee of annees) {
+      const base = `https://www.allocine.fr/vod/films/decennie-2020/annee-${annee}/?page=`;
+      for (let page = 1; page <= TOTAL_PAGES; page++) {
+        globalPage++;
+        scrapeProgress = { current: globalPage, total: totalPages, annee };
+        const url = base + page;
+        try {
+          let html = getCachedPage(url);
+          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+          const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
+          allFilms.push(...raw);
+          console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
+        } catch(e) {
+          console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
+          lastScrapeErrors.push({ page, annee, message: e.message });
         }
-        const result = dedupeAndSortFilms(allFilms, noteMin);
-        cachedFilms  = result;
-        await saveLastScrape();
-        if (redis) {
-          try { await redis.set('films', JSON.stringify(result)); }
-          catch(e) { console.warn('[auto] Erreur sauvegarde films Redis:', e.message); }
-        }
-        console.log(`✅ Auto-scrape films (liste) terminé — ${result.length} films\n`);
-      } catch(e) { console.error('[auto] Erreur liste films:', e.message); }
-    }
-
-    // ── 2. Scrape les plateformes si périmées (ou si liste vient d'être rescrapée) ──
-    if (detStale || listStale) {
-      const toFetch = cachedFilms.filter(f => f.allocineId);
-      if (toFetch.length > 0) {
-        const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
-        console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
-        let done = 0;
-        for (const film of toFetch) {
-          const cacheKey = `id:${film.allocineId}`;
-          if (detStale) detailsCache.delete(cacheKey); // force le rafraîchissement
-          if (getCachedDetails(cacheKey)) { done++; continue; }
-          try {
-            const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
-            const filmResp = await rateLimitedFetch(filmUrl);
-            const html     = filmResp.data;
-            const isValid  = /fichefilm_gen_cfilm|provider-tile|Titre original|Année de production/i.test(html);
-            if (!isValid) {
-              console.warn(`[auto] Fiche film ${film.allocineId} → page suspecte, ignorée`);
-            } else {
-              const lines = htmlToLines(html);
-              let pays = null, annee = null;
-              for (let i = 0; i < lines.length - 1; i++) {
-                if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
-                if (lines[i] === 'Année de production') annee = lines[i + 1];
-                if (pays && annee) break;
-              }
-              const providers = extractProviders(html);
-              const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
-              if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
-            }
-          } catch(e) { console.warn(`[auto] Détail film ${film.allocineId}: ${e.message}`); }
-          done++;
-          if (done % 50 === 0) console.log(`[auto] Plateformes: ${done}/${toFetch.length}`);
-        }
-        lastDetailsScrape = new Date().toISOString();
-        if (redis) {
-          try {
-            await saveDetailsCache();
-            await redis.set('lastDetailsScrape', lastDetailsScrape);
-          } catch(e) { console.warn('[auto] Erreur Redis plateformes:', e.message); }
-        }
-        console.log(`✅ Auto-scrape films (plateformes) terminé — ${done} fiches\n`);
+        await sleep(1500 + Math.random() * 500);
       }
     }
+    const result = dedupeAndSortFilms(allFilms, 3.5);
+    cachedFilms  = result;
+    await saveLastScrape();
+    if (redis) { try { await redis.set('films', JSON.stringify(result)); } catch(e) { console.warn('[auto] Redis films:', e.message); } }
+    console.log(`✅ Films liste terminée — ${result.length} films\n`);
   } finally {
     isScraping     = false;
     scrapeProgress = { current: 0, total: 0, annee: '' };
   }
 }
 
+// ── Phase 2 : plateformes des films ───────────────────────────────────────
 /**
- * Auto-scrape séries en tâche de fond si le cache est périmé.
- * Déclenché au démarrage du serveur puis toutes les 24h via setInterval.
- * Scrape d'abord la liste, puis les détails (plateformes, statut, pays…).
+ * Scrape les plateformes/détails films si lastDetailsScrape > AUTO_SCRAPE_DAYS jours,
+ * ou si la liste a été rescrapée plus récemment que les détails.
+ * Déclenché au démarrage et chaque nuit à 3h15 par scheduleNightlyScraping().
  */
-async function autoScrapeSeriesIfStale() {
-  if (isScrapingSeries) return;
-
-  const ageListMs   = lastSeriesScrape        ? Date.now() - new Date(lastSeriesScrape).getTime()        : Infinity;
-  const ageDetMs    = lastSeriesDetailsScrape  ? Date.now() - new Date(lastSeriesDetailsScrape).getTime() : Infinity;
-  const ageListDays = ageListMs  / 86400000;
-  const ageDetDays  = ageDetMs   / 86400000;
-
-  const listStale = ageListDays >= AUTO_SCRAPE_DAYS;
-  const detStale  = ageDetDays  >= AUTO_SCRAPE_DAYS;
-
-  if (!listStale && !detStale) {
-    console.log(`⏭️  Auto-scrape séries ignoré — liste il y a ${ageListDays.toFixed(1)}j, détails il y a ${ageDetDays.toFixed(1)}j`);
-    return;
+async function autoScrapeFilmsDetailsIfStale() {
+  if (isScraping) return;
+  const ageDetDays  = lastDetailsScrape ? (Date.now() - new Date(lastDetailsScrape).getTime()) / 86400000 : Infinity;
+  const ageListDays = lastScrape        ? (Date.now() - new Date(lastScrape).getTime())        / 86400000 : Infinity;
+  // Scrape si détails périmés OU si la liste est plus fraîche que les détails
+  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
+  const listMoreRecent = ageListDays < ageDetDays;
+  if (!detStale && !listMoreRecent) {
+    console.log(`⏭️  Films plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
+  isScraping = true;
+  try {
+    const toFetch = cachedFilms.filter(f => f.allocineId);
+    if (toFetch.length === 0) { console.log('⏭️  Films plateformes : aucun film avec allocineId'); return; }
+    const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
+    console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+    let done = 0;
+    for (const film of toFetch) {
+      const cacheKey = `id:${film.allocineId}`;
+      detailsCache.delete(cacheKey); // force le rafraîchissement
+      try {
+        const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
+        const filmResp = await rateLimitedFetch(filmUrl);
+        const html     = filmResp.data;
+        const isValid  = /fichefilm_gen_cfilm|provider-tile|Titre original|Année de production/i.test(html);
+        if (!isValid) {
+          console.warn(`[auto] Film ${film.allocineId} → page suspecte, ignorée`);
+        } else {
+          const lines = htmlToLines(html);
+          let pays = null, annee = null;
+          for (let i = 0; i < lines.length - 1; i++) {
+            if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
+            if (lines[i] === 'Année de production') annee = lines[i + 1];
+            if (pays && annee) break;
+          }
+          const providers = extractProviders(html);
+          const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
+          if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
+        }
+      } catch(e) { console.warn(`[auto] Film ${film.allocineId}: ${e.message}`); }
+      done++;
+      if (done % 50 === 0) console.log(`[auto] Plateformes films: ${done}/${toFetch.length}`);
+    }
+    lastDetailsScrape = new Date().toISOString();
+    if (redis) {
+      try { await saveDetailsCache(); await redis.set('lastDetailsScrape', lastDetailsScrape); }
+      catch(e) { console.warn('[auto] Redis plateformes:', e.message); }
+    }
+    console.log(`✅ Films plateformes terminées — ${done} fiches\n`);
+  } finally {
+    isScraping     = false;
+    scrapeProgress = { current: 0, total: 0, annee: '' };
+  }
+}
 
+// ── Phase 3 : liste des séries ─────────────────────────────────────────────
+/**
+ * Scrape la liste des séries si lastSeriesScrape > AUTO_SCRAPE_DAYS jours.
+ * Déclenché au démarrage et chaque nuit à 3h30 par scheduleNightlyScraping().
+ */
+async function autoScrapeSeriesListIfStale() {
+  if (isScrapingSeries) return;
+  const ageDays = lastSeriesScrape ? (Date.now() - new Date(lastSeriesScrape).getTime()) / 86400000 : Infinity;
+  if (ageDays < AUTO_SCRAPE_DAYS) {
+    console.log(`⏭️  Séries liste OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
   isScrapingSeries      = true;
   lastSeriesScrapeErrors = [];
   seriesProgress         = { current: 0, total: SERIES_PAGES };
-
-  // ── 1. Scrape la liste si périmée ────────────────────────────────────────
-  if (listStale) {
-    const label = lastSeriesScrape ? `${ageListDays.toFixed(1)} jour(s)` : 'jamais';
-    console.log(`\n🔄 Auto-scrape séries (liste) — dernier scraping il y a ${label}`);
-
+  try {
+    const label = lastSeriesScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
+    console.log(`\n🔄 Auto-scrape séries (liste) — dernier il y a ${label}`);
     const allSeries = [];
-    let globalPage  = 0;
-
-    try {
-      for (const source of SERIES_SOURCES) {
-        console.log(`[auto-series] Source: ${source.label}`);
-        for (let page = 1; page <= source.pages; page++) {
-          globalPage++;
-          seriesProgress.current = globalPage;
-          const url = `${source.baseUrl}?page=${page}`;
-          try {
-            let html = getCachedPage(url);
-            if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
-            const raw = parseSeries(html);
-            allSeries.push(...raw);
-            console.log(`[auto-series] ${source.label} p${page}/${source.pages} → ${raw.length} séries`);
-            if (raw.length === 0) break; // page vide, on passe à la source suivante
-          } catch(e) {
-            const msg = e.response ? `HTTP ${e.response.status}` : e.message;
-            console.warn(`[auto-series] ${source.label} p${page} erreur: ${msg}`);
-            lastSeriesScrapeErrors.push({ source: source.label, page, message: msg });
-          }
-          await sleep(1500 + Math.random() * 500);
-        }
-      }
-
-      const result     = dedupeAndSortSeries(allSeries);
-      cachedSeries     = result;
-      lastSeriesScrape = new Date().toISOString();
-      if (redis) {
+    let   globalPage = 0;
+    for (const source of SERIES_SOURCES) {
+      for (let page = 1; page <= source.pages; page++) {
+        globalPage++;
+        seriesProgress.current = globalPage;
+        const url = `${source.baseUrl}?page=${page}`;
         try {
-          await redis.set('series', JSON.stringify(result));
-          await redis.set('lastSeriesScrape', lastSeriesScrape);
-        } catch(e) { console.warn('[auto-series] Erreur Redis:', e.message); }
+          let html = getCachedPage(url);
+          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+          const raw = parseSeries(html);
+          allSeries.push(...raw);
+          if (raw.length === 0) break;
+        } catch(e) { lastSeriesScrapeErrors.push({ source: source.label, page, message: e.message }); }
+        await sleep(1500 + Math.random() * 500);
       }
-      console.log(`✅ Auto-scrape séries (liste) terminé — ${result.length} séries\n`);
-    } catch(e) {
-      console.error('[auto-series] Erreur liste:', e.message);
     }
-  }
-
-  // ── 2. Scrape les détails si périmés (ou si on vient de rescaper la liste) ──
-  if (detStale || listStale) {
-    const toFetch = cachedSeries.filter(s => s.allocineId);
-    if (toFetch.length > 0) {
-      const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
-      console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
-      let done = 0;
-      for (const serie of toFetch) {
-        const cacheKey = `sid:${serie.allocineId}`;
-        // Force le rafraîchissement si les détails sont périmés
-        if (detStale) seriesDetailsCache.delete(cacheKey);
-        if (getCachedSeriesDetails(cacheKey)) { done++; continue; }
-        try {
-          const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${serie.allocineId}.html`;
-          const resp = await rateLimitedFetch(url);
-          const html = resp.data;
-          const lines = htmlToLines(html);
-          let nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
-          for (let i = 0; i < lines.length - 1; i++) {
-            const l = lines[i], n = lines[i + 1];
-            if (/^Nationalités?$/i.test(l))              pays = n;
-            if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
-            if (l === 'Saisons' && /^\d+$/.test(n))       nbSaisons = parseInt(n);
-            if (l === 'Statut')                            statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
-            if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
-              const parts = l.split(/\s*[-–—−]\s*/);
-              const yB = parts[1]?.match(/\d{4}/)?.[0];
-              const yA = parts[0]?.match(/\d{4}/)?.[0];
-              if (yB) derniereAnnee = yB;
-              else if (yA && !derniereAnnee) derniereAnnee = yA;
-            }
-            if (!derniereAnnee) { const m = l.match(/^[Dd]epuis\s+(\d{4})$/); if (m) derniereAnnee = m[1]; }
-            if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
-            if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
-          }
-          const providers = extractProviders(html);
-          const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
-          if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
-        } catch(e) { console.warn(`[auto-series] Détail ${serie.allocineId}: ${e.message}`); }
-        done++;
-        if (done % 20 === 0) console.log(`[auto-series] Détails: ${done}/${toFetch.length}`);
-      }
-
-      lastSeriesDetailsScrape = new Date().toISOString();
-      if (redis) {
-        try {
-          await redis.set('series_details', JSON.stringify(Object.fromEntries(seriesDetailsCache)));
-          await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
-        } catch(e) { console.warn('[auto-series] Erreur Redis détails:', e.message); }
-      }
-      console.log(`✅ Auto-scrape séries (détails) terminé — ${done} fiches\n`);
+    const result     = dedupeAndSortSeries(allSeries);
+    cachedSeries     = result;
+    lastSeriesScrape = new Date().toISOString();
+    if (redis) {
+      try { await redis.set('series', JSON.stringify(result)); await redis.set('lastSeriesScrape', lastSeriesScrape); }
+      catch(e) { console.warn('[auto] Redis séries liste:', e.message); }
     }
+    console.log(`✅ Séries liste terminée — ${result.length} séries\n`);
+  } finally {
+    isScrapingSeries = false;
+    seriesProgress   = { current: 0, total: SERIES_PAGES };
   }
-
-  isScrapingSeries  = false;
-  seriesProgress    = { current: 0, total: SERIES_PAGES };
 }
+
+// ── Phase 4 : détails des séries ───────────────────────────────────────────
+/**
+ * Scrape les détails séries si lastSeriesDetailsScrape > AUTO_SCRAPE_DAYS jours,
+ * ou si la liste a été rescrapée plus récemment que les détails.
+ * Déclenché au démarrage et chaque nuit à 3h45 par scheduleNightlyScraping().
+ */
+async function autoScrapeSeriesDetailsIfStale() {
+  if (isScrapingSeries) return;
+  const ageDetDays  = lastSeriesDetailsScrape ? (Date.now() - new Date(lastSeriesDetailsScrape).getTime()) / 86400000 : Infinity;
+  const ageListDays = lastSeriesScrape        ? (Date.now() - new Date(lastSeriesScrape).getTime())        / 86400000 : Infinity;
+  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
+  const listMoreRecent = ageListDays < ageDetDays;
+  if (!detStale && !listMoreRecent) {
+    console.log(`⏭️  Séries détails OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  isScrapingSeries = true;
+  try {
+    const toFetch = cachedSeries.filter(s => s.allocineId);
+    if (toFetch.length === 0) { console.log('⏭️  Séries détails : aucune série avec allocineId'); return; }
+    const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
+    console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
+    let done = 0;
+    for (const serie of toFetch) {
+      const cacheKey = `sid:${serie.allocineId}`;
+      seriesDetailsCache.delete(cacheKey);
+      try {
+        const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${serie.allocineId}.html`;
+        const resp = await rateLimitedFetch(url);
+        const html = resp.data;
+        const lines = htmlToLines(html);
+        let nbSaisons = null, statut = null, derniereAnnee = null, pays = null;
+        for (let i = 0; i < lines.length - 1; i++) {
+          const l = lines[i], n = lines[i + 1];
+          if (/^Nationalités?$/i.test(l))              pays = n;
+          if (/^Nationalité\s*:(.+)/i.test(l) && !pays) pays = l.replace(/^Nationalité\s*:\s*/i, '').trim();
+          if (l === 'Saisons' && /^\d+$/.test(n))       nbSaisons = parseInt(n);
+          if (l === 'Statut')                            statut = /en cours/i.test(n) ? 'En cours' : /termin/i.test(n) ? 'Terminée' : n;
+          if (/^\d{4}\s*[-–—−]\s*(\d{4}|en cours|\.\.\.)$/i.test(l)) {
+            const parts = l.split(/\s*[-–—−]\s*/);
+            const yB = parts[1]?.match(/\d{4}/)?.[0];
+            const yA = parts[0]?.match(/\d{4}/)?.[0];
+            if (yB) derniereAnnee = yB;
+            else if (yA && !derniereAnnee) derniereAnnee = yA;
+          }
+          if (!derniereAnnee) { const m = l.match(/^[Dd]epuis\s+(\d{4})$/); if (m) derniereAnnee = m[1]; }
+          if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
+          if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
+        }
+        const providers = extractProviders(html);
+        const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
+        if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
+      } catch(e) { console.warn(`[auto] Série ${serie.allocineId}: ${e.message}`); }
+      done++;
+      if (done % 20 === 0) console.log(`[auto] Séries détails: ${done}/${toFetch.length}`);
+    }
+    lastSeriesDetailsScrape = new Date().toISOString();
+    if (redis) {
+      try {
+        await redis.set('series_details', JSON.stringify(Object.fromEntries(seriesDetailsCache)));
+        await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
+      } catch(e) { console.warn('[auto] Redis séries détails:', e.message); }
+    }
+    console.log(`✅ Séries détails terminés — ${done} fiches\n`);
+  } finally {
+    isScrapingSeries = false;
+    seriesProgress   = { current: 0, total: SERIES_PAGES };
+  }
+}
+
 
 /**
  * Crée les profils famille par défaut s'ils n'existent pas encore.
@@ -2158,14 +2181,13 @@ app.listen(PORT, () => {
   // Séquence d'initialisation :
   //   1. Charge Redis (films, séries, utilisateurs, prefs, caches)
   //   2. Crée les profils par défaut s'ils n'existent pas
-  //   3. Lance un auto-scrape des films si le cache est périmé
-  //   4. Lance un auto-scrape des séries (liste + détails) si le cache est périmé
+  //   3–6. Lance les 4 auto-scrapes si le cache est périmé
+  //   7. Programme le scraping nocturne quotidien (3h00–3h45, heure Paris)
   loadUserdata()
     .then(() => seedDefaultProfiles())
-    .then(() => autoScrapeIfStale())
-    .then(() => autoScrapeSeriesIfStale());
-
-  // Vérifie toutes les 24h si un auto-scrape est nécessaire
-  setInterval(() => autoScrapeIfStale(),       24 * 60 * 60 * 1000);
-  setInterval(() => autoScrapeSeriesIfStale(), 24 * 60 * 60 * 1000);
+    .then(() => autoScrapeFilmsListIfStale())
+    .then(() => autoScrapeFilmsDetailsIfStale())
+    .then(() => autoScrapeSeriesListIfStale())
+    .then(() => autoScrapeSeriesDetailsIfStale())
+    .then(() => scheduleNightlyScraping());
 });

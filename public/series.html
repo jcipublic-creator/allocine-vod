@@ -432,7 +432,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v136';
+const LS_SVERSION = 'vod_series_v137';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1425,45 +1425,19 @@ const UI = {
 };
 
 
-// ─── Auto-scrape au chargement ────────────────────────────────────────────────
-/**
- * Vérifie si les données séries sont périmées (> AUTO_DAYS jours) et relance
- * le scraping automatiquement si besoin.
- * Retourne true si un scraping a été déclenché.
- */
-async function checkAutoScrapeSeries() {
-  const AUTO_DAYS = 2;
-  const daysSince = iso => iso ? (Date.now() - new Date(iso).getTime()) / 86400000 : Infinity;
-  try {
-    const r = await fetch('/api/series/health', { signal: AbortSignal.timeout(4000) });
-    if (!r.ok) return false;
-    const d = await r.json();
-    if (d.isScrapingSeries) return false; // scraping déjà en cours
-    if (daysSince(d.lastScrape) > AUTO_DAYS) {
-      showError('🔄 Mise à jour automatique : scraping de la liste séries…');
-      startSeriesScrape(); // relance liste + détails quand terminé
-      return true;
-    }
-    if (daysSince(d.lastDetailsScrape) > AUTO_DAYS) {
-      showError('🔄 Mise à jour automatique des détails séries…');
-      await clearSeriesCache('details'); // vide le cache détails + incrémente _detLoadGen
-      startSeriesDetailsLoading();
-      return true;
-    }
-  } catch(e) {}
-  return false;
-}
-
 // ══════════════════════════════════════════════════════════════════════════════
 //  INITIALISATION
 //  Séquence au chargement de la page :
-//    1. Initialise le profil utilisateur (shared.js → /api/users)
-//    2. Charge les préférences
-//    3. Tente de charger depuis localStorage (affichage immédiat)
-//    4. Ping le serveur (active les boutons de scraping)
-//    5. Charge les userdata si profil connu
-//    6. Vérifie si un auto-scrape est nécessaire (> 2 jours)
-//       Sinon → charge depuis le serveur ou complète les détails manquants
+//    1. Charge le secret applicatif (shared.js → /api/config)
+//    2. Initialise le profil utilisateur (shared.js → /api/users)
+//    3. Charge les préférences
+//    4. Tente de charger depuis localStorage (affichage immédiat)
+//    5. Ping le serveur (active les boutons de scraping)
+//    6. Charge les userdata si profil connu
+//    7. Charge depuis le serveur ou complète les détails manquants
+//
+//  Le scraping automatique est géré exclusivement côté serveur
+//  (autoScrapeSeriesIfStale + setInterval 24h). Le client ne le déclenche jamais.
 // ══════════════════════════════════════════════════════════════════════════════
 
 (async () => {
@@ -1480,13 +1454,10 @@ async function checkAutoScrapeSeries() {
   await pingServer();                 // vérifie la disponibilité du serveur
   if (_currentUserId) await loadUserdata(); // charge les notes utilisateur
 
-  const autoScrapeTriggered = await checkAutoScrapeSeries();
-  if (!autoScrapeTriggered) {
-    if (!hadCache) {
-      await loadSeriesFromServer();         // premier chargement : récupère tout
-    } else {
-      startSeriesDetailsLoading();          // cache présent : complète les détails manquants
-    }
+  if (!hadCache) {
+    await loadSeriesFromServer();         // premier chargement : récupère tout
+  } else {
+    startSeriesDetailsLoading();          // cache présent : complète les détails manquants
   }
 })();
 </script>

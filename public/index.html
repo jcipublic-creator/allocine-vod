@@ -47,6 +47,18 @@ body {
 }
 .header-title { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
 .note-label { font-size: 11px; color: var(--muted); white-space: nowrap; }
+#scrape-indicator {
+  display: none; align-items: center; gap: 4px;
+  font-size: 10px; color: var(--gold);
+  background: rgba(240,192,64,.08); border: 1px solid rgba(240,192,64,.25);
+  border-radius: 8px; padding: 2px 7px; white-space: nowrap; flex-shrink: 0;
+}
+#scrape-indicator.show { display: flex; }
+#scrape-indicator .si-dot {
+  width: 5px; height: 5px; border-radius: 50%; background: var(--gold);
+  animation: si-pulse .9s ease-in-out infinite alternate;
+}
+@keyframes si-pulse { from { opacity: .3; } to { opacity: 1; } }
 
 /* ── Progress bars ── */
 .prog-zone { padding: 8px 14px 4px; display: none; }
@@ -423,6 +435,7 @@ body {
     <div class="header-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🎬 Films VOD</div>
     <a href="/series.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">📺 Séries</a>
   </div>
+  <div id="scrape-indicator"><span class="si-dot"></span><span id="scrape-indicator-label"></span></div>
   <div id="server-status" style="display:none;"></div>
   <div id="profile-header-badge" onclick="openProfiles()">
     👤 <span id="profile-name-badge">—</span>
@@ -822,6 +835,51 @@ async function pingServer() {
     if (btnPlat) btnPlat.disabled = true;
   }
 }
+
+// ─── Indicateur scraping header ───────────────────────────────────────────────
+const _phaseLabel = {
+  'films-list':    'Films · liste',
+  'films-details': 'Films · plateformes',
+  'series-list':   'Séries · liste',
+  'series-details':'Séries · détails',
+};
+const _phaseKey = {
+  'films-list':    'filmsList',
+  'films-details': 'filmsDetails',
+  'series-list':   'seriesList',
+  'series-details':'seriesDetails',
+};
+function _updateScrapeIndicator(st) {
+  const el  = document.getElementById('scrape-indicator');
+  const lbl = document.getElementById('scrape-indicator-label');
+  if (!el) return;
+  if (st?.phase) {
+    const pct = st[_phaseKey[st.phase]]?.pct ?? '';
+    lbl.textContent = `${_phaseLabel[st.phase] || st.phase}${pct !== '' ? ' ' + pct + '%' : ''}`;
+    el.classList.add('show');
+  } else {
+    el.classList.remove('show');
+  }
+}
+(function startScrapePolling() {
+  let interval = 10000;
+  async function poll() {
+    try {
+      const r = await fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) {
+        const st = await r.json();
+        _updateScrapeIndicator(st);
+        // Si scraping actif → rafraîchit aussi le panneau Info si ouvert
+        if (st?.phase && document.getElementById('info-modal')?.classList.contains('open')) {
+          if (_infoData) { _infoData.status = st; renderInfo(); }
+        }
+        interval = st?.phase ? 3000 : 10000;
+      }
+    } catch(e) {}
+    setTimeout(poll, interval);
+  }
+  setTimeout(poll, 5000); // 1er poll 5s après le chargement
+})();
 
 // ─── Info ─────────────────────────────────────────────────────────────────────
 let _infoData = null;

@@ -1307,7 +1307,7 @@ function openConfirm() {
 function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
 
 // ─── Monitoring auto-scrape ───────────────────────────────────────────────────
-let _pollTimer = null;
+// Note : _pollTimer est déclaré dans shared.js — ne pas redéclarer ici.
 
 async function startAutoScrapeMonitoring() {
   try {

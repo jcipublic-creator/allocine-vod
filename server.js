@@ -92,11 +92,14 @@ function requireRateLimit(max, windowMs) {
 
 // ── État global Films ──────────────────────────────────────────────────────
 let cachedFilms      = [];   // dernière liste de films scrapés (en mémoire + Redis)
-let lastScrape       = null; // ISO — dernier scraping liste films
-let lastDetailsScrape= null; // ISO — dernier scraping plateformes films
-let isScraping       = false;
-let scrapeProgress   = { current: 0, total: 0, annee: '' };
-let lastScrapeErrors = [];
+let lastScrape            = null; // ISO — dernier scraping liste films
+let lastDetailsScrape     = null; // ISO — dernier scraping plateformes films
+let isScraping            = false;
+let scrapeProgress        = { current: 0, total: 0, annee: '' };
+let filmsDetailsProgress  = { current: 0, total: 0 };
+let lastScrapeErrors      = [];
+// Phase du scraping nocturne en cours : null | 'films-list' | 'films-details' | 'series-list' | 'series-details'
+let scrapingPhase         = null;
 
 // ── Sources Séries (fenêtre glissante 4 ans) ───────────────────────────────
 // Génère dynamiquement : Top AlloCiné + presse de l'année courante et les 3 ans précédents.
@@ -117,9 +120,10 @@ const SERIES_DETAILS_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 jours — durée de 
 let cachedSeries            = [];   // dernière liste de séries scrapées
 let lastSeriesScrape        = null; // ISO — dernier scraping liste séries
 let lastSeriesDetailsScrape = null; // ISO — dernier scraping fiches séries
-let isScrapingSeries        = false;
-let seriesProgress          = { current: 0, total: 0 };
-let lastSeriesScrapeErrors  = [];
+let isScrapingSeries         = false;
+let seriesProgress           = { current: 0, total: 0 };
+let seriesDetailsProgress    = { current: 0, total: 0 };
+let lastSeriesScrapeErrors   = [];
 const seriesDetailsCache    = new Map(); // clé: "sid:XXXXX" → { value, cachedAt }
 
 app.use(express.static(path.join(__dirname, 'public')));
@@ -968,6 +972,34 @@ app.get('/api/scrape-status', (_req, res) => {
 });
 
 /**
+ * GET /api/scraping-status
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne l'état d'avancement des 4 scrapings nocturnes.
+ *        Utilisé par le menu Info pour afficher la progression en temps réel.
+ *
+ * Réponse: { phase, filmsList, filmsDetails, seriesList, seriesDetails }
+ *   phase = null | 'films-list' | 'films-details' | 'series-list' | 'series-details'
+ *   chaque section : { active: bool, pct: 0-100, label?: string }
+ */
+app.get('/api/scraping-status', (_req, res) => {
+  const pctFilmsList    = scrapeProgress.total
+    ? Math.round(scrapeProgress.current / scrapeProgress.total * 100) : 0;
+  const pctFilmsDetails = filmsDetailsProgress.total
+    ? Math.round(filmsDetailsProgress.current / filmsDetailsProgress.total * 100) : 0;
+  const pctSeriesList   = seriesProgress.total
+    ? Math.round(seriesProgress.current / seriesProgress.total * 100) : 0;
+  const pctSeriesDetails = seriesDetailsProgress.total
+    ? Math.round(seriesDetailsProgress.current / seriesDetailsProgress.total * 100) : 0;
+  res.json({
+    phase: scrapingPhase,
+    filmsList:    { active: scrapingPhase === 'films-list',    pct: pctFilmsList,    annee: scrapeProgress.annee },
+    filmsDetails: { active: scrapingPhase === 'films-details', pct: pctFilmsDetails, total: filmsDetailsProgress.total },
+    seriesList:   { active: scrapingPhase === 'series-list',   pct: pctSeriesList   },
+    seriesDetails:{ active: scrapingPhase === 'series-details',pct: pctSeriesDetails,total: seriesDetailsProgress.total },
+  });
+});
+
+/**
  * GET /api/scrape?annees=2026,2025&noteMin=3.5
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Lance le scraping des pages VOD AlloCiné pour les années demandées.
@@ -1264,7 +1296,8 @@ async function autoScrapeFilmsListIfStale() {
   if (ageDays < AUTO_SCRAPE_DAYS) {
     console.log(`⏭️  Films liste OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
-  isScraping = true;
+  isScraping    = true;
+  scrapingPhase = 'films-list';
   try {
     const label      = lastScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
     console.log(`\n🔄 Auto-scrape films (liste) — dernier il y a ${label}`);
@@ -1300,6 +1333,7 @@ async function autoScrapeFilmsListIfStale() {
     console.log(`✅ Films liste terminée — ${result.length} films\n`);
   } finally {
     isScraping     = false;
+    scrapingPhase  = null;
     scrapeProgress = { current: 0, total: 0, annee: '' };
   }
 }
@@ -1320,12 +1354,14 @@ async function autoScrapeFilmsDetailsIfStale() {
   if (!detStale && !listMoreRecent) {
     console.log(`⏭️  Films plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
-  isScraping = true;
+  isScraping    = true;
+  scrapingPhase = 'films-details';
   try {
     const toFetch = cachedFilms.filter(f => f.allocineId);
     if (toFetch.length === 0) { console.log('⏭️  Films plateformes : aucun film avec allocineId'); return; }
     const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
     console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+    filmsDetailsProgress = { current: 0, total: toFetch.length };
     let done = 0;
     for (const film of toFetch) {
       const cacheKey = `id:${film.allocineId}`;
@@ -1351,6 +1387,7 @@ async function autoScrapeFilmsDetailsIfStale() {
         }
       } catch(e) { console.warn(`[auto] Film ${film.allocineId}: ${e.message}`); }
       done++;
+      filmsDetailsProgress.current = done;
       if (done % 50 === 0) console.log(`[auto] Plateformes films: ${done}/${toFetch.length}`);
     }
     lastDetailsScrape = new Date().toISOString();
@@ -1360,8 +1397,10 @@ async function autoScrapeFilmsDetailsIfStale() {
     }
     console.log(`✅ Films plateformes terminées — ${done} fiches\n`);
   } finally {
-    isScraping     = false;
-    scrapeProgress = { current: 0, total: 0, annee: '' };
+    isScraping           = false;
+    scrapingPhase        = null;
+    scrapeProgress       = { current: 0, total: 0, annee: '' };
+    filmsDetailsProgress = { current: 0, total: 0 };
   }
 }
 
@@ -1376,7 +1415,8 @@ async function autoScrapeSeriesListIfStale() {
   if (ageDays < AUTO_SCRAPE_DAYS) {
     console.log(`⏭️  Séries liste OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
-  isScrapingSeries      = true;
+  isScrapingSeries       = true;
+  scrapingPhase          = 'series-list';
   lastSeriesScrapeErrors = [];
   seriesProgress         = { current: 0, total: SERIES_PAGES };
   try {
@@ -1409,6 +1449,7 @@ async function autoScrapeSeriesListIfStale() {
     console.log(`✅ Séries liste terminée — ${result.length} séries\n`);
   } finally {
     isScrapingSeries = false;
+    scrapingPhase    = null;
     seriesProgress   = { current: 0, total: SERIES_PAGES };
   }
 }
@@ -1428,12 +1469,14 @@ async function autoScrapeSeriesDetailsIfStale() {
   if (!detStale && !listMoreRecent) {
     console.log(`⏭️  Séries détails OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
-  isScrapingSeries = true;
+  isScrapingSeries    = true;
+  scrapingPhase       = 'series-details';
   try {
     const toFetch = cachedSeries.filter(s => s.allocineId);
     if (toFetch.length === 0) { console.log('⏭️  Séries détails : aucune série avec allocineId'); return; }
     const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
     console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
+    seriesDetailsProgress = { current: 0, total: toFetch.length };
     let done = 0;
     for (const serie of toFetch) {
       const cacheKey = `sid:${serie.allocineId}`;
@@ -1466,6 +1509,7 @@ async function autoScrapeSeriesDetailsIfStale() {
         if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
       } catch(e) { console.warn(`[auto] Série ${serie.allocineId}: ${e.message}`); }
       done++;
+      seriesDetailsProgress.current = done;
       if (done % 20 === 0) console.log(`[auto] Séries détails: ${done}/${toFetch.length}`);
     }
     lastSeriesDetailsScrape = new Date().toISOString();
@@ -1477,8 +1521,10 @@ async function autoScrapeSeriesDetailsIfStale() {
     }
     console.log(`✅ Séries détails terminés — ${done} fiches\n`);
   } finally {
-    isScrapingSeries = false;
-    seriesProgress   = { current: 0, total: SERIES_PAGES };
+    isScrapingSeries      = false;
+    scrapingPhase         = null;
+    seriesProgress        = { current: 0, total: SERIES_PAGES };
+    seriesDetailsProgress = { current: 0, total: 0 };
   }
 }
 

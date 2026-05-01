@@ -189,6 +189,12 @@ body {
 .info-row .lbl { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; }
 .info-row .val { font-size: 12px; color: var(--text); text-align: right; }
 .info-errors { margin-top: 10px; font-size: 11px; color: #e74c3c; line-height: 1.6; }
+.info-progress { margin-top: 6px; }
+.info-progress-bar-wrap { height: 4px; background: rgba(42,79,112,.5); border-radius: 2px; overflow: hidden; margin-top: 3px; }
+.info-progress-bar { height: 100%; background: var(--gold); border-radius: 2px; transition: width .4s ease; }
+.info-progress-label { font-size: 10px; color: var(--gold); display: flex; justify-content: space-between; }
+.info-scraping-badge { display: inline-block; font-size: 10px; color: var(--gold); background: rgba(240,192,64,.1); border: 1px solid rgba(240,192,64,.3); border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; animation: pulse-badge .8s ease-in-out infinite alternate; }
+@keyframes pulse-badge { from { opacity: .6; } to { opacity: 1; } }
 .info-section-title { font-size: 10px; font-weight: 700; color: var(--gold); text-transform: uppercase; letter-spacing: 1px; margin-top: 14px; margin-bottom: 2px; padding-bottom: 4px; border-bottom: 1px solid rgba(240,192,64,.2); }
 .info-section-title:first-child { margin-top: 0; }
 .info-close-btn {
@@ -819,41 +825,87 @@ async function pingServer() {
 
 // ─── Info ─────────────────────────────────────────────────────────────────────
 let _infoData = null;
+let _infoRefreshTimer = null;
 
 async function openInfo() {
   document.getElementById('info-modal').classList.add('open');
   document.getElementById('info-content').innerHTML = 'Chargement…';
-  try {
-    const [rf, rs] = await Promise.all([
-      fetch('/api/health',        { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/series/health', { signal: AbortSignal.timeout(4000) }),
-    ]);
-    _infoData = { films: rf.ok ? await rf.json() : null, series: rs.ok ? await rs.json() : null };
-  } catch(e) { _infoData = null; }
+  await _fetchInfoData();
   renderInfo();
+  _startInfoRefresh();
 }
-function closeInfo() { document.getElementById('info-modal').classList.remove('open'); }
+function closeInfo() {
+  document.getElementById('info-modal').classList.remove('open');
+  _stopInfoRefresh();
+}
+async function _fetchInfoData() {
+  try {
+    const [rf, rs, rst] = await Promise.all([
+      fetch('/api/health',          { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/series/health',   { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/scraping-status', { signal: AbortSignal.timeout(4000) }),
+    ]);
+    _infoData = {
+      films:  rf.ok  ? await rf.json()  : null,
+      series: rs.ok  ? await rs.json()  : null,
+      status: rst.ok ? await rst.json() : null,
+    };
+  } catch(e) { _infoData = null; }
+}
+function _startInfoRefresh() {
+  _stopInfoRefresh();
+  _infoRefreshTimer = setInterval(async () => {
+    if (!document.getElementById('info-modal').classList.contains('open')) { _stopInfoRefresh(); return; }
+    const any = _infoData?.status?.phase != null;
+    if (!any) return; // rien en cours, pas besoin de rafraîchir
+    try {
+      const r = await fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) });
+      if (r.ok) { _infoData.status = await r.json(); renderInfo(); }
+    } catch(e) {}
+  }, 3000);
+}
+function _stopInfoRefresh() {
+  if (_infoRefreshTimer) { clearInterval(_infoRefreshTimer); _infoRefreshTimer = null; }
+}
 function renderInfo() {
   const el  = document.getElementById('info-content');
   if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
   const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
-  const f = _infoData.films, s = _infoData.series;
+  const f = _infoData.films, s = _infoData.series, st = _infoData.status;
   const fErrors = f?.lastScrapeErrors || [];
+
+  function progressBlock(info) {
+    if (!info?.active) return '';
+    const pct = info.pct ?? 0;
+    const extra = info.annee ? ` · ${info.annee}` : (info.total ? ` · ${info.total} entrées` : '');
+    return `<div class="info-progress">
+      <div class="info-progress-label"><span>En cours${extra}</span><span>${pct}%</span></div>
+      <div class="info-progress-bar-wrap"><div class="info-progress-bar" style="width:${pct}%"></div></div>
+    </div>`;
+  }
+  function badge(active) {
+    return active ? '<span class="info-scraping-badge">⟳ en cours</span>' : '';
+  }
+
   el.innerHTML = `
     <div class="info-section-title">Serveur</div>
     <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(f?.version || s?.version || '—')}</span></div>
     <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>
     <div class="info-section-title">🎬 Films</div>
     <div class="info-row"><span class="lbl">En base</span><span class="val">${f?.cachedFilms ?? '—'} films</span></div>
-    <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(f?.lastScrape)}</span></div>
-    <div class="info-row"><span class="lbl">Scraping plateformes</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.filmsList?.active)}</span><span class="val">${fmt(f?.lastScrape)}</span></div>
+    ${progressBlock(st?.filmsList)}
+    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.filmsDetails?.active)}</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.filmsDetails)}
     <div class="info-row"><span class="lbl">Erreurs</span><span class="val">${fErrors.length === 0 ? '✅ Aucune' : `⚠️ ${fErrors.length}`}</span></div>
     ${fErrors.length > 0 ? `<div class="info-errors">${fErrors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
     <div class="info-section-title">📺 Séries</div>
     <div class="info-row"><span class="lbl">En base</span><span class="val">${s?.cachedSeries ?? '—'} séries</span></div>
     <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${s?.cachedDetails ?? '—'} en mémoire</span></div>
-    <div class="info-row"><span class="lbl">Scraping liste</span><span class="val">${fmt(s?.lastScrape)}</span></div>
-    <div class="info-row"><span class="lbl">Scraping détails</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.seriesList?.active)}</span><span class="val">${fmt(s?.lastScrape)}</span></div>
+    ${progressBlock(st?.seriesList)}
+    <div class="info-row"><span class="lbl">Scraping détails${badge(st?.seriesDetails?.active)}</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.seriesDetails)}
   `;
 }
 

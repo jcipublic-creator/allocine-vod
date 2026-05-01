@@ -490,15 +490,15 @@ body {
 <div class="filter-bar" id="filter-bar">
   <select id="fil-decade" onchange="applyFilters()">
     <option value="">Toutes les décennies</option>
-    <option value="2020">Années 2020</option>
-    <option value="2010">Années 2010</option>
-    <option value="2000">Années 2000</option>
-    <option value="1990">Années 1990</option>
-    <option value="1980">Années 1980</option>
-    <option value="1970">Années 1970</option>
-    <option value="1960">Années 1960</option>
-    <option value="1950">Années 1950</option>
-    <option value="1940">Années 1940</option>
+    <option value="2020">À partir de 2020</option>
+    <option value="2010">À partir de 2010</option>
+    <option value="2000">À partir de 2000</option>
+    <option value="1990">À partir de 1990</option>
+    <option value="1980">À partir de 1980</option>
+    <option value="1970">À partir de 1970</option>
+    <option value="1960">À partir de 1960</option>
+    <option value="1950">À partir de 1950</option>
+    <option value="1940">À partir de 1940</option>
   </select>
   <select id="fil-genre" onchange="applyFilters()">
     <option value="">Tous genres</option>
@@ -727,7 +727,8 @@ function renderCards(films) {
     const posterHtml = f.poster
       ? `<div class="card-poster"><img src="${esc(f.poster)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">🎬</div></div>`;
-    const decadePill = f.decade ? `<span class="decade-pill">Années ${esc(f.decade)}</span>` : '';
+    const yearTxt = f.anneeSortie || f.anneeReelle || '';
+    const decadePill = f.decade ? `<span class="decade-pill" id="decade-pill-${i}">Années ${esc(f.decade)}${yearTxt ? ' · ' + esc(yearTxt) : ''}</span>` : `<span id="decade-pill-${i}"></span>`;
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
   <div class="card-top">
@@ -780,6 +781,13 @@ function updateCardMeta(i, data) {
   if (data.annee) {
     const film = _allFilms[i];
     if (film) film.anneeReelle = data.annee;
+    // Met à jour le pill décennie avec l'année réelle si elle n'était pas déjà connue
+    if (film && !film.anneeSortie) {
+      const pillEl = document.getElementById(`decade-pill-${i}`);
+      if (pillEl && film.decade) {
+        pillEl.textContent = `Années ${film.decade} · ${data.annee}`;
+      }
+    }
   }
 }
 
@@ -805,7 +813,7 @@ function applyFiltersResponsive() {
     const providers = provObjs.map(p => p.name.toLowerCase());
     const ud = _userdata[film.allocineId] || {};
 
-    const matchDecade = !decadeFilter || film.decade === decadeFilter;
+    const matchDecade = !decadeFilter || parseInt(film.decade) >= parseInt(decadeFilter);
     const matchGenre  = (!genreFilter || genres.some(g => g.includes(genreFilter)))
                      && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
                      && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));

@@ -2349,7 +2349,16 @@ function parseBesteverFilms(html, decade) {
     // Synopsis
     const synopsis = $card.find('.content-txt').first().text().trim().substring(0, 400);
 
-    films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade: String(decade) });
+    // Année de sortie (text brut dans .meta-body-info, hors liens)
+    let anneeSortie = null;
+    const $metaInfo = $card.find('.meta-body-info').first();
+    if ($metaInfo.length) {
+      const metaText = $metaInfo.text();
+      const yearMatch = metaText.match(/\b(19\d{2}|20\d{2})\b/);
+      if (yearMatch) anneeSortie = yearMatch[1];
+    }
+
+    films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade: String(decade), anneeSortie });
   });
 
   return films;

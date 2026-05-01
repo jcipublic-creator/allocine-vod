@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Films VOD">
+<meta name="apple-mobile-web-app-title" content="Best Ever">
 <link rel="apple-touch-icon" href="/icon-192.svg">
 <link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<title>🎬 Films VOD</title>
+<title>🏆 Best ever</title>
 <style>
 :root {
   --navy:   #0d2137;
@@ -130,7 +130,7 @@ body {
 .card-crew strong { color: var(--text); font-weight: 600; }
 .card-pays  { color: var(--muted); font-weight: 400; }
 .card-actors { font-size: 10px; color: var(--muted); margin-top: 1px; font-style: italic; }
-.year-pill {
+.decade-pill {
   display: inline-block; font-size: 9px; font-weight: 700;
   background: rgba(240,192,64,.12); color: var(--gold);
   border: 1px solid rgba(240,192,64,.25); border-radius: 4px;
@@ -232,13 +232,6 @@ body {
 .confirm-btns button { flex: 1; padding: 13px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-confirm { background: var(--gold); color: #000; }
 .btn-cancel  { background: var(--blue3); color: var(--text); }
-.confirm-note { display: flex; justify-content: space-between; align-items: center; margin: 14px 0 18px; padding: 12px 14px; background: rgba(255,255,255,.04); border-radius: 10px; border: 1px solid var(--blue3); }
-.confirm-note .note-label { font-size: 13px; color: var(--text); }
-.note-input {
-  width: 52px; background: var(--blue2); border: 1px solid var(--blue3);
-  color: var(--text); border-radius: 8px; padding: 5px 6px;
-  font-size: 13px; text-align: center;
-}
 
 /* Error banner */
 #error-banner { margin: 8px 12px; padding: 10px 14px; background: rgba(180,50,50,.25);
@@ -293,7 +286,7 @@ body {
 }
 .submenu .menu-item:last-child { border-bottom: none; }
 
-/* ── Prefs & Profils modales ── */
+/* ── Profils & Prefs modales ── */
 #prefs-modal, #profiles-modal {
   display: none; position: fixed; inset: 0; z-index: 500;
   background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
@@ -343,11 +336,9 @@ body {
 /* ── RESPONSIVE DESKTOP ─────────────────────────────────────── */
 @media (min-width: 700px) {
   body { padding-top: calc(60px + var(--st)); }
-
   .header { height: calc(60px + var(--st)); padding-left: 24px; padding-right: 20px; }
   .header-title { font-size: 18px; }
 
-  /* Grille 2 colonnes */
   .cards {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -355,25 +346,18 @@ body {
     gap: 10px;
   }
 
-  /* Filtres desktop visibles */
   .desktop-only { display: flex !important; }
 
-  /* Filter bar : wrap au lieu du scroll horizontal */
   .filter-bar {
     overflow-x: visible;
     flex-wrap: wrap;
     padding: 10px 20px;
     gap: 8px;
   }
-
-  /* Export visible */
   .export-btns { display: flex; }
-
-  /* Stats : fond légèrement distinct */
   .stats { padding: 8px 20px; }
   #error-banner { margin: 8px 20px; }
 
-  /* Modales centrées */
   #info-modal, #confirm-modal, #prefs-modal, #profiles-modal {
     align-items: center;
     padding-bottom: 0;
@@ -388,8 +372,6 @@ body {
     max-width: 480px;
     padding-bottom: 24px;
   }
-
-  /* Progress zones */
   .prog-zone { padding: 8px 20px 4px; }
 }
 
@@ -409,12 +391,8 @@ body {
 <div id="confirm-modal">
   <div class="confirm-sheet">
     <h3>🔄 Relancer le scraping ?</h3>
-    <p>La liste sera mise à jour en arrière-plan.</p>
+    <p>Les meilleurs films all-time seront mis à jour en arrière-plan.</p>
     <div class="last-scrape" id="confirm-last-scrape"></div>
-    <div class="confirm-note">
-      <span class="note-label">Note presse minimum</span>
-      <input class="note-input" type="number" id="inp-note" value="3.5" min="0" max="5" step="0.1">
-    </div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
       <button class="btn-confirm" onclick="closeConfirm();startScrape()">Confirmer</button>
@@ -432,9 +410,9 @@ body {
 
 <div class="header">
   <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;">
-    <div class="header-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🎬 Films VOD</div>
+    <div class="header-title" style="flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">🏆 Best ever</div>
+    <a href="/index.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">🎬 VOD</a>
     <a href="/series.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">📺 Séries</a>
-    <a href="/bestever.html" style="text-decoration:none;font-size:12px;color:var(--muted);border:1px solid var(--blue3);border-radius:10px;padding:4px 9px;flex-shrink:0;">🏆 Best ever</a>
   </div>
   <div id="scrape-indicator"><span class="si-dot"></span><span id="scrape-indicator-label"></span></div>
   <div id="server-status" style="display:none;"></div>
@@ -458,9 +436,7 @@ body {
   <div class="submenu" id="submenu-debug">
     <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
     <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
-    <button class="menu-item desktop-only" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
-    <button class="menu-item" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
-    <button class="menu-item" onclick="closeMenu();clearFilmsListCache()">🗑️ Vider cache liste</button>
+    <button class="menu-item" onclick="closeMenu();clearBesteverCache()">🗑️ Vider cache liste</button>
   </div>
 </div>
 
@@ -477,12 +453,17 @@ body {
 <div id="error-banner"></div>
 
 <div class="filter-bar" id="filter-bar">
-  <select id="fil-annee" onchange="applyFilters()">
-    <option value="">Toutes les années</option>
-    <option value="2026">À partir de 2026</option>
-    <option value="2025">À partir de 2025</option>
-    <option value="2024">À partir de 2024</option>
-    <option value="2023">À partir de 2023</option>
+  <select id="fil-decade" onchange="applyFilters()">
+    <option value="">Toutes les décennies</option>
+    <option value="2020">Années 2020</option>
+    <option value="2010">Années 2010</option>
+    <option value="2000">Années 2000</option>
+    <option value="1990">Années 1990</option>
+    <option value="1980">Années 1980</option>
+    <option value="1970">Années 1970</option>
+    <option value="1960">Années 1960</option>
+    <option value="1950">Années 1950</option>
+    <option value="1940">Années 1940</option>
   </select>
   <select id="fil-genre" onchange="applyFilters()">
     <option value="">Tous genres</option>
@@ -501,15 +482,15 @@ body {
   </select>
   <select class="desktop-only" id="fil-note" onchange="applyFilters()">
     <option value="0">Toutes les notes</option>
+    <option value="4.5">≥ 4,5</option>
     <option value="4">≥ 4,0</option>
-    <option value="3.8">≥ 3,8</option>
-    <option value="3.5" selected>≥ 3,5</option>
+    <option value="3.5">≥ 3,5</option>
   </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
+    <option value="decade">↓ Décennie</option>
     <option value="presse">↓ Note presse</option>
     <option value="spectateurs">↓ Note spectateurs</option>
-    <option value="annee">↓ Année</option>
   </select>
 </div>
 
@@ -542,6 +523,13 @@ body {
 
 <script src="/shared.js"></script>
 <script>
+// ─── Cache localStorage bestever ──────────────────────────────────────────────
+// Remplace les constantes globales de shared.js pour cette page
+const LS_FILMS_BE   = 'bestever_films';
+const LS_DETAILS_BE = 'bestever_details';
+const LS_DATE_BE    = 'bestever_updated';
+const LS_VERSION_BE = 'bestever_cache_v144';
+
 // ─── Objet UI ─────────────────────────────────────────────────────────────────
 const UI = {
   renderFilms(films) { renderCards(films); },
@@ -600,9 +588,9 @@ const UI = {
     document.getElementById('prog-fill').style.width = '0%';
     document.getElementById('prog-lbl').textContent = 'Scraping en arrière-plan…';
   },
-  onScrapeProgress(pct, annee, count) {
+  onScrapeProgress(pct, decade, count) {
     document.getElementById('prog-fill').style.width = pct + '%';
-    document.getElementById('prog-lbl').textContent = `⏳ ${annee || ''} — ${pct}% — ${count} films`;
+    document.getElementById('prog-lbl').textContent = `⏳ ${decade ? 'Années ' + decade : ''} — ${pct}% — ${count} films`;
   },
   onScrapeDone(btn, lastScrape) {
     document.getElementById('prog-fill').style.width = '100%';
@@ -672,9 +660,9 @@ const UI = {
     el.textContent = msg; el.style.display = 'block';
     setTimeout(() => { el.style.display = 'none'; }, 8000);
   },
-  showAutoScrapeBar(pct, annee) {
+  showAutoScrapeBar(pct, decade) {
     document.getElementById('auto-scrape-fill').style.width = pct + '%';
-    document.getElementById('server-status').textContent = `🔄 ${annee || ''} ${pct}%`;
+    document.getElementById('server-status').textContent = `🔄 ${decade ? 'Années ' + decade + ' ' : ''}${pct}%`;
   },
   hideAutoScrapeBar() {
     const fill = document.getElementById('auto-scrape-fill');
@@ -695,7 +683,6 @@ function renderCards(films) {
     const url = f.allocineId
       ? `https://www.allocine.fr/film/fichefilm_gen_cfilm=${f.allocineId}.html`
       : `https://www.allocine.fr/rechercher/?q=${encodeURIComponent(f.titre)}`;
-    const annee = f.anneeReelle || f.anneeSortie || '';
     const pScore = f.notePresse;
     const sScore = f.noteSpect;
     const LIMIT = 120;
@@ -705,12 +692,13 @@ function renderCards(films) {
     const posterHtml = f.poster
       ? `<div class="card-poster"><img src="${esc(f.poster)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">🎬</div></div>`;
+    const decadePill = f.decade ? `<span class="decade-pill">Années ${esc(f.decade)}</span>` : '';
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">
-      <div class="card-title">${esc(f.titre)}${annee ? `<span class="year-pill" id="card-year-${i}">${esc(annee)}</span>` : `<span class="year-pill" id="card-year-${i}" style="display:none"></span>`}</div>
+      <div class="card-title">${esc(f.titre)}${decadePill}</div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
       <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}</div>
       ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
@@ -718,7 +706,7 @@ function renderCards(films) {
     </div>
     <div class="card-scores">
       <div class="score-block">
-        <div class="score-val ${pScore >= 4 ? 'green' : 'orange'}">${pScore.toFixed(1)}</div>
+        <div class="score-val ${pScore >= 4 ? 'green' : 'orange'}">${pScore != null ? pScore.toFixed(1) : '—'}</div>
         <div class="score-lbl">Presse</div>
       </div>
       <div class="score-sep"></div>
@@ -757,21 +745,18 @@ function updateCardMeta(i, data) {
   if (data.annee) {
     const film = _allFilms[i];
     if (film) film.anneeReelle = data.annee;
-    const yearEl = document.getElementById(`card-year-${i}`);
-    if (yearEl) { yearEl.textContent = data.annee; yearEl.style.display = ''; }
   }
 }
 
 // ─── Filtres ──────────────────────────────────────────────────────────────────
 function applyFiltersResponsive() {
-  const anneeFilter = document.getElementById('fil-annee').value;
-  const genreFilter = document.getElementById('fil-genre').value;
-  const typeFilter  = document.getElementById('fil-type').value;
-  const paysFilter  = document.getElementById('fil-pays').value;
-  const onlyVoir    = document.getElementById('fil-only-voir')?.checked;
-  // Desktop only (might not be visible but still read)
-  const noteMin     = parseFloat(document.getElementById('fil-note')?.value || '0');
-  const platFilter  = (document.getElementById('fil-plat')?.value || '').toLowerCase();
+  const decadeFilter = document.getElementById('fil-decade').value;
+  const genreFilter  = document.getElementById('fil-genre').value;
+  const typeFilter   = document.getElementById('fil-type').value;
+  const paysFilter   = document.getElementById('fil-pays').value;
+  const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
+  const noteMin      = parseFloat(document.getElementById('fil-note')?.value || '0');
+  const platFilter   = (document.getElementById('fil-plat')?.value || '').toLowerCase();
 
   let visible = 0;
   _allFilms.forEach((film, i) => {
@@ -785,21 +770,21 @@ function applyFiltersResponsive() {
     const providers = provObjs.map(p => p.name.toLowerCase());
     const ud = _userdata[film.allocineId] || {};
 
-    const matchAnnee   = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
-    const matchGenre   = (!genreFilter || genres.some(g => g.includes(genreFilter)))
-                      && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
-                      && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
-    const matchType    = !typeFilter
-                      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
-                      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
-    const matchPays    = !paysFilter  || filmPays.some(p => p === paysFilter);
-    const matchNote    = film.notePresse >= noteMin;
-    const matchPlat    = !platFilter  || providers.some(p => p.includes(platFilter));
-    const matchListe   = (!_prefs.hideVus           || !ud.vu)
-                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
-                      && (!onlyVoir                 || !!ud.vouloir);
+    const matchDecade = !decadeFilter || film.decade === decadeFilter;
+    const matchGenre  = (!genreFilter || genres.some(g => g.includes(genreFilter)))
+                     && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
+                     && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
+    const matchType   = !typeFilter
+                     || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
+                     || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
+    const matchPays   = !paysFilter  || filmPays.some(p => p === paysFilter);
+    const matchNote   = (film.notePresse ?? 0) >= noteMin;
+    const matchPlat   = !platFilter  || providers.some(p => p.includes(platFilter));
+    const matchListe  = (!_prefs.hideVus           || !ud.vu)
+                     && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
+                     && (!onlyVoir                 || !!ud.vouloir);
 
-    const ok = matchAnnee && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe;
+    const ok = matchDecade && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });
@@ -817,35 +802,33 @@ if ('serviceWorker' in navigator) {
 // ─── Ping serveur ─────────────────────────────────────────────────────────────
 async function pingServer() {
   const statusEl = document.getElementById('server-status');
-  const btnEl = document.getElementById('btn-run');
+  const btnEl    = document.getElementById('btn-run');
+  const btnPlat  = document.getElementById('btn-plat');
   try {
-    const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
+    const r = await fetch('/api/bestever/health', { signal: AbortSignal.timeout(3000) });
     if (r.ok) {
       const d = await r.json();
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = '🟢';
-      btnEl.disabled = false;
-      const btnPlat = document.getElementById('btn-plat');
+      if (btnEl)   btnEl.disabled   = false;
       if (btnPlat) btnPlat.disabled = false;
-      return d; // ← données health pour la vérification de fraîcheur
+      return d;
     } else { throw new Error('non-ok'); }
   } catch {
     statusEl.textContent = '🔴 Hors ligne';
     statusEl.style.color = 'var(--orange)';
-    btnEl.disabled = true;
-    const btnPlat = document.getElementById('btn-plat');
+    if (btnEl)   btnEl.disabled   = true;
     if (btnPlat) btnPlat.disabled = true;
     return null;
   }
 }
 
 /**
- * Retourne true si le serveur a scrapé films liste ou plateformes
- * plus récemment que le cache localStorage.
+ * Retourne true si le serveur a scrapé bestever plus récemment que le cache localStorage.
  */
-function isFilmsCacheStale(health) {
+function isBesteverCacheStale(health) {
   if (!health) return false;
-  const cacheDate = localStorage.getItem(LS_DATE);
+  const cacheDate = localStorage.getItem(LS_DATE_BE);
   if (!cacheDate) return false;
   const cached = new Date(cacheDate).getTime();
   const srvList = health.lastScrape        ? new Date(health.lastScrape).getTime()        : 0;
@@ -853,18 +836,58 @@ function isFilmsCacheStale(health) {
   return srvList > cached || srvDet > cached;
 }
 
+// ─── Cache localStorage bestever ──────────────────────────────────────────────
+function saveCacheBestever() {
+  try {
+    localStorage.setItem(LS_FILMS_BE,   JSON.stringify(_allFilms));
+    localStorage.setItem(LS_DETAILS_BE, JSON.stringify(_details));
+    localStorage.setItem(LS_DATE_BE,    new Date().toISOString());
+  } catch(e) { console.warn('[bestever cache] Erreur sauvegarde :', e.message); }
+}
+
+function loadCacheBestever() {
+  try {
+    if (localStorage.getItem('bestever_cache_version') !== LS_VERSION_BE) {
+      localStorage.removeItem(LS_FILMS_BE);
+      localStorage.removeItem(LS_DETAILS_BE);
+      localStorage.removeItem(LS_DATE_BE);
+      localStorage.setItem('bestever_cache_version', LS_VERSION_BE);
+      console.log('[bestever cache] Version obsolète — cache purgé');
+      return false;
+    }
+    const films   = localStorage.getItem(LS_FILMS_BE);
+    const details = localStorage.getItem(LS_DETAILS_BE);
+    const date    = localStorage.getItem(LS_DATE_BE);
+    if (!films) return false;
+
+    _allFilms = JSON.parse(films);
+    _details  = details ? JSON.parse(details) : {};
+    _allPlats = new Set();
+    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
+
+    const d = date ? new Date(date) : null;
+    const label = d ? `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}` : '—';
+    UI.onCacheLoaded(label);
+    return true;
+  } catch(e) { console.warn('[bestever cache] Erreur chargement :', e.message); return false; }
+}
+
 // ─── Indicateur scraping header ───────────────────────────────────────────────
 const _phaseLabel = {
-  'films-list':    'Films · liste',
-  'films-details': 'Films · plateformes',
-  'series-list':   'Séries · liste',
-  'series-details':'Séries · détails',
+  'films-list':       'Films · liste',
+  'films-details':    'Films · plateformes',
+  'series-list':      'Séries · liste',
+  'series-details':   'Séries · détails',
+  'bestever-list':    'Best ever · liste',
+  'bestever-details': 'Best ever · plateformes',
 };
 const _phaseKey = {
-  'films-list':    'filmsList',
-  'films-details': 'filmsDetails',
-  'series-list':   'seriesList',
-  'series-details':'seriesDetails',
+  'films-list':       'filmsList',
+  'films-details':    'filmsDetails',
+  'series-list':      'seriesList',
+  'series-details':   'seriesDetails',
+  'bestever-list':    'besteverList',
+  'bestever-details': 'besteverDetails',
 };
 function _updateScrapeIndicator(st) {
   const el  = document.getElementById('scrape-indicator');
@@ -886,7 +909,6 @@ function _updateScrapeIndicator(st) {
       if (r.ok) {
         const st = await r.json();
         _updateScrapeIndicator(st);
-        // Si scraping actif → rafraîchit aussi le panneau Info si ouvert
         if (st?.phase && document.getElementById('info-modal')?.classList.contains('open')) {
           if (_infoData) { _infoData.status = st; renderInfo(); }
         }
@@ -895,7 +917,7 @@ function _updateScrapeIndicator(st) {
     } catch(e) {}
     setTimeout(poll, interval);
   }
-  setTimeout(poll, 5000); // 1er poll 5s après le chargement
+  setTimeout(poll, 5000);
 })();
 
 // ─── Info ─────────────────────────────────────────────────────────────────────
@@ -915,15 +937,13 @@ function closeInfo() {
 }
 async function _fetchInfoData() {
   try {
-    const [rf, rs, rst] = await Promise.all([
-      fetch('/api/health',          { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/series/health',   { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/scraping-status', { signal: AbortSignal.timeout(4000) }),
+    const [rb, rst] = await Promise.all([
+      fetch('/api/bestever/health',  { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/scraping-status',  { signal: AbortSignal.timeout(4000) }),
     ]);
     _infoData = {
-      films:  rf.ok  ? await rf.json()  : null,
-      series: rs.ok  ? await rs.json()  : null,
-      status: rst.ok ? await rst.json() : null,
+      bestever: rb.ok  ? await rb.json()  : null,
+      status:   rst.ok ? await rst.json() : null,
     };
   } catch(e) { _infoData = null; }
 }
@@ -931,8 +951,7 @@ function _startInfoRefresh() {
   _stopInfoRefresh();
   _infoRefreshTimer = setInterval(async () => {
     if (!document.getElementById('info-modal').classList.contains('open')) { _stopInfoRefresh(); return; }
-    const any = _infoData?.status?.phase != null;
-    if (!any) return; // rien en cours, pas besoin de rafraîchir
+    if (!_infoData?.status?.phase) return;
     try {
       const r = await fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) });
       if (r.ok) { _infoData.status = await r.json(); renderInfo(); }
@@ -943,16 +962,15 @@ function _stopInfoRefresh() {
   if (_infoRefreshTimer) { clearInterval(_infoRefreshTimer); _infoRefreshTimer = null; }
 }
 function renderInfo() {
-  const el  = document.getElementById('info-content');
+  const el = document.getElementById('info-content');
   if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
   const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
-  const f = _infoData.films, s = _infoData.series, st = _infoData.status;
-  const fErrors = f?.lastScrapeErrors || [];
+  const b = _infoData.bestever, st = _infoData.status;
 
   function progressBlock(info) {
     if (!info?.active) return '';
     const pct = info.pct ?? 0;
-    const extra = info.annee ? ` · ${info.annee}` : (info.total ? ` · ${info.total} entrées` : '');
+    const extra = info.total ? ` · ${info.total} entrées` : '';
     return `<div class="info-progress">
       <div class="info-progress-label"><span>En cours${extra}</span><span>${pct}%</span></div>
       <div class="info-progress-bar-wrap"><div class="info-progress-bar" style="width:${pct}%"></div></div>
@@ -964,23 +982,17 @@ function renderInfo() {
 
   el.innerHTML = `
     <div class="info-section-title">Serveur</div>
-    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(f?.version || s?.version || '—')}</span></div>
-    <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>
-    <div class="info-section-title">🎬 Films</div>
-    <div class="info-row"><span class="lbl">En base</span><span class="val">${f?.cachedFilms ?? '—'} films</span></div>
-    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.filmsList?.active)}</span><span class="val">${fmt(f?.lastScrape)}</span></div>
-    ${progressBlock(st?.filmsList)}
-    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.filmsDetails?.active)}</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
-    ${progressBlock(st?.filmsDetails)}
-    <div class="info-row"><span class="lbl">Erreurs</span><span class="val">${fErrors.length === 0 ? '✅ Aucune' : `⚠️ ${fErrors.length}`}</span></div>
-    ${fErrors.length > 0 ? `<div class="info-errors">${fErrors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
-    <div class="info-section-title">📺 Séries</div>
-    <div class="info-row"><span class="lbl">En base</span><span class="val">${s?.cachedSeries ?? '—'} séries</span></div>
-    <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${s?.cachedDetails ?? '—'} en mémoire</span></div>
-    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.seriesList?.active)}</span><span class="val">${fmt(s?.lastScrape)}</span></div>
-    ${progressBlock(st?.seriesList)}
-    <div class="info-row"><span class="lbl">Scraping détails${badge(st?.seriesDetails?.active)}</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
-    ${progressBlock(st?.seriesDetails)}
+    <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(b?.version || '—')}</span></div>
+    <div class="info-section-title">🏆 Best ever</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${b?.cachedFilms ?? '—'} films</span></div>
+    <div class="info-row"><span class="lbl">Pages / décennie</span><span class="val">${b?.pagesPerDecade ?? '—'} pages × ${b?.decades?.length ?? '—'} décennies</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.besteverList?.active)}</span><span class="val">${fmt(b?.lastScrape)}</span></div>
+    ${progressBlock(st?.besteverList)}
+    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.besteverDetails)}
+    <div class="info-section-title">Autres scrapings</div>
+    <div class="info-row"><span class="lbl">Films VOD${badge(st?.filmsList?.active || st?.filmsDetails?.active)}</span><span class="val">${(st?.filmsList?.active || st?.filmsDetails?.active) ? '⟳ en cours' : '—'}</span></div>
+    <div class="info-row"><span class="lbl">Séries${badge(st?.seriesList?.active || st?.seriesDetails?.active)}</span><span class="val">${(st?.seriesList?.active || st?.seriesDetails?.active) ? '⟳ en cours' : '—'}</span></div>
   `;
 }
 
@@ -1106,12 +1118,12 @@ function updateProfileBadge() {
 }
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false, hideVusSeries: true, hideNonInteresseSeries: true };
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
 
-function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
+function getPrefsKey() { return 'bestever_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
@@ -1144,69 +1156,29 @@ function renderPrefs() {
       ${row('showAnimations',    'Afficher les animations')}
     </div>
     <div class="prefs-section">
-      <div class="prefs-section-title">🎬 Films — Ma liste</div>
+      <div class="prefs-section-title">Ma liste</div>
       ${row('hideVus',          'Masquer les films déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
-    </div>
-    <div class="prefs-section">
-      <div class="prefs-section-title">📺 Séries — Ma liste</div>
-      ${row('hideVusSeries',          'Masquer les séries déjà vues')}
-      ${row('hideNonInteresseSeries', 'Masquer les "Non intéressé"')}
     </div>`;
 }
 
-// ─── Cache ────────────────────────────────────────────────────────────────────
-
-/** Vide le cache plateformes (détails films) */
-async function clearDetailsCache() {
+// ─── Cache actions ────────────────────────────────────────────────────────────
+async function clearBesteverCache() {
+  if (!confirm('Vider le cache liste Best ever ? Les films disparaîtront jusqu\'au prochain scraping.')) return;
   try {
-    const r = await fetch('/api/clear-details-cache', { method: 'POST' });
+    const r = await fetch('/api/bestever/clear', { method: 'POST' });
     const d = await r.json();
-    UI.showError(`✅ Cache plateformes vidé — ${d.cleared} entrée(s) supprimées`);
+    UI.showError(`✅ Cache bestever vidé — ${d.cleared} film(s) supprimés`);
+    document.getElementById('cards').innerHTML = '';
   } catch(e) { UI.showError('Erreur lors de la suppression du cache.'); }
 }
 
-/** Vide le cache liste films (Redis + mémoire) */
-async function clearFilmsListCache() {
-  if (!confirm('Vider le cache liste films ? Les films disparaîtront jusqu\'au prochain scraping.')) return;
-  try {
-    const r = await fetch('/api/clear-films', { method: 'POST' });
-    const d = await r.json();
-    UI.showError(`✅ Cache liste vidé — ${d.cleared} film(s) supprimés`);
-    document.getElementById('cards').innerHTML = '';
-  } catch(e) { UI.showError('Erreur lors de la suppression du cache liste.'); }
-}
-
-/** Vide le cache plateformes puis relance le chargement */
 async function rescrapeDetails() {
-  if (!confirm('Rescraper toutes les plateformes films ?')) return;
+  if (!confirm('Rescraper toutes les plateformes Best ever ?')) return;
   try {
-    await fetch('/api/clear-details-cache', { method: 'POST' });
-    // Vide les détails locaux pour forcer un rechargement complet
     Object.keys(_details).forEach(k => delete _details[k]);
     startPlatformLoading();
   } catch(e) { UI.showError('Erreur lors du rescraping plateformes.'); }
-}
-
-// ─── Tester AlloCiné ─────────────────────────────────────────────────────────
-async function testAllocine() {
-  const el = document.getElementById('server-status');
-  el.textContent = '⏳ Test…';
-  try {
-    const r = await fetch('/api/ping-allocine');
-    const d = await r.json();
-    if (d.ok) {
-      el.textContent = `✅ AlloCiné OK (${d.status})`;
-      setTimeout(() => { el.textContent = '🟢'; }, 5000);
-    } else {
-      el.textContent = `❌ AlloCiné bloqué`;
-      UI.showError(`AlloCiné renvoie une erreur : ${d.status ? 'HTTP ' + d.status : d.message}`);
-      setTimeout(() => { el.textContent = '🔴'; }, 8000);
-    }
-  } catch(e) {
-    el.textContent = '❌ Erreur réseau';
-    setTimeout(() => { el.textContent = '🔴'; }, 5000);
-  }
 }
 
 // ─── Export CSV / Excel ───────────────────────────────────────────────────────
@@ -1219,35 +1191,191 @@ function dlBlob(blob, name) {
 }
 function downloadCSV() {
   const BOM = '\uFEFF';
-  const head = ['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes'];
+  const head = ['#','Titre','Titre original','Décennie','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes'];
   const rows = _allFilms.map((f, i) => {
     const det = _details[filmKey(f)] || {};
     const plats = (det.providers || []).map(p => p.name).join(', ');
-    return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
-            f.notePresse.toFixed(1), f.noteSpect != null ? f.noteSpect.toFixed(1) : '', f.synopsis||'', plats];
+    return [i+1, f.titre, f.titreOriginal||'', f.decade||'', f.genre, f.realisateur, f.acteurs,
+            f.notePresse != null ? f.notePresse.toFixed(1) : '', f.noteSpect != null ? f.noteSpect.toFixed(1) : '', f.synopsis||'', plats];
   });
   const csv = BOM + [head,...rows].map(r => r.map(v => `"${String(v||'').replace(/"/g,'""')}"`).join(';')).join('\n');
-  dlBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'allocine_vod.csv');
+  dlBlob(new Blob([csv], { type: 'text/csv;charset=utf-8;' }), 'bestever.csv');
 }
 function downloadXLSX() {
   if (typeof XLSX === 'undefined') { UI.showError('Bibliothèque Excel non chargée.'); return; }
   const wb = XLSX.utils.book_new();
-  const head = [['#','Titre','Titre original','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes']];
+  const head = [['#','Titre','Titre original','Décennie','Genre','Réalisateur','Acteurs','Note Presse','Note Spectateurs','Résumé','Plateformes']];
   const rows = _allFilms.map((f, i) => {
     const det = _details[filmKey(f)] || {};
     const plats = (det.providers || []).map(p => p.name).join(', ');
-    return [i+1, f.titre, f.titreOriginal||'', f.genre, f.realisateur, f.acteurs,
-            f.notePresse, f.noteSpect ?? '', f.synopsis||'', plats];
+    return [i+1, f.titre, f.titreOriginal||'', f.decade||'', f.genre, f.realisateur, f.acteurs,
+            f.notePresse ?? '', f.noteSpect ?? '', f.synopsis||'', plats];
   });
   const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
-  ws['!cols'] = [4,34,24,22,20,34,11,14,50,30].map(w => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Films VOD');
-  XLSX.writeFile(wb, 'allocine_vod.xlsx');
+  ws['!cols'] = [4,34,24,10,22,20,34,11,14,50,30].map(w => ({ wch: w }));
+  XLSX.utils.book_append_sheet(wb, ws, 'Best ever');
+  XLSX.writeFile(wb, 'bestever.xlsx');
 }
 
+// ─── Tri ──────────────────────────────────────────────────────────────────────
+function applySort(critere) {
+  if (critere) _sortBy = critere;
+  UI.updateSortButtons(_sortBy);
+
+  _allFilms.sort((a, b) => {
+    if (_sortBy === 'presse') {
+      return (b.notePresse ?? 0) - (a.notePresse ?? 0) || a.titre.localeCompare(b.titre, 'fr');
+    }
+    if (_sortBy === 'spectateurs') {
+      if (a.noteSpect == null && b.noteSpect == null) return 0;
+      if (a.noteSpect == null) return 1;
+      if (b.noteSpect == null) return -1;
+      return b.noteSpect - a.noteSpect || (b.notePresse ?? 0) - (a.notePresse ?? 0);
+    }
+    // 'decade' : décennie décroissante, puis note presse décroissante
+    const da = Number(a.decade) || 0, db = Number(b.decade) || 0;
+    return db - da || (b.notePresse ?? 0) - (a.notePresse ?? 0) || a.titre.localeCompare(b.titre, 'fr');
+  });
+
+  UI.renderFilms(_allFilms);
+  UI.reapplyAfterSort(_allFilms);
+  UI.applyFilters();
+}
+
+// ─── Scraping manuel ─────────────────────────────────────────────────────────
+function startScrape() {
+  const btn = document.getElementById('btn-run');
+  _scrapingDone = false;
+  _loadGen++;
+  UI.onScrapeStart(btn);
+
+  const seen = new Set();
+  const pendingFilms = [];
+
+  const es = new EventSource('/api/bestever/scrape');
+
+  es.onmessage = e => {
+    const d = JSON.parse(e.data);
+    if (d.type === 'films') {
+      const pct = Math.round(d.page / d.total * 100);
+      d.films.forEach(f => {
+        const key = f.allocineId || `${f.titre.toLowerCase()}|${f.notePresse}`;
+        if (!seen.has(key)) { seen.add(key); pendingFilms.push(f); }
+      });
+      UI.onScrapeProgress(pct, d.decade, pendingFilms.length);
+    }
+    if (d.type === 'error') UI.showError(`⚠ Erreur page ${d.page} : ${d.message}`);
+    if (d.type === 'done') {
+      es.close();
+      _allFilms = pendingFilms;
+      _allPlats = new Set(); _platsDone = 0;
+      _scrapingDone = true;
+      UI.populateGenreFilter();
+      UI.populatePlatFilter?.();
+      populatePaysFilter();
+      UI.renderFilms(_allFilms);
+      applySort();
+      UI.applyFilters();
+      UI.onScrapeDone(btn, d.lastScrape);
+      startPlatformLoading();
+    }
+  };
+
+  es.onerror = () => {
+    es.close();
+    _scrapingDone = true;
+    UI.onScrapeError(btn);
+  };
+}
+
+// ─── Confirmation scraping ────────────────────────────────────────────────────
+function openConfirm() {
+  const el = document.getElementById('confirm-last-scrape');
+  fetch('/api/bestever/health', { signal: AbortSignal.timeout(3000) })
+    .then(r => r.json())
+    .then(d => {
+      if (d.lastScrape) {
+        const dt = new Date(d.lastScrape);
+        el.textContent = `Dernier scraping : ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}`;
+      } else {
+        el.textContent = 'Aucun scraping effectué.';
+      }
+    })
+    .catch(() => { el.textContent = ''; });
+  document.getElementById('confirm-modal').classList.add('open');
+}
+function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
+
+// ─── Monitoring auto-scrape ───────────────────────────────────────────────────
+let _pollTimer = null;
+
+async function startAutoScrapeMonitoring() {
+  try {
+    const r = await fetch('/api/bestever/scrape-status');
+    const d = await r.json();
+    if (d.isScraping) {
+      UI.showAutoScrapeBar(d.pct, '');
+      _startPollLoop();
+    }
+  } catch(e) {}
+}
+
+function _startPollLoop() {
+  if (_pollTimer) return;
+  _pollTimer = setInterval(async () => {
+    try {
+      const r = await fetch('/api/bestever/scrape-status');
+      const d = await r.json();
+      if (d.isScraping) {
+        UI.showAutoScrapeBar(d.pct, '');
+      } else {
+        UI.hideAutoScrapeBar();
+        clearInterval(_pollTimer);
+        _pollTimer = null;
+        await loadBesteverFromServer();
+      }
+    } catch(e) {}
+  }, 5000);
+}
+
+async function loadBesteverFromServer() {
+  try {
+    const r = await fetch('/api/bestever', { signal: AbortSignal.timeout(10000) });
+    if (!r.ok) return false;
+    const d = await r.json();
+    if (!d.films || d.films.length === 0) return false;
+    _allFilms = d.films;
+    if (d.details) {
+      d.films.forEach((film, i) => {
+        if (d.details[i]) {
+          _details[filmKey(film)] = d.details[i];
+          (d.details[i].providers || []).forEach(p => _allPlats.add(p.name));
+        }
+      });
+    }
+    UI.populateGenreFilter();
+    UI.populatePlatFilter?.();
+    populatePaysFilter();
+    applySort();
+    UI.applyFilters();
+    UI.onFilmsFromServer(d);
+    _scrapingDone = true;
+    startPlatformLoading();
+    return true;
+  } catch(e) {
+    console.warn('[server] Impossible de charger les bestever:', e.message);
+    return false;
+  }
+}
+
+// Override saveCache pour utiliser les clés bestever
+const _origSaveCache = window.saveCache;
+window.saveCache = saveCacheBestever;
+
+// Override startPlatformLoading pour utiliser saveCache bestever
+const _origStartPlatformLoading = startPlatformLoading;
+
 // ─── Init ─────────────────────────────────────────────────────────────────────
-// Le scraping automatique est géré exclusivement côté serveur (autoScrapeIfStale,
-// setInterval 24h). Le client se contente de monitorer via startAutoScrapeMonitoring().
 (async () => {
   await loadAppSecret();
   const userInit = await initUser();
@@ -1257,16 +1385,16 @@ function downloadXLSX() {
     updateProfileBadge();
   }
   loadPrefs();
-  const hadCache = loadCache();
+  const hadCache = loadCacheBestever();
   const health   = await pingServer();
-  if (!hadCache || isFilmsCacheStale(health)) {
+  if (!hadCache || isBesteverCacheStale(health)) {
     if (hadCache) {
-      localStorage.removeItem(LS_FILMS);
-      localStorage.removeItem(LS_DETAILS);
-      localStorage.removeItem(LS_DATE);
-      console.log('[cache] Films : données serveur plus récentes — rechargement');
+      localStorage.removeItem(LS_FILMS_BE);
+      localStorage.removeItem(LS_DETAILS_BE);
+      localStorage.removeItem(LS_DATE_BE);
+      console.log('[bestever cache] Données serveur plus récentes — rechargement');
     }
-    await loadFilmsFromServer();
+    await loadBesteverFromServer();
   }
   if (_currentUserId) await loadUserdata();
   startAutoScrapeMonitoring();

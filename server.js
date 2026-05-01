@@ -98,8 +98,8 @@ let isScraping            = false;
 let scrapeProgress        = { current: 0, total: 0, annee: '' };
 let filmsDetailsProgress  = { current: 0, total: 0 };
 let lastScrapeErrors      = [];
-// Phase du scraping nocturne en cours : null | 'films-list' | 'films-details' | 'series-list' | 'series-details'
-let scrapingPhase         = null;
+// Phase du scraping nocturne en cours
+let scrapingPhase         = null; // null | 'films-list' | 'films-details' | 'series-list' | 'series-details' | 'bestever-list' | 'bestever-details'
 
 // ── Sources Séries (fenêtre glissante 4 ans) ───────────────────────────────
 // Génère dynamiquement : Top AlloCiné + presse de l'année courante et les 3 ans précédents.
@@ -125,6 +125,16 @@ let seriesProgress           = { current: 0, total: 0 };
 let seriesDetailsProgress    = { current: 0, total: 0 };
 let lastSeriesScrapeErrors   = [];
 const seriesDetailsCache    = new Map(); // clé: "sid:XXXXX" → { value, cachedAt }
+
+// ── État global Bestever ────────────────────────────────────────────────────
+const BESTEVER_DECADES          = [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
+const BESTEVER_PAGES_PER_DECADE = Number(process.env.BESTEVER_PAGES_PER_DECADE || 6);
+let cachedBestever              = [];   // meilleurs films all-time (par décennie)
+let lastBesteverScrape          = null; // ISO — dernier scraping liste bestever
+let lastBesteverDetailsScrape   = null; // ISO — dernier scraping plateformes bestever
+let isBesteverScraping          = false;
+let besteverProgress            = { current: 0, total: 0 };
+let besteverDetailsProgress     = { current: 0, total: 0 };
 
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
@@ -234,6 +244,17 @@ async function loadUserdata() {
         Object.entries(sdObj).forEach(([k, v]) => seriesDetailsCache.set(k, v));
         console.log(`📋 seriesDetailsCache Redis chargé (${seriesDetailsCache.size} entrées)`);
       }
+      // Liste bestever
+      const besteverRaw = await redis.get('bestever');
+      if (besteverRaw) {
+        cachedBestever = typeof besteverRaw === 'string' ? JSON.parse(besteverRaw) : besteverRaw;
+        console.log(`🏆 Bestever Redis chargé (${cachedBestever.length} films)`);
+      }
+      // Horodatages bestever
+      const besteverTsRaw = await redis.get('lastBesteverScrape');
+      if (besteverTsRaw) lastBesteverScrape = besteverTsRaw;
+      const besteverDetailsTsRaw = await redis.get('lastBesteverDetailsScrape');
+      if (besteverDetailsTsRaw) lastBesteverDetailsScrape = besteverDetailsTsRaw;
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
 
@@ -982,20 +1003,26 @@ app.get('/api/scrape-status', (_req, res) => {
  *   chaque section : { active: bool, pct: 0-100, label?: string }
  */
 app.get('/api/scraping-status', (_req, res) => {
-  const pctFilmsList    = scrapeProgress.total
+  const pctFilmsList      = scrapeProgress.total
     ? Math.round(scrapeProgress.current / scrapeProgress.total * 100) : 0;
-  const pctFilmsDetails = filmsDetailsProgress.total
+  const pctFilmsDetails   = filmsDetailsProgress.total
     ? Math.round(filmsDetailsProgress.current / filmsDetailsProgress.total * 100) : 0;
-  const pctSeriesList   = seriesProgress.total
+  const pctSeriesList     = seriesProgress.total
     ? Math.round(seriesProgress.current / seriesProgress.total * 100) : 0;
-  const pctSeriesDetails = seriesDetailsProgress.total
+  const pctSeriesDetails  = seriesDetailsProgress.total
     ? Math.round(seriesDetailsProgress.current / seriesDetailsProgress.total * 100) : 0;
+  const pctBesteverList   = besteverProgress.total
+    ? Math.round(besteverProgress.current / besteverProgress.total * 100) : 0;
+  const pctBesteverDetails= besteverDetailsProgress.total
+    ? Math.round(besteverDetailsProgress.current / besteverDetailsProgress.total * 100) : 0;
   res.json({
     phase: scrapingPhase,
-    filmsList:    { active: scrapingPhase === 'films-list',    pct: pctFilmsList,    annee: scrapeProgress.annee },
-    filmsDetails: { active: scrapingPhase === 'films-details', pct: pctFilmsDetails, total: filmsDetailsProgress.total },
-    seriesList:   { active: scrapingPhase === 'series-list',   pct: pctSeriesList   },
-    seriesDetails:{ active: scrapingPhase === 'series-details',pct: pctSeriesDetails,total: seriesDetailsProgress.total },
+    filmsList:       { active: scrapingPhase === 'films-list',      pct: pctFilmsList,       annee: scrapeProgress.annee },
+    filmsDetails:    { active: scrapingPhase === 'films-details',   pct: pctFilmsDetails,    total: filmsDetailsProgress.total },
+    seriesList:      { active: scrapingPhase === 'series-list',     pct: pctSeriesList       },
+    seriesDetails:   { active: scrapingPhase === 'series-details',  pct: pctSeriesDetails,   total: seriesDetailsProgress.total },
+    besteverList:    { active: scrapingPhase === 'bestever-list',   pct: pctBesteverList     },
+    besteverDetails: { active: scrapingPhase === 'bestever-details',pct: pctBesteverDetails, total: besteverDetailsProgress.total },
   });
 });
 
@@ -1273,10 +1300,12 @@ function scheduleNightlyScraping() {
   function run() {
     const label = new Date().toLocaleString('fr-FR', { timeZone: 'Europe/Paris', dateStyle: 'short', timeStyle: 'short' });
     console.log(`\n🌙 Scraping nocturne — démarrage à ${label} (heure Paris)`);
-    autoScrapeFilmsListIfStale();                                                        // 3h00
-    setTimeout(() => autoScrapeFilmsDetailsIfStale(),    15 * 60 * 1000);               // 3h15
-    setTimeout(() => autoScrapeSeriesListIfStale(),      30 * 60 * 1000);               // 3h30
-    setTimeout(() => autoScrapeSeriesDetailsIfStale(),   45 * 60 * 1000);               // 3h45
+    autoScrapeFilmsListIfStale();                                                         // 3h00
+    setTimeout(() => autoScrapeFilmsDetailsIfStale(),     15 * 60 * 1000);               // 3h15
+    setTimeout(() => autoScrapeSeriesListIfStale(),       30 * 60 * 1000);               // 3h30
+    setTimeout(() => autoScrapeSeriesDetailsIfStale(),    45 * 60 * 1000);               // 3h45
+    setTimeout(() => autoScrapeBesteverListIfStale(),     60 * 60 * 1000);               // 4h00
+    setTimeout(() => autoScrapeBesteverDetailsIfStale(),  75 * 60 * 1000);               // 4h15
     // Reprogramme pour demain 3h00
     setTimeout(run, msTillParis(3, 0));
   }
@@ -2215,25 +2244,411 @@ app.get('/api/series/debug-lines', requireSecret, async (req, res) => {
 
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  SECTION 12 — BESTEVER : MEILLEURS FILMS DE TOUS LES TEMPS
+//
+//  URL : allocine.fr/film/meilleurs/presse/decennie-{DECADE}/?page={N}
+//  Décennies : 1940 à 2020 (9 décennies × BESTEVER_PAGES_PER_DECADE pages)
+//  Clés Redis : bestever, lastBesteverScrape, lastBesteverDetailsScrape
+//  Plateformes : réutilise detailsCache (même infrastructure que VOD films)
+// ══════════════════════════════════════════════════════════════════════════════
+
+/**
+ * Parse une page "Meilleurs films" AlloCiné (décennie) via Cheerio DOM.
+ * Structure spécifique à ces pages (différente des pages VOD) :
+ *   • a.meta-title-link → titre + allocineId
+ *   • img.thumbnail-img → poster
+ *   • .rating-item contenant "Presse"/"Spectateurs" → notes
+ *   • .meta-body-info .dark-grey-link → genres
+ *   • .meta-body-direction → réalisateur
+ *   • .meta-body-actor → acteurs
+ *   • .content-txt → synopsis
+ *   • span.light contenant "Titre original" → titreOriginal
+ *
+ * @param  {string} html
+ * @param  {string} decade  ex: "2020"
+ * @returns {Array<{ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade }>}
+ */
+function parseBesteverFilms(html, decade) {
+  const $ = cheerio.load(html);
+  const films = [];
+  const seen  = new Set();
+
+  $('a.meta-title-link').each((_, el) => {
+    const $el     = $(el);
+    const href    = $el.attr('href') || '';
+    const idMatch = href.match(/fichefilm_gen_cfilm=(\d+)/);
+    if (!idMatch) return;
+
+    const allocineId = idMatch[1];
+    const titre      = $el.text().trim();
+    if (!titre || seen.has(allocineId)) return;
+    seen.add(allocineId);
+
+    // Remonte vers le container de la carte (max 10 niveaux)
+    let $card = $el.parent();
+    for (let i = 0; i < 10; i++) {
+      const cls = $card.attr('class') || '';
+      if (/card|entity|item|result|content/i.test(cls) || $card.is('article, li')) break;
+      const $parent = $card.parent();
+      if ($parent.is('body, html') || !$parent.length) break;
+      $card = $parent;
+    }
+
+    // Poster
+    const $imgThumb = $card.find('img.thumbnail-img').first();
+    const $imgAny   = $card.find('img').first();
+    const $img      = $imgThumb.length ? $imgThumb : $imgAny;
+    const rawSrc    = $img.attr('src') || $img.attr('data-src') || $img.attr('data-lazy-src') || '';
+    const poster    = rawSrc && !/blank|placeholder/i.test(rawSrc) ? rawSrc : null;
+
+    // Notes presse & spectateurs
+    let notePresse = null, noteSpect = null;
+    $card.find('.rating-item, [class*="rating-item"]').each((_, ri) => {
+      const $ri  = $(ri);
+      const txt  = $ri.text();
+      const note = parseFloat($ri.find('.stareval-note, [class*="stareval-note"]').first().text().replace(',', '.'));
+      if (isNaN(note) || note <= 0 || note > 5) return;
+      if (/presse/i.test(txt) && notePresse === null)         notePresse = note;
+      else if (/spectateur/i.test(txt) && noteSpect === null) noteSpect  = note;
+    });
+
+    // Genres
+    const genreArr = [];
+    $card.find('.meta-body-info .dark-grey-link, .meta-body-info a').each((_, a) => {
+      const t = $(a).text().trim();
+      if (t && t.length < 50 && !genreArr.includes(t)) genreArr.push(t);
+    });
+    const genre = genreArr.join(', ');
+
+    // Réalisateur
+    let realisateur = '';
+    $card.find('.meta-body-direction, [class*="meta-body-direction"]').each((_, d) => {
+      if (realisateur) return;
+      const names = $(d).find('.dark-grey-link, a').map((_, a) => $(a).text().trim()).get().filter(Boolean);
+      if (names.length) realisateur = names.join(', ');
+    });
+
+    // Acteurs
+    let acteurs = '';
+    $card.find('.meta-body-actor, [class*="meta-body-actor"]').each((_, a) => {
+      if (acteurs) return;
+      const names = $(a).find('.dark-grey-link, a').map((_, al) => $(al).text().trim()).get().filter(Boolean);
+      if (names.length) acteurs = names.slice(0, 5).join(', ');
+    });
+
+    // Titre original
+    let titreOriginal = '';
+    $card.find('span.light, .meta-body-item span.light').each((_, span) => {
+      if (/titre original/i.test($(span).text())) {
+        titreOriginal = $(span).siblings('.dark-grey').first().text().trim()
+          || $(span).next('.dark-grey, span').text().trim()
+          || $(span).parent().find('.dark-grey').text().trim();
+      }
+    });
+
+    // Synopsis
+    const synopsis = $card.find('.content-txt').first().text().trim().substring(0, 400);
+
+    films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade: String(decade) });
+  });
+
+  return films;
+}
+
+/**
+ * Déduplique et trie les bestever films.
+ * Ordre : décennie décroissante, puis note presse décroissante.
+ * La déduplication utilise l'allocineId (ou titre|notePresse si pas d'ID).
+ */
+function dedupeAndSortBestever(films) {
+  const seen = new Set();
+  return films
+    .filter(f => {
+      const key = f.allocineId || `${f.titre.toLowerCase()}|${f.notePresse}`;
+      if (seen.has(key)) return false;
+      seen.add(key); return true;
+    })
+    .sort((a, b) =>
+      Number(b.decade) - Number(a.decade) ||
+      (b.notePresse ?? 0) - (a.notePresse ?? 0) ||
+      a.titre.localeCompare(b.titre, 'fr')
+    );
+}
+
+
+// ── API BESTEVER ────────────────────────────────────────────────────────────
+
+/**
+ * GET /api/bestever
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne la liste complète des meilleurs films all-time en cache,
+ *        accompagnée des détails plateformes (réutilise detailsCache films VOD).
+ *
+ * Réponse : { films, lastScrape, count, details }
+ */
+app.get('/api/bestever', (_req, res) => {
+  const details = cachedBestever.map(film => {
+    const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
+    return getCachedDetails(key) || null;
+  });
+  res.json({ films: cachedBestever, lastScrape: lastBesteverScrape, count: cachedBestever.length, details });
+});
+
+/**
+ * GET /api/bestever/health
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Réponse : { ok, cachedFilms, lastScrape, lastDetailsScrape, isScraping, pagesPerDecade, decades }
+ */
+app.get('/api/bestever/health', (_req, res) => {
+  res.json({
+    ok: true,
+    cachedFilms:       cachedBestever.length,
+    lastScrape:        lastBesteverScrape,
+    lastDetailsScrape: lastBesteverDetailsScrape,
+    isScraping:        isBesteverScraping,
+    pagesPerDecade:    BESTEVER_PAGES_PER_DECADE,
+    decades:           BESTEVER_DECADES,
+    version:           VERSION,
+  });
+});
+
+/**
+ * GET /api/bestever/scrape-status
+ * Réponse : { isScraping, pct }
+ */
+app.get('/api/bestever/scrape-status', (_req, res) => {
+  const pct = besteverProgress.total
+    ? Math.round(besteverProgress.current / besteverProgress.total * 100) : 0;
+  res.json({ isScraping: isBesteverScraping, pct, current: besteverProgress.current, total: besteverProgress.total });
+});
+
+/**
+ * GET /api/bestever/scrape
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Lance le scraping des pages meilleurs films en SSE.
+ * Événements : progress, films, error, done
+ */
+app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 1000), async (req, res) => {
+  if (isBesteverScraping) return res.status(429).json({ error: 'Scraping bestever déjà en cours' });
+  isBesteverScraping = true;
+  scrapingPhase      = 'bestever-list';
+
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.flushHeaders();
+
+  const send       = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const allFilms   = [];
+  const totalPages = BESTEVER_DECADES.length * BESTEVER_PAGES_PER_DECADE;
+  let   globalPage = 0;
+
+  try {
+    for (const decade of BESTEVER_DECADES) {
+      for (let page = 1; page <= BESTEVER_PAGES_PER_DECADE; page++) {
+        globalPage++;
+        besteverProgress = { current: globalPage, total: totalPages };
+        send({ type: 'progress', page: globalPage, total: totalPages, decade });
+        const url = `https://www.allocine.fr/film/meilleurs/presse/decennie-${decade}/?page=${page}`;
+        try {
+          let html = getCachedPage(url);
+          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+          const raw = parseBesteverFilms(html, String(decade));
+          allFilms.push(...raw);
+          send({ type: 'films', films: raw, page: globalPage, total: totalPages, decade });
+          console.log(`[bestever][${decade}] Page ${page}/${BESTEVER_PAGES_PER_DECADE} → ${raw.length} films`);
+        } catch(e) {
+          const msg = e.response ? `HTTP ${e.response.status}` : e.message;
+          console.error(`[bestever][${decade}] Page ${page} erreur: ${msg}`);
+          send({ type: 'error', page: globalPage, message: msg });
+        }
+        await sleep(1500 + Math.random() * 500);
+      }
+    }
+    const result   = dedupeAndSortBestever(allFilms);
+    cachedBestever = result;
+    lastBesteverScrape = new Date().toISOString();
+    if (redis) {
+      try { await redis.set('bestever', JSON.stringify(result)); await redis.set('lastBesteverScrape', lastBesteverScrape); }
+      catch(e) { console.warn('[bestever] Redis scrape:', e.message); }
+    }
+    send({ type: 'done', totalFilms: result.length, lastScrape: lastBesteverScrape });
+    res.end();
+    console.log(`✅ Bestever : ${result.length} films`);
+  } finally {
+    isBesteverScraping = false;
+    scrapingPhase      = null;
+    besteverProgress   = { current: 0, total: 0 };
+  }
+});
+
+/**
+ * POST /api/bestever/clear
+ * Vide le cache liste bestever (Redis + mémoire).
+ */
+app.post('/api/bestever/clear', requireSecret, async (_req, res) => {
+  const count    = cachedBestever.length;
+  cachedBestever = [];
+  lastBesteverScrape = null;
+  if (redis) {
+    try { await redis.del('bestever'); await redis.del('lastBesteverScrape'); }
+    catch(e) { console.warn('Redis del bestever:', e.message); }
+  }
+  console.log(`🗑️  Cache bestever vidé (${count} entrées)`);
+  res.json({ ok: true, cleared: count });
+});
+
+
+// ── Phase 5 : liste bestever ────────────────────────────────────────────────
+/**
+ * Scrape la liste des meilleurs films all-time si lastBesteverScrape > AUTO_SCRAPE_DAYS jours.
+ * Déclenché au démarrage et chaque nuit à 4h00 par scheduleNightlyScraping().
+ */
+async function autoScrapeBesteverListIfStale() {
+  if (isBesteverScraping) return;
+  const ageDays = lastBesteverScrape ? (Date.now() - new Date(lastBesteverScrape).getTime()) / 86400000 : Infinity;
+  if (ageDays < AUTO_SCRAPE_DAYS) {
+    console.log(`⏭️  Bestever liste OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  isBesteverScraping = true;
+  scrapingPhase      = 'bestever-list';
+  try {
+    const label      = lastBesteverScrape ? `${ageDays.toFixed(1)} jour(s)` : 'jamais';
+    console.log(`\n🔄 Auto-scrape bestever (liste) — dernier il y a ${label}`);
+    const allFilms   = [];
+    const totalPages = BESTEVER_DECADES.length * BESTEVER_PAGES_PER_DECADE;
+    let   globalPage = 0;
+    besteverProgress = { current: 0, total: totalPages };
+    for (const decade of BESTEVER_DECADES) {
+      for (let page = 1; page <= BESTEVER_PAGES_PER_DECADE; page++) {
+        globalPage++;
+        besteverProgress.current = globalPage;
+        const url = `https://www.allocine.fr/film/meilleurs/presse/decennie-${decade}/?page=${page}`;
+        try {
+          let html = getCachedPage(url);
+          if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+          const raw = parseBesteverFilms(html, String(decade));
+          allFilms.push(...raw);
+          console.log(`[auto][bestever][${decade}] Page ${page}/${BESTEVER_PAGES_PER_DECADE} → ${raw.length} films`);
+        } catch(e) {
+          console.warn(`[auto][bestever][${decade}] Page ${page} erreur: ${e.message}`);
+        }
+        await sleep(1500 + Math.random() * 500);
+      }
+    }
+    const result       = dedupeAndSortBestever(allFilms);
+    cachedBestever     = result;
+    lastBesteverScrape = new Date().toISOString();
+    if (redis) {
+      try {
+        await redis.set('bestever', JSON.stringify(result));
+        await redis.set('lastBesteverScrape', lastBesteverScrape);
+      } catch(e) { console.warn('[auto][bestever] Redis liste:', e.message); }
+    }
+    console.log(`✅ Bestever liste terminée — ${result.length} films\n`);
+  } finally {
+    isBesteverScraping = false;
+    scrapingPhase      = null;
+    besteverProgress   = { current: 0, total: 0 };
+  }
+}
+
+// ── Phase 6 : plateformes bestever ─────────────────────────────────────────
+/**
+ * Scrape les plateformes des meilleurs films si lastBesteverDetailsScrape > AUTO_SCRAPE_DAYS jours.
+ * Réutilise detailsCache (partagé avec VOD films) — évite les doublons.
+ * Déclenché au démarrage et chaque nuit à 4h15 par scheduleNightlyScraping().
+ */
+async function autoScrapeBesteverDetailsIfStale() {
+  if (isBesteverScraping) return;
+  const ageDetDays  = lastBesteverDetailsScrape ? (Date.now() - new Date(lastBesteverDetailsScrape).getTime()) / 86400000 : Infinity;
+  const ageListDays = lastBesteverScrape         ? (Date.now() - new Date(lastBesteverScrape).getTime())         / 86400000 : Infinity;
+  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
+  const listMoreRecent = ageListDays < ageDetDays;
+  if (!detStale && !listMoreRecent) {
+    console.log(`⏭️  Bestever plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  isBesteverScraping = true;
+  scrapingPhase      = 'bestever-details';
+  try {
+    const toFetch = cachedBestever.filter(f => f.allocineId);
+    if (toFetch.length === 0) { console.log('⏭️  Bestever plateformes : aucun film avec allocineId'); return; }
+    const label = lastBesteverDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
+    console.log(`\n🔄 Auto-scrape bestever (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+    besteverDetailsProgress = { current: 0, total: toFetch.length };
+    let done = 0;
+    for (const film of toFetch) {
+      const cacheKey = `id:${film.allocineId}`;
+      // Utilise le cache existant si valide (partage avec VOD films)
+      const existing = getCachedDetails(cacheKey);
+      if (existing) {
+        done++;
+        besteverDetailsProgress.current = done;
+        continue; // déjà en cache (scraping VOD ou précédent bestever)
+      }
+      try {
+        const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
+        const filmResp = await rateLimitedFetch(filmUrl);
+        const html     = filmResp.data;
+        const isValid  = /fichefilm_gen_cfilm|provider-tile|Titre original|Année de production/i.test(html);
+        if (!isValid) {
+          console.warn(`[auto][bestever] Film ${film.allocineId} → page suspecte, ignorée`);
+        } else {
+          const lines = htmlToLines(html);
+          let pays = null, annee = null;
+          for (let i = 0; i < lines.length - 1; i++) {
+            if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
+            if (lines[i] === 'Année de production') annee = lines[i + 1];
+            if (pays && annee) break;
+          }
+          const providers = extractProviders(html);
+          const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
+          if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
+        }
+      } catch(e) { console.warn(`[auto][bestever] Film ${film.allocineId}: ${e.message}`); }
+      done++;
+      besteverDetailsProgress.current = done;
+      if (done % 50 === 0) console.log(`[auto][bestever] Plateformes: ${done}/${toFetch.length}`);
+    }
+    lastBesteverDetailsScrape = new Date().toISOString();
+    if (redis) {
+      try {
+        await saveDetailsCache(); // sauvegarde detailsCache partagé
+        await redis.set('lastBesteverDetailsScrape', lastBesteverDetailsScrape);
+      } catch(e) { console.warn('[auto][bestever] Redis détails:', e.message); }
+    }
+    console.log(`✅ Bestever plateformes terminées — ${done} fiches\n`);
+  } finally {
+    isBesteverScraping      = false;
+    scrapingPhase           = null;
+    besteverDetailsProgress = { current: 0, total: 0 };
+  }
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  SECTION 11 — DÉMARRAGE DU SERVEUR
 // ══════════════════════════════════════════════════════════════════════════════
 
 app.listen(PORT, () => {
   console.log('\n🎬 AlloCiné VOD Scraper v9 démarré !');
-  console.log(`   ➜ Application  : http://localhost:${PORT}`);
-  console.log(`   ➜ Santé films  : http://localhost:${PORT}/api/health`);
-  console.log(`   ➜ Santé séries : http://localhost:${PORT}/api/series/health\n`);
+  console.log(`   ➜ Application    : http://localhost:${PORT}`);
+  console.log(`   ➜ Santé films    : http://localhost:${PORT}/api/health`);
+  console.log(`   ➜ Santé séries   : http://localhost:${PORT}/api/series/health`);
+  console.log(`   ➜ Santé bestever : http://localhost:${PORT}/api/bestever/health\n`);
 
   // Séquence d'initialisation :
-  //   1. Charge Redis (films, séries, utilisateurs, prefs, caches)
+  //   1. Charge Redis (films, séries, bestever, utilisateurs, prefs, caches)
   //   2. Crée les profils par défaut s'ils n'existent pas
-  //   3–6. Lance les 4 auto-scrapes si le cache est périmé
-  //   7. Programme le scraping nocturne quotidien (3h00–3h45, heure Paris)
+  //   3–8. Lance les 6 auto-scrapes si le cache est périmé
+  //   9. Programme le scraping nocturne quotidien (3h00–4h15, heure Paris)
   loadUserdata()
     .then(() => seedDefaultProfiles())
     .then(() => autoScrapeFilmsListIfStale())
     .then(() => autoScrapeFilmsDetailsIfStale())
     .then(() => autoScrapeSeriesListIfStale())
     .then(() => autoScrapeSeriesDetailsIfStale())
+    .then(() => autoScrapeBesteverListIfStale())
+    .then(() => autoScrapeBesteverDetailsIfStale())
     .then(() => scheduleNightlyScraping());
 });

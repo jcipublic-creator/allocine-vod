@@ -128,7 +128,7 @@ const seriesDetailsCache    = new Map(); // clé: "sid:XXXXX" → { value, cache
 
 // ── État global Bestever ────────────────────────────────────────────────────
 const BESTEVER_DECADES          = [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
-const BESTEVER_PAGES_PER_DECADE = Number(process.env.BESTEVER_PAGES_PER_DECADE || 6);
+const BESTEVER_PAGES_PER_DECADE = Number(process.env.BESTEVER_PAGES_PER_DECADE || 9);
 let cachedBestever              = [];   // meilleurs films all-time (par décennie)
 let lastBesteverScrape          = null; // ISO — dernier scraping liste bestever
 let lastBesteverDetailsScrape   = null; // ISO — dernier scraping plateformes bestever

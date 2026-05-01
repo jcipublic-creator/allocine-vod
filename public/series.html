@@ -244,6 +244,43 @@ body {
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
 .empty.show { display: block; }
 
+/* ── Webviewer intégré ── */
+#webview-modal {
+  display: none; position: fixed; inset: 0; z-index: 500;
+  flex-direction: column; background: var(--navy);
+}
+#webview-modal.open { display: flex; }
+#webview-bar {
+  display: flex; align-items: center; gap: 10px;
+  padding: 0 12px; height: calc(48px + var(--st)); padding-top: var(--st);
+  background: rgba(13,33,55,.97); border-bottom: 1px solid var(--blue3);
+  flex-shrink: 0;
+}
+#webview-close {
+  background: none; border: 1px solid var(--blue3); color: var(--gold);
+  border-radius: 8px; padding: 5px 10px; font-size: 13px; cursor: pointer; flex-shrink: 0;
+}
+#webview-title {
+  flex: 1; font-size: 13px; color: var(--text);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+#webview-external {
+  font-size: 12px; color: var(--muted); border: 1px solid var(--blue3);
+  border-radius: 8px; padding: 5px 9px; text-decoration: none; flex-shrink: 0;
+}
+#webview-frame { flex: 1; border: none; background: #fff; }
+#webview-blocked {
+  display: none; flex: 1; flex-direction: column;
+  align-items: center; justify-content: center; gap: 16px;
+  padding: 40px 24px; text-align: center;
+}
+#webview-blocked.show { display: flex; }
+#webview-blocked p { color: var(--muted); font-size: 14px; line-height: 1.6; }
+#webview-blocked a {
+  display: block; padding: 12px 24px; background: var(--gold); color: var(--navy);
+  border-radius: 12px; font-weight: 700; font-size: 14px; text-decoration: none;
+}
+
 /* ══════════════════════════════════════════════════════
    MODALS (bottom sheets)
    ══════════════════════════════════════════════════════ */
@@ -326,6 +363,19 @@ body {
 </head>
 <body>
 <div id="auto-scrape-bar"><div id="auto-scrape-fill"></div></div>
+
+<div id="webview-modal">
+  <div id="webview-bar">
+    <button id="webview-close" onclick="closeWebview()">✕ Fermer</button>
+    <span id="webview-title"></span>
+    <a id="webview-external" href="#" target="_blank">↗ Safari</a>
+  </div>
+  <iframe id="webview-frame" src="" onload="webviewLoaded()" onerror="webviewBlocked()"></iframe>
+  <div id="webview-blocked">
+    <p>AlloCiné ne peut pas s'afficher dans l'application.</p>
+    <a id="webview-blocked-link" href="#" target="_blank">Ouvrir dans Safari</a>
+  </div>
+</div>
 
 <!-- ── Modal : confirmation scraping ── -->
 <div id="confirm-modal">
@@ -451,7 +501,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v142';
+const LS_SVERSION = 'vod_series_v143';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -704,7 +754,7 @@ function renderSeriesCards(series) {
       : `<div class="card-poster"><div class="card-poster-ph">📺</div></div>`;
 
     return `
-<div class="card" id="card-${i}" data-idx="${i}" onclick="window.open('${url}','_blank')">
+<div class="card" id="card-${i}" data-idx="${i}" onclick="openWebview('${url}', ${JSON.stringify(s.titre)})">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">
@@ -1153,6 +1203,31 @@ async function confirmClearCache(mode) {
   await clearSeriesCache(mode);
 }
 
+
+// ─── Webviewer intégré ────────────────────────────────────────────────────────
+function openWebview(url, titre) {
+  document.getElementById('webview-title').textContent = titre || 'AlloCiné';
+  document.getElementById('webview-external').href = url;
+  document.getElementById('webview-blocked-link').href = url;
+  document.getElementById('webview-frame').style.display = 'block';
+  document.getElementById('webview-blocked').classList.remove('show');
+  document.getElementById('webview-frame').src = url;
+  document.getElementById('webview-modal').classList.add('open');
+}
+function closeWebview() {
+  document.getElementById('webview-modal').classList.remove('open');
+  document.getElementById('webview-frame').src = '';
+}
+function webviewLoaded() {
+  try {
+    const doc = document.getElementById('webview-frame').contentDocument;
+    if (!doc || !doc.body || doc.body.innerHTML === '') webviewBlocked();
+  } catch(e) { /* cross-origin = chargé normalement */ }
+}
+function webviewBlocked() {
+  document.getElementById('webview-frame').style.display = 'none';
+  document.getElementById('webview-blocked').classList.add('show');
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  MENU

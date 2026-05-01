@@ -432,6 +432,11 @@ function applySort(critere) {
       if (b.noteSpect == null) return -1;
       return b.noteSpect - a.noteSpect || b.notePresse - a.notePresse;
     }
+    if (_sortBy === 'combinee') {
+      const sa = (a.notePresse ?? 0) + (a.noteSpect ?? 0);
+      const sb = (b.notePresse ?? 0) + (b.noteSpect ?? 0);
+      return sb - sa || a.titre.localeCompare(b.titre, 'fr');
+    }
     return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
   });
 

@@ -441,6 +441,7 @@ body {
   <select id="fil-sort" onchange="applySeriesSort(this.value)">
     <option value="presse">↓ Note presse</option>
     <option value="spectateurs">↓ Note spectateurs</option>
+    <option value="combinee">↓ Note combinée</option>
     <option value="annee">↓ Année début</option>
   </select>
 </div>
@@ -868,6 +869,11 @@ function applySeriesSort(sortBy) {
   const sorted = [..._allSeries].sort((a, b) => {
     if (_seriesSortBy === 'presse')      return b.notePresse - a.notePresse;
     if (_seriesSortBy === 'spectateurs') return (b.noteSpect ?? 0) - (a.noteSpect ?? 0);
+    if (_seriesSortBy === 'combinee') {
+      const sa = (a.notePresse ?? 0) + (a.noteSpect ?? 0);
+      const sb = (b.notePresse ?? 0) + (b.noteSpect ?? 0);
+      return sb - sa;
+    }
     if (_seriesSortBy === 'annee')       return (parseInt(b.anneeSortie) || 0) - (parseInt(a.anneeSortie) || 0);
     return 0;
   });

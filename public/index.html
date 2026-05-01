@@ -5,11 +5,11 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="Films VOD">
+<meta name="apple-mobile-web-app-title" content="Films récents">
 <link rel="apple-touch-icon" href="/icon-192.svg">
 <link rel="manifest" href="/manifest.json">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<title>🎬 Films VOD</title>
+<title>🎬 Films récents</title>
 <style>
 :root {
   --navy:   #0d2137;
@@ -449,7 +449,7 @@ body {
 
 <div class="header">
   <div style="display:flex;align-items:center;gap:8px;flex:1;min-width:0;overflow:hidden;">
-    <div class="header-title">🎬 Films VOD</div>
+    <div class="header-title">🎬 Films récents</div>
   </div>
   <div id="scrape-indicator"><span class="si-dot"></span><span id="scrape-indicator-label"></span></div>
   <div id="server-status" style="display:none;"></div>
@@ -1256,7 +1256,7 @@ function downloadXLSX() {
   });
   const ws = XLSX.utils.aoa_to_sheet([...head, ...rows]);
   ws['!cols'] = [4,34,24,22,20,34,11,14,50,30].map(w => ({ wch: w }));
-  XLSX.utils.book_append_sheet(wb, ws, 'Films VOD');
+  XLSX.utils.book_append_sheet(wb, ws, 'Films récents');
   XLSX.writeFile(wb, 'allocine_vod.xlsx');
 }
 

@@ -227,7 +227,20 @@ body {
 }
 .confirm-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 10px; }
 .confirm-sheet p  { font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 6px; }
-.confirm-sheet .last-scrape { font-size: 12px; color: var(--muted); margin-bottom: 20px; }
+.confirm-sheet .last-scrape { font-size: 12px; color: var(--muted); margin-bottom: 14px; }
+.confirm-param { margin-bottom: 18px; }
+.confirm-param-label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 6px; }
+.confirm-param-row { display: flex; align-items: center; gap: 10px; }
+.confirm-input {
+  width: 72px; padding: 8px 10px; border-radius: 8px;
+  background: var(--blue2); border: 1px solid var(--blue3);
+  color: var(--text); font-size: 15px; font-weight: 600; text-align: center;
+  -moz-appearance: textfield;
+}
+.confirm-input::-webkit-outer-spin-button,
+.confirm-input::-webkit-inner-spin-button { -webkit-appearance: none; margin: 0; }
+.confirm-input:focus { outline: none; border-color: var(--gold); }
+.confirm-param-hint { font-size: 12px; color: var(--muted); }
 .confirm-btns { display: flex; gap: 10px; }
 .confirm-btns button { flex: 1; padding: 13px; border-radius: 10px; border: none; font-size: 14px; font-weight: 600; cursor: pointer; }
 .btn-confirm { background: var(--gold); color: #000; }
@@ -393,9 +406,16 @@ body {
     <h3>🔄 Relancer le scraping ?</h3>
     <p>Les meilleurs films all-time seront mis à jour en arrière-plan.</p>
     <div class="last-scrape" id="confirm-last-scrape"></div>
+    <div class="confirm-param">
+      <label class="confirm-param-label" for="confirm-pages">Pages par décennie</label>
+      <div class="confirm-param-row">
+        <input type="number" id="confirm-pages" class="confirm-input" min="1" max="20" value="6">
+        <span class="confirm-param-hint" id="confirm-pages-hint"></span>
+      </div>
+    </div>
     <div class="confirm-btns">
       <button class="btn-cancel"  onclick="closeConfirm()">Annuler</button>
-      <button class="btn-confirm" onclick="closeConfirm();startScrape()">Confirmer</button>
+      <button class="btn-confirm" onclick="closeConfirm();startScrape()">Lancer</button>
     </div>
   </div>
 </div>
@@ -1244,7 +1264,8 @@ function applySort(critere) {
 
 // ─── Scraping manuel ─────────────────────────────────────────────────────────
 function startScrape() {
-  const btn = document.getElementById('btn-run');
+  const btn   = document.getElementById('btn-run');
+  const pages = parseInt(document.getElementById('confirm-pages')?.value) || 6;
   _scrapingDone = false;
   _loadGen++;
   UI.onScrapeStart(btn);
@@ -1252,7 +1273,7 @@ function startScrape() {
   const seen = new Set();
   const pendingFilms = [];
 
-  const es = new EventSource('/api/bestever/scrape');
+  const es = new EventSource(`/api/bestever/scrape?pages=${pages}`);
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);
@@ -1290,19 +1311,31 @@ function startScrape() {
 
 // ─── Confirmation scraping ────────────────────────────────────────────────────
 function openConfirm() {
-  const el = document.getElementById('confirm-last-scrape');
+  const elDate  = document.getElementById('confirm-last-scrape');
+  const elPages = document.getElementById('confirm-pages');
+  const elHint  = document.getElementById('confirm-pages-hint');
   fetch('/api/bestever/health', { signal: AbortSignal.timeout(3000) })
     .then(r => r.json())
     .then(d => {
       if (d.lastScrape) {
         const dt = new Date(d.lastScrape);
-        el.textContent = `Dernier scraping : ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}`;
+        elDate.textContent = `Dernier scraping : ${dt.toLocaleDateString('fr-FR')} à ${dt.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}`;
       } else {
-        el.textContent = 'Aucun scraping effectué.';
+        elDate.textContent = 'Aucun scraping effectué.';
+      }
+      if (d.pagesPerDecade) {
+        elPages.value = d.pagesPerDecade;
+        const total = (d.decades?.length || 9) * d.pagesPerDecade;
+        elHint.textContent = `= ${total} pages au total (${d.decades?.length || 9} décennies)`;
       }
     })
-    .catch(() => { el.textContent = ''; });
+    .catch(() => { elDate.textContent = ''; });
   document.getElementById('confirm-modal').classList.add('open');
+  // Mise à jour du hint en temps réel quand l'utilisateur change la valeur
+  elPages.oninput = () => {
+    const n = parseInt(elPages.value) || 0;
+    elHint.textContent = n > 0 ? `= ${n * 9} pages au total (9 décennies)` : '';
+  };
 }
 function closeConfirm() { document.getElementById('confirm-modal').classList.remove('open'); }
 

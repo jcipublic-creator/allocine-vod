@@ -2433,6 +2433,11 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
   isBesteverScraping = true;
   scrapingPhase      = 'bestever-list';
 
+  const pagesParam = parseInt(req.query.pages);
+  const pagesPerDecade = (Number.isFinite(pagesParam) && pagesParam >= 1 && pagesParam <= 20)
+    ? pagesParam
+    : BESTEVER_PAGES_PER_DECADE;
+
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -2440,12 +2445,12 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
 
   const send       = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
   const allFilms   = [];
-  const totalPages = BESTEVER_DECADES.length * BESTEVER_PAGES_PER_DECADE;
+  const totalPages = BESTEVER_DECADES.length * pagesPerDecade;
   let   globalPage = 0;
 
   try {
     for (const decade of BESTEVER_DECADES) {
-      for (let page = 1; page <= BESTEVER_PAGES_PER_DECADE; page++) {
+      for (let page = 1; page <= pagesPerDecade; page++) {
         globalPage++;
         besteverProgress = { current: globalPage, total: totalPages };
         send({ type: 'progress', page: globalPage, total: totalPages, decade });
@@ -2456,7 +2461,7 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
           const raw = parseBesteverFilms(html, String(decade));
           allFilms.push(...raw);
           send({ type: 'films', films: raw, page: globalPage, total: totalPages, decade });
-          console.log(`[bestever][${decade}] Page ${page}/${BESTEVER_PAGES_PER_DECADE} → ${raw.length} films`);
+          console.log(`[bestever][${decade}] Page ${page}/${pagesPerDecade} → ${raw.length} films`);
         } catch(e) {
           const msg = e.response ? `HTTP ${e.response.status}` : e.message;
           console.error(`[bestever][${decade}] Page ${page} erreur: ${msg}`);

@@ -467,7 +467,7 @@ const LS_SERIES   = 'vod_series';
 const LS_SDET     = 'vod_series_details';
 const LS_SDATE    = 'vod_series_updated';
 // ⚠ Incrémenter LS_SVERSION à chaque changement de format des données en cache
-const LS_SVERSION = 'vod_series_v150';
+const LS_SVERSION = 'vod_series_v151';
 
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1263,15 +1263,17 @@ function closeInfo() {
 }
 async function _fetchInfoData() {
   try {
-    const [rf, rs, rst] = await Promise.all([
+    const [rf, rs, rb, rst] = await Promise.all([
       fetch('/api/health',          { signal: AbortSignal.timeout(4000) }),
       fetch('/api/series/health',   { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/bestever/health', { signal: AbortSignal.timeout(4000) }),
       fetch('/api/scraping-status', { signal: AbortSignal.timeout(4000) }),
     ]);
     _infoData = {
-      films:  rf.ok  ? await rf.json()  : null,
-      series: rs.ok  ? await rs.json()  : null,
-      status: rst.ok ? await rst.json() : null,
+      films:    rf.ok  ? await rf.json()  : null,
+      series:   rs.ok  ? await rs.json()  : null,
+      bestever: rb.ok  ? await rb.json()  : null,
+      status:   rst.ok ? await rst.json() : null,
     };
   } catch(e) { _infoData = null; }
 }
@@ -1294,7 +1296,7 @@ function renderInfo() {
   const el = document.getElementById('info-content');
   if (!_infoData) { el.textContent = 'Serveur non disponible.'; return; }
   const fmt = iso => iso ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit',minute:'2-digit'}) : '—';
-  const f = _infoData.films, s = _infoData.series, st = _infoData.status;
+  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, st = _infoData.status;
   const fErrors = f?.lastScrapeErrors || [];
 
   function progressBlock(info) {
@@ -1329,6 +1331,13 @@ function renderInfo() {
     ${progressBlock(st?.seriesList)}
     <div class="info-row"><span class="lbl">Scraping détails${badge(st?.seriesDetails?.active)}</span><span class="val">${fmt(s?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.seriesDetails)}
+    <div class="info-section-title">🏆 Best ever</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${b?.cachedFilms ?? '—'} films</span></div>
+    <div class="info-row"><span class="lbl">Pages / décennie</span><span class="val">${b?.pagesPerDecade ?? '—'} × ${b?.decades?.length ?? '—'} décennies</span></div>
+    <div class="info-row"><span class="lbl">Scraping liste${badge(st?.besteverList?.active)}</span><span class="val">${fmt(b?.lastScrape)}</span></div>
+    ${progressBlock(st?.besteverList)}
+    <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
+    ${progressBlock(st?.besteverDetails)}
   `;
 }
 

@@ -3016,5 +3016,11 @@ app.listen(PORT, () => {
   //   le menu Debug déclenchent un scraping.
   loadUserdata()
     .then(() => seedDefaultProfiles())
-    .then(() => scheduleNightlyScraping());
+    .then(() => {
+      if (process.env.AUTO_SCRAPE === 'true') {
+        scheduleNightlyScraping();
+      } else {
+        console.log('⏸️  Scraping nocturne désactivé (AUTO_SCRAPE != true) — mode local ou dev');
+      }
+    });
 });

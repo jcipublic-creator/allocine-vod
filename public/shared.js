@@ -787,7 +787,7 @@ async function _mpSaveContact() {
       body: JSON.stringify({ mobile: mob1, email: mail1 })
     });
     if (r.ok) {
-      if (errEl) { errEl.style.color = '#4c9'; errEl.textContent = '✓ Enregistré'; setTimeout(() => { if (errEl) { errEl.textContent=''; errEl.style.color='#e55'; } }, 2500); }
+      closeMyProfile();
     } else {
       if (errEl) errEl.textContent = 'Erreur serveur.';
     }

@@ -2782,6 +2782,24 @@ app.get('/api/bestever/health', (_req, res) => {
 });
 
 /**
+ * GET /api/admin/providers — liste toutes les plateformes uniques dans detailsCache
+ * Réponse : [{ name, type, count }] trié par count décroissant
+ */
+app.get('/api/admin/providers', requireSecret, (_req, res) => {
+  const map = new Map();
+  for (const { value } of detailsCache.values()) {
+    if (!value || !value.providers) continue;
+    for (const p of value.providers) {
+      const key = p.name;
+      if (!map.has(key)) map.set(key, { name: p.name, type: p.type, count: 0 });
+      map.get(key).count++;
+    }
+  }
+  const result = [...map.values()].sort((a, b) => b.count - a.count);
+  res.json({ total: result.length, providers: result });
+});
+
+/**
  * GET /api/bestever/scrape-status
  * Réponse : { isScraping, pct }
  */

@@ -2445,16 +2445,18 @@ function parseBesteverFilms(html, decade) {
     // Synopsis
     const synopsis = $card.find('.content-txt').first().text().trim().substring(0, 400);
 
-    // Année de sortie (text brut dans .meta-body-info, hors liens)
-    let anneeSortie = null;
+    // Année de sortie + durée (text brut dans .meta-body-info, hors liens)
+    let anneeSortie = null, duree = null;
     const $metaInfo = $card.find('.meta-body-info').first();
     if ($metaInfo.length) {
       const metaText = $metaInfo.text();
       const yearMatch = metaText.match(/\b(19\d{2}|20\d{2})\b/);
       if (yearMatch) anneeSortie = yearMatch[1];
+      const dureeMatch = metaText.match(/\b(\d+h\s*(?:\d+min)?)/);
+      if (dureeMatch) duree = dureeMatch[1].replace(/\s+/, ' ').trim();
     }
 
-    films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade: String(decade), anneeSortie });
+    films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, decade: String(decade), anneeSortie, duree });
   });
 
   return films;

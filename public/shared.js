@@ -726,14 +726,8 @@ async function _renderMyProfile() {
         <label style="${labelStyle}">📱 Mobile</label>
         <input id="mp-mob1" type="tel" autocomplete="off" maxlength="20" placeholder="ex : 06 12 34 56 78"
           style="${inputStyle}" value="${esc(me.mobile||'')}">
-        <label style="${labelStyle}">📱 Confirmer le mobile</label>
-        <input id="mp-mob2" type="tel" autocomplete="off" maxlength="20" placeholder="même numéro"
-          style="${inputStyle}" value="${esc(me.mobile||'')}">
         <label style="${labelStyle};margin-top:14px">✉️ Email</label>
         <input id="mp-mail1" type="email" autocomplete="off" maxlength="80" placeholder="ex : prenom@example.com"
-          style="${inputStyle}" value="${esc(me.email||'')}">
-        <label style="${labelStyle}">✉️ Confirmer l'email</label>
-        <input id="mp-mail2" type="email" autocomplete="off" maxlength="80" placeholder="même adresse"
           style="${inputStyle}" value="${esc(me.email||'')}">
         <div id="mp-contact-err" style="color:#e55;font-size:12px;min-height:14px;margin-top:6px"></div>
         <button onclick="_mpSaveContact()" style="${btnStyle};background:var(--gold);color:#000;border:none;font-weight:700">
@@ -770,21 +764,16 @@ async function _renderMyProfile() {
 }
 
 async function _mpSaveContact() {
-  const mob1  = document.getElementById('mp-mob1')?.value.trim()  || '';
-  const mob2  = document.getElementById('mp-mob2')?.value.trim()  || '';
-  const mail1 = document.getElementById('mp-mail1')?.value.trim() || '';
-  const mail2 = document.getElementById('mp-mail2')?.value.trim() || '';
-  const errEl = document.getElementById('mp-contact-err');
+  const mobile = document.getElementById('mp-mob1')?.value.trim()  || '';
+  const email  = document.getElementById('mp-mail1')?.value.trim() || '';
+  const errEl  = document.getElementById('mp-contact-err');
   if (errEl) errEl.textContent = '';
-
-  if (mob1 !== mob2)  { if (errEl) errEl.textContent = 'Les numéros de mobile ne correspondent pas.'; return; }
-  if (mail1 !== mail2) { if (errEl) errEl.textContent = 'Les adresses email ne correspondent pas.'; return; }
 
   try {
     const r = await fetch(`/api/users/${encodeURIComponent(_currentUserId)}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
-      body: JSON.stringify({ mobile: mob1, email: mail1 })
+      body: JSON.stringify({ mobile, email })
     });
     if (r.ok) {
       closeMyProfile();

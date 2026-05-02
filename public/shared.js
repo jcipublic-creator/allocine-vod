@@ -960,9 +960,7 @@ function renderInfo() {
         ? new Date(p.lastConnection).toLocaleDateString('fr-FR') + ' ' +
           new Date(p.lastConnection).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         : '—';
-      const pinBtn = uid !== _currentUserId
-        ? `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted);cursor:pointer;margin-left:6px">🔐 PIN</button>`
-        : '';
+      const pinBtn = `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted);cursor:pointer;margin-left:6px">🔐 PIN</button>`;
       return `
     <div class="info-section-title" style="display:flex;align-items:center">👤 ${esc(p.name)}${pinBtn}</div>
     <div class="info-row"><span class="lbl">Connexions</span><span class="val">${p.connectionCount}</span></div>

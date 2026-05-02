@@ -177,6 +177,7 @@ async function createUser(name) {
 function switchUser(userId) {
   _currentUserId = userId;
   localStorage.setItem(LS_USER_ID, userId);
+  _connectionPinged = false; // réinitialise pour que le prochain loadUserdata() pinge le nouveau profil
 }
 
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */

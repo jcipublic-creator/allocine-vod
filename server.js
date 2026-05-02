@@ -703,7 +703,7 @@ function parseFilms(html) {
     const noteSpect  = lines[i + 2] === 'Spectateurs' && lines[i + 3] && /^\d[,.]\d$/.test(lines[i + 3])
       ? parseFloat(lines[i + 3].replace(',', '.')) : null;
 
-    let titre = '', genre = '', realisateur = '', acteurs = '', titreOriginal = '';
+    let titre = '', genre = '', realisateur = '', acteurs = '', titreOriginal = '', duree = null;
     let titleIdx = -1;
 
     // Remonte pour trouver le titre (ligne se terminant par " VOD")
@@ -718,6 +718,9 @@ function parseFilms(html) {
       const avecIdx= seg.indexOf('Avec');
       const origIdx= seg.indexOf('Titre original');
       const pipeIdx= seg.findIndex((line) => line === '|');
+
+      // Durée : ligne de la forme "1h 30min" présente dans le segment (filtrée du genre)
+      duree = seg.find(line => /^\d+h/.test(line)) || null;
 
       // Genre : entre le premier "|" et "De" (s'arrête avant "Titre original" s'il est intercalé)
       if (pipeIdx >= 0 && deIdx > pipeIdx) {
@@ -758,7 +761,7 @@ function parseFilms(html) {
       const originalKey = normalizeTitle(titreOriginal);
       const allocineId  = titleToId.get(titleKey) || titleToId.get(originalKey) || null;
       const poster      = allocineId ? (idToPoster.get(allocineId) || null) : null;
-      films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster });
+      films.push({ titre, titreOriginal, genre, realisateur, acteurs, notePresse, noteSpect, synopsis, allocineId, poster, duree });
     }
   }
 

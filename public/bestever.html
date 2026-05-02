@@ -1067,7 +1067,7 @@ async function onAddUser() {
   input.disabled = true;
   try {
     await createUser(name);
-    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
     savePrefs();
     _userdata = {};
     await loadUserdata();
@@ -1092,12 +1092,12 @@ function updateProfileBadge() {
 }
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
 
-function getPrefsKey() { return 'bestever_prefs_' + (_currentUserId || 'anon'); }
+function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
@@ -1124,6 +1124,7 @@ function renderPrefs() {
       </label>
     </div>`;
   document.getElementById('prefs-content').innerHTML = `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5">Ces réglages s'appliquent aux 3 sections : Films, Séries et Best ever.</p>
     <div class="prefs-section">
       <div class="prefs-section-title">Genres</div>
       ${row('showDocumentaires', 'Afficher les documentaires')}
@@ -1131,7 +1132,7 @@ function renderPrefs() {
     </div>
     <div class="prefs-section">
       <div class="prefs-section-title">Ma liste</div>
-      ${row('hideVus',          'Masquer les films déjà vus')}
+      ${row('hideVus',          'Masquer les déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
     </div>`;
 }

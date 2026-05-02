@@ -1016,7 +1016,7 @@ async function onAddUser() {
   input.disabled = true;
   try {
     await createUser(name);
-    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
+    _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
     savePrefs();
     _userdata = {};
     await loadUserdata();
@@ -1041,12 +1041,12 @@ function updateProfileBadge() {
 }
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: false, hideNonInteresse: false, hideVusSeries: true, hideNonInteresseSeries: true };
+let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, hideVusSeries: true, hideNonInteresseSeries: true };
+  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
@@ -1073,20 +1073,16 @@ function renderPrefs() {
       </label>
     </div>`;
   document.getElementById('prefs-content').innerHTML = `
+    <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5">Ces réglages s'appliquent aux 3 sections : Films, Séries et Best ever.</p>
     <div class="prefs-section">
       <div class="prefs-section-title">Genres</div>
       ${row('showDocumentaires', 'Afficher les documentaires')}
       ${row('showAnimations',    'Afficher les animations')}
     </div>
     <div class="prefs-section">
-      <div class="prefs-section-title">🎬 Films — Ma liste</div>
-      ${row('hideVus',          'Masquer les films déjà vus')}
+      <div class="prefs-section-title">Ma liste</div>
+      ${row('hideVus',               'Masquer les déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
-    </div>
-    <div class="prefs-section">
-      <div class="prefs-section-title">📺 Séries — Ma liste</div>
-      ${row('hideVusSeries',          'Masquer les séries déjà vues')}
-      ${row('hideNonInteresseSeries', 'Masquer les "Non intéressé"')}
     </div>`;
 }
 

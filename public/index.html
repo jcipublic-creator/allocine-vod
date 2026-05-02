@@ -972,8 +972,9 @@ function renderProfiles(list, firstLaunch = false) {
     const deleteBtn = canDelete
       ? `<button class="profile-delete-btn" onclick="event.stopPropagation();deleteUser('${u.id}','${esc(u.name)}')" title="Supprimer">🗑️</button>`
       : '';
-    return `<div class="profile-row ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfile('${u.id}')"`}>
-      <span class="profile-name">${esc(u.name)}</span>
+    const lockIcon = (!isActive && u.hasPin) ? ' 🔒' : '';
+    return `<div class="profile-row ${isActive ? 'active' : ''}" ${isActive ? '' : `onclick="selectProfile('${u.id}',${!!u.hasPin})"`}>
+      <span class="profile-name">${esc(u.name)}${lockIcon}</span>
       <div style="display:flex;align-items:center;gap:8px">
         ${isActive ? '<span class="profile-badge-active">● Actif</span>' : '<span class="profile-badge-switch">Sélectionner →</span>'}
         ${deleteBtn}
@@ -1004,7 +1005,11 @@ async function deleteUser(userId, userName) {
   } catch(e) { UI.showError('Erreur lors de la suppression.'); }
 }
 
-async function selectProfile(userId) {
+async function selectProfile(userId, hasPin = false) {
+  if (hasPin) {
+    const ok = await promptPinModal(userId);
+    if (!ok) return;
+  }
   switchUser(userId);
   loadPrefs();
   _userdata = {};

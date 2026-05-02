@@ -180,6 +180,91 @@ function switchUser(userId) {
   _connectionPinged = false; // réinitialise pour que le prochain loadUserdata() pinge le nouveau profil
 }
 
+// ─── Protection PIN ───────────────────────────────────────────────────────────
+
+/**
+ * Affiche une modal de saisie PIN pour le profil userId.
+ * Retourne une Promise<boolean> : true si PIN correct, false si annulé/incorrect.
+ */
+function promptPinModal(userId) {
+  return new Promise(resolve => {
+    const ID = 'pin-modal';
+    let el = document.getElementById(ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = ID;
+      el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center';
+      el.innerHTML = `
+        <div style="background:var(--card);border-radius:14px;padding:28px 24px;width:280px;text-align:center">
+          <div style="font-size:28px;margin-bottom:8px">🔒</div>
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">Profil protégé</div>
+          <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Entre le code PIN pour accéder à ce profil.</div>
+          <input id="pin-input" type="password" inputmode="numeric" maxlength="10"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:18px;letter-spacing:.2em;text-align:center;outline:none"
+            placeholder="••••">
+          <div id="pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button id="pin-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
+            <button id="pin-confirm" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Valider</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
+    }
+
+    const input   = el.querySelector('#pin-input');
+    const errDiv  = el.querySelector('#pin-error');
+    const btnOk   = el.querySelector('#pin-confirm');
+    const btnCancel = el.querySelector('#pin-cancel');
+
+    input.value = '';
+    errDiv.textContent = '';
+    el.style.display = 'flex';
+    setTimeout(() => input.focus(), 50);
+
+    async function attempt() {
+      const pin = input.value.trim();
+      if (!pin) { input.focus(); return; }
+      btnOk.disabled = true;
+      try {
+        const r = await fetch(`/api/users/${encodeURIComponent(userId)}/verify-pin`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pin })
+        });
+        const { ok } = await r.json();
+        if (ok) { close(); resolve(true); }
+        else { errDiv.textContent = 'Code incorrect.'; input.value = ''; input.focus(); btnOk.disabled = false; }
+      } catch(e) { errDiv.textContent = 'Erreur réseau.'; btnOk.disabled = false; }
+    }
+
+    function close() { el.style.display = 'none'; input.removeEventListener('keydown', onKey); }
+    function cancel() { close(); resolve(false); }
+    function onKey(e) { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); }
+
+    input.addEventListener('keydown', onKey);
+    btnOk.onclick = attempt;
+    btnCancel.onclick = cancel;
+  });
+}
+
+/**
+ * Ouvre une modal pour définir ou supprimer le PIN d'un profil (admin JC only).
+ * Appelé depuis le bloc admin du menu Info.
+ */
+async function openSetPin(userId, userName) {
+  const pin = window.prompt(`Code PIN pour "${userName}" (laisser vide pour supprimer) :`);
+  if (pin === null) return; // annulé
+  try {
+    const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-secret': _secret || '' },
+      body: JSON.stringify({ pin: pin.trim() })
+    });
+    if (r.ok) {
+      alert(pin.trim() ? `PIN défini pour ${userName}.` : `PIN supprimé pour ${userName}.`);
+    }
+  } catch(e) { alert('Erreur lors de la définition du PIN.'); }
+}
+
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */
 function openACSync() {
   const ID = 'ac-sync-modal';
@@ -865,18 +950,21 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`;
   })();
 
-  // Bloc admin (JC only) : connexions + stats tous les profils
+  // Bloc admin (JC only) : connexions + stats + gestion PIN tous les profils
   const adminBlock = (() => {
     if (!isJCProfile()) return '';
     const entries = Object.entries(udStats);
     if (!entries.length) return '';
-    const rows = entries.map(([, p]) => {
+    const rows = entries.map(([uid, p]) => {
       const lastConn = p.lastConnection
         ? new Date(p.lastConnection).toLocaleDateString('fr-FR') + ' ' +
           new Date(p.lastConnection).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         : '—';
+      const pinBtn = uid !== _currentUserId
+        ? `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted);cursor:pointer;margin-left:6px">🔐 PIN</button>`
+        : '';
       return `
-    <div class="info-section-title">👤 ${esc(p.name)}</div>
+    <div class="info-section-title" style="display:flex;align-items:center">👤 ${esc(p.name)}${pinBtn}</div>
     <div class="info-row"><span class="lbl">Connexions</span><span class="val">${p.connectionCount}</span></div>
     <div class="info-row"><span class="lbl">Dernière connexion</span><span class="val">${lastConn}</span></div>
     <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>

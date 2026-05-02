@@ -834,7 +834,8 @@ app.get('/api/films', (_req, res) => {
  * Réponse : { id, name, createdAt }[]
  */
 app.get('/api/users', (_req, res) => {
-  res.json(Object.values(users));
+  // N'expose jamais le pin brut — seulement un booléen hasPin
+  res.json(Object.values(users).map(u => ({ ...u, pin: undefined, hasPin: !!u.pin })));
 });
 
 /**
@@ -903,6 +904,44 @@ app.post('/api/users/:id/ping', async (req, res) => {
   users[id].lastConnection  = new Date().toISOString();
   await saveUsers();
   res.json({ ok: true });
+});
+
+/**
+ * POST /api/users/:id/set-pin
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Définit ou supprime le PIN d'un profil (réservé à l'admin).
+ *        Envoyer pin: "" ou pin: null pour supprimer le PIN.
+ *
+ * Body   : { pin: string }
+ * Réponse: { ok: true }
+ */
+app.post('/api/users/:id/set-pin', requireSecret, async (req, res) => {
+  const { id } = req.params;
+  if (!users[id]) return res.status(404).json({ error: 'Profil introuvable' });
+  const { pin } = req.body;
+  if (pin && typeof pin === 'string' && pin.trim()) {
+    users[id].pin = pin.trim();
+  } else {
+    delete users[id].pin;
+  }
+  await saveUsers();
+  res.json({ ok: true });
+});
+
+/**
+ * POST /api/users/:id/verify-pin
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Vérifie le PIN d'un profil.
+ *
+ * Body   : { pin: string }
+ * Réponse: { ok: true } ou { ok: false }
+ */
+app.post('/api/users/:id/verify-pin', async (req, res) => {
+  const { id } = req.params;
+  if (!users[id]) return res.status(404).json({ error: 'Profil introuvable' });
+  const { pin } = req.body;
+  const ok = !!users[id].pin && users[id].pin === String(pin || '').trim();
+  res.json({ ok });
 });
 
 /**

@@ -827,7 +827,19 @@ function renderInfo() {
     return active ? '<span class="info-scraping-badge">⟳ en cours</span>' : '';
   }
 
+  // Compteurs de notes AlloCiné (profil JC uniquement)
+  const notesBlock = (() => {
+    if (!isJCProfile()) return '';
+    const filmsAvecNote  = Object.entries(_userdata).filter(([k, v]) => !k.startsWith('s:') && v.noteAC).length;
+    const seriesAvecNote = Object.entries(_userdata).filter(([k, v]) =>  k.startsWith('s:') && v.noteAC).length;
+    return `
+    <div class="info-section-title">⭐ Mes notes AlloCiné</div>
+    <div class="info-row"><span class="lbl">Films notés</span><span class="val">${filmsAvecNote}</span></div>
+    <div class="info-row"><span class="lbl">Séries notées</span><span class="val">${seriesAvecNote}</span></div>`;
+  })();
+
   el.innerHTML = `
+    ${notesBlock}
     <div class="info-section-title">Serveur</div>
     <div class="info-row"><span class="lbl">Version</span><span class="val">${esc(f?.version || s?.version || b?.version || '—')}</span></div>
     <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>

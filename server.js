@@ -65,7 +65,8 @@ const APP_SECRET = process.env.APP_SECRET || null;
 /** Middleware : rejette les requêtes sans le bon header x-app-secret (si APP_SECRET est défini). */
 function requireSecret(req, res, next) {
   if (!APP_SECRET) return next();
-  if (req.headers['x-app-secret'] !== APP_SECRET)
+  const provided = req.headers['x-app-secret'] || req.query.secret;
+  if (provided !== APP_SECRET)
     return res.status(403).json({ error: 'Accès non autorisé' });
   next();
 }

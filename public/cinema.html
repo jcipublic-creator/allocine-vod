@@ -952,7 +952,7 @@ function startScrape() {
   const btn = document.getElementById('btn-run');
   UI.onScrapeStart(btn);
   let totalFound = 0;
-  const es = new EventSource(`/api/cinema/scrape`);
+  const es = new EventSource(`/api/cinema/scrape?secret=${encodeURIComponent(_appSecret || '')}`);
   es.onmessage = e => {
     const d = JSON.parse(e.data);
     if (d.type === 'progress') {

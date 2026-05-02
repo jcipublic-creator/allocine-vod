@@ -466,7 +466,7 @@ body {
   <div class="menu-separator"></div>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadCSV()">⬇ Exporter CSV</button>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
-  <div class="menu-separator"></div>
+  <div class="menu-separator" id="debug-separator"></div>
   <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
     🛠 Debug <span class="sub-arrow">▶</span>
   </button>
@@ -1037,6 +1037,7 @@ function updateProfileBadge() {
     const badge  = document.getElementById('profile-header-badge');
     if (nameEl) nameEl.textContent = u.name;
     if (badge) badge.style.display = 'flex';
+    updateDebugVisibility(u.name);
   }).catch(() => {});
 }
 

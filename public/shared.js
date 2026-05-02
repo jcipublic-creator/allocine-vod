@@ -179,6 +179,15 @@ function switchUser(userId) {
   localStorage.setItem(LS_USER_ID, userId);
 }
 
+/** Masque le menu Debug pour tous les profils sauf "JC" */
+function updateDebugVisibility(userName) {
+  const show = (userName || '').trim().toUpperCase() === 'JC';
+  ['btn-debug-toggle', 'submenu-debug', 'debug-separator'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.display = show ? '' : 'none';
+  });
+}
+
 async function loadServerPrefs() {
   if (!_currentUserId) return null;
   try {

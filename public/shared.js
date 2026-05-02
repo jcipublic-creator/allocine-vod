@@ -411,17 +411,29 @@ async function _renderUserMgmt() {
         ? `<button onclick="_umDelPin('${u.id}','${esc(u.name)}')" style="${btnStyle}border:1px solid rgba(255,80,80,.3);background:transparent;color:#e55">✕ Suppr.</button>`
         : '';
       const editContactBtn = `<button onclick="_umEditContact('${u.id}','${esc(u.name)}')" style="${btnStyle}border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted)">📋 Contact</button>`;
-      const mobile = u.mobile ? `<a href="tel:${esc(u.mobile)}" style="color:var(--text);text-decoration:none">${esc(u.mobile)}</a>` : '<span style="color:rgba(255,255,255,.25)">—</span>';
-      const email  = u.email  ? `<a href="mailto:${esc(u.email)}" style="color:var(--text);text-decoration:none">${esc(u.email)}</a>`   : '<span style="color:rgba(255,255,255,.25)">—</span>';
+      const mobileVal = u.mobile || '';
+      const emailVal  = u.email  || '';
+      const mobileDisp = mobileVal
+        ? `<a href="tel:${esc(mobileVal)}" style="color:#7ecfff;text-decoration:none;font-weight:600">${esc(mobileVal)}</a>`
+        : '<span style="color:rgba(255,255,255,.2);font-style:italic">non renseigné</span>';
+      const emailDisp  = emailVal
+        ? `<a href="mailto:${esc(emailVal)}" style="color:#7ecfff;text-decoration:none;font-weight:600">${esc(emailVal)}</a>`
+        : '<span style="color:rgba(255,255,255,.2);font-style:italic">non renseigné</span>';
       return `
       <div style="padding:14px 0;border-bottom:1px solid rgba(42,79,112,.3)">
         <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">
           <span style="font-size:14px;font-weight:600;color:var(--text)">${esc(u.name)}</span>
           <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${pinBadge}${setPinBtn}${delPinBtn}${editContactBtn}</div>
         </div>
+        <div style="background:rgba(255,255,255,.04);border-radius:8px;padding:8px 10px;margin-bottom:8px;font-size:12px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+            <span style="color:var(--muted);min-width:60px">📱 Mobile</span><span>${mobileDisp}</span>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px">
+            <span style="color:var(--muted);min-width:60px">✉️ Email</span><span style="word-break:break-all">${emailDisp}</span>
+          </div>
+        </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:12px;color:var(--muted)">
-          <span>📱 Mobile</span><span>${mobile}</span>
-          <span>✉️ Email</span><span>${email}</span>
           <span>Connexions</span><span style="color:var(--text)">${p.connectionCount ?? '—'}</span>
           <span>Dernière connexion</span><span style="color:var(--text)">${fmtDate(p.lastConnection)}</span>
           <span>🎬 Films vus</span><span style="color:var(--text)">${p.films?.vu ?? 0}</span>
@@ -444,56 +456,81 @@ async function _renderUserMgmt() {
 }
 
 async function _umEditContact(userId, userName) {
-  const ID = 'contact-modal';
-  let el = document.getElementById(ID);
-  if (!el) {
-    el = document.createElement('div');
-    el.id = ID;
-    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center';
-    el.innerHTML = `
-      <div style="background:var(--card);border-radius:14px;padding:24px 20px;width:300px">
-        <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">📋 Coordonnées</div>
-        <div id="contact-sub" style="font-size:12px;color:var(--muted);margin-bottom:16px"></div>
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">📱 Mobile</label>
-        <input id="contact-mobile" type="tel" autocomplete="off" maxlength="20"
-          style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none;margin-bottom:12px">
-        <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">✉️ Email</label>
-        <input id="contact-email" type="email" autocomplete="off" maxlength="80"
-          style="width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none;margin-bottom:4px">
-        <div id="contact-err" style="color:#e55;font-size:12px;min-height:16px;margin-bottom:12px"></div>
-        <div style="display:flex;gap:10px">
-          <button id="contact-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
-          <button id="contact-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Enregistrer</button>
-        </div>
-      </div>`;
-    el.addEventListener('click', e => { if (e.target === el) el.style.display = 'none'; });
-    document.body.appendChild(el);
-  }
+  // Supprimer l'ancienne instance pour reconstruire proprement
+  const old = document.getElementById('contact-modal');
+  if (old) old.remove();
+
+  const el = document.createElement('div');
+  el.id = 'contact-modal';
+  el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
+
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none';
+  const labelStyle = 'font-size:11px;color:var(--muted);display:block;margin-bottom:3px;margin-top:10px';
+
+  el.innerHTML = `
+    <div style="background:var(--card);border-radius:14px;padding:24px 20px;width:100%;max-width:320px;max-height:90vh;overflow-y:auto">
+      <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px">📋 Coordonnées</div>
+      <div id="cm-sub" style="font-size:12px;color:var(--muted);margin-bottom:14px"></div>
+
+      <label style="${labelStyle}">📱 Mobile</label>
+      <input id="cm-mob1" type="tel" autocomplete="off" maxlength="20" placeholder="ex : 06 12 34 56 78"
+        style="${inputStyle}">
+      <label style="${labelStyle}">📱 Confirmer le mobile</label>
+      <input id="cm-mob2" type="tel" autocomplete="off" maxlength="20" placeholder="même numéro"
+        style="${inputStyle}">
+
+      <label style="${labelStyle};margin-top:16px">✉️ Email</label>
+      <input id="cm-mail1" type="email" autocomplete="off" maxlength="80" placeholder="ex : prenom@example.com"
+        style="${inputStyle}">
+      <label style="${labelStyle}">✉️ Confirmer l'email</label>
+      <input id="cm-mail2" type="email" autocomplete="off" maxlength="80" placeholder="même adresse"
+        style="${inputStyle}">
+
+      <div id="cm-err" style="color:#e55;font-size:12px;min-height:16px;margin-top:10px;margin-bottom:8px"></div>
+      <div style="display:flex;gap:10px;margin-top:4px">
+        <button id="cm-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
+        <button id="cm-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Enregistrer</button>
+      </div>
+    </div>`;
+
+  el.addEventListener('click', e => { if (e.target === el) el.style.display = 'none'; });
+  document.body.appendChild(el);
+
   // Pré-remplir avec les valeurs actuelles
   const users = await fetch('/api/users').then(r => r.json());
   const u = users.find(x => x.id === userId) || {};
-  el.querySelector('#contact-sub').textContent    = `Profil : ${userName}`;
-  el.querySelector('#contact-mobile').value        = u.mobile || '';
-  el.querySelector('#contact-email').value         = u.email  || '';
-  el.querySelector('#contact-err').textContent     = '';
+  el.querySelector('#cm-sub').textContent  = `Profil : ${userName}`;
+  el.querySelector('#cm-mob1').value  = u.mobile || '';
+  el.querySelector('#cm-mob2').value  = u.mobile || '';
+  el.querySelector('#cm-mail1').value = u.email  || '';
+  el.querySelector('#cm-mail2').value = u.email  || '';
+  el.querySelector('#cm-err').textContent = '';
   el.style.display = 'flex';
-  setTimeout(() => el.querySelector('#contact-mobile').focus(), 50);
+  setTimeout(() => el.querySelector('#cm-mob1').focus(), 50);
 
-  el.querySelector('#contact-ok').onclick = async () => {
-    const mobile = el.querySelector('#contact-mobile').value.trim();
-    const email  = el.querySelector('#contact-email').value.trim();
-    el.querySelector('#contact-err').textContent = '';
+  const showErr = msg => { el.querySelector('#cm-err').textContent = msg; };
+
+  el.querySelector('#cm-ok').onclick = async () => {
+    const mob1  = el.querySelector('#cm-mob1').value.trim();
+    const mob2  = el.querySelector('#cm-mob2').value.trim();
+    const mail1 = el.querySelector('#cm-mail1').value.trim();
+    const mail2 = el.querySelector('#cm-mail2').value.trim();
+    showErr('');
+
+    if (mob1 !== mob2)  return showErr('Les numéros de mobile ne correspondent pas.');
+    if (mail1 !== mail2) return showErr('Les adresses email ne correspondent pas.');
+
     try {
       const r = await fetch(`/api/users/${encodeURIComponent(userId)}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
-        body: JSON.stringify({ mobile, email })
+        body: JSON.stringify({ mobile: mob1, email: mail1 })
       });
       if (r.ok) { el.style.display = 'none'; await _renderUserMgmt(); }
-      else { el.querySelector('#contact-err').textContent = 'Erreur serveur.'; }
-    } catch(e) { el.querySelector('#contact-err').textContent = 'Erreur réseau.'; }
+      else { showErr('Erreur serveur.'); }
+    } catch(e) { showErr('Erreur réseau.'); }
   };
-  el.querySelector('#contact-cancel').onclick = () => { el.style.display = 'none'; };
+  el.querySelector('#cm-cancel').onclick = () => { el.style.display = 'none'; };
 }
 
 async function _umSetPin(userId, userName) {

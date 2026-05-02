@@ -332,6 +332,23 @@ function openSetPin(userId, userName) {
   });
 }
 
+/** Supprime immédiatement le PIN d'un profil (admin JC only, appelé depuis bloc admin). */
+async function deletePin(userId, userName) {
+  if (!confirm(`Supprimer le PIN de "${userName}" ?`)) return;
+  try {
+    const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
+      body: JSON.stringify({ pin: '' })
+    });
+    if (r.ok) {
+      // Rafraîchit le modal info pour refléter le nouveau statut
+      await _fetchInfoData();
+      renderInfo();
+    }
+  } catch(e) { alert('Erreur lors de la suppression du PIN.'); }
+}
+
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */
 function openACSync() {
   const ID = 'ac-sync-modal';
@@ -1027,9 +1044,16 @@ function renderInfo() {
         ? new Date(p.lastConnection).toLocaleDateString('fr-FR') + ' ' +
           new Date(p.lastConnection).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
         : '—';
-      const pinBtn = `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted);cursor:pointer;margin-left:6px">🔐 PIN</button>`;
+      const btnStyle = 'font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;cursor:pointer;margin-left:4px';
+      const setPinBtn  = `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="${btnStyle};color:var(--muted)">✏️ ${p.hasPin ? 'Changer' : 'Définir'}</button>`;
+      const delPinBtn  = p.hasPin
+        ? `<button onclick="deletePin('${uid}','${esc(p.name)}')" style="${btnStyle};color:#e55;border-color:rgba(255,80,80,.3)">✕ Supprimer</button>`
+        : '';
+      const pinStatus  = p.hasPin
+        ? `<span style="font-size:11px;color:#4c9;margin-left:6px">🔒 PIN actif</span>`
+        : `<span style="font-size:11px;color:var(--muted);margin-left:6px">🔓 Sans PIN</span>`;
       return `
-    <div class="info-section-title" style="display:flex;align-items:center">👤 ${esc(p.name)}${pinBtn}</div>
+    <div class="info-section-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">👤 ${esc(p.name)}${pinStatus}${setPinBtn}${delPinBtn}</div>
     <div class="info-row"><span class="lbl">Connexions</span><span class="val">${p.connectionCount}</span></div>
     <div class="info-row"><span class="lbl">Dernière connexion</span><span class="val">${lastConn}</span></div>
     <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>

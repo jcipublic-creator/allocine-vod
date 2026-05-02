@@ -1039,6 +1039,7 @@ app.get('/api/userdata/stats', (_req, res) => {
     if (!u) continue;
     const stats = {
       name:            u.name,
+      hasPin:          !!u.pin,
       connectionCount: u.connectionCount || 0,
       lastConnection:  u.lastConnection  || null,
       films:  { vu: 0, vouloir: 0, nonInteresse: 0 },

@@ -992,11 +992,13 @@ app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
   let count = 0;
   for (const { allocineId, noteAC } of films) {
     if (!allocineId) continue;
-    const existing = userdata[userId][String(allocineId)] || {};
+    // Les séries utilisent le préfixe "s:" pour distinguer des films (ex: s:22881)
+    const key = isSeries ? `s:${allocineId}` : String(allocineId);
+    const existing = userdata[userId][key] || {};
     // Pour les séries : on ne force pas vu, on préserve la valeur existante
     // (une note ≠ série entièrement visionnée — plusieurs saisons possibles)
     const resolvedVu = isSeries ? (existing.vu || false) : true;
-    userdata[userId][String(allocineId)] = {
+    userdata[userId][key] = {
       vu:            resolvedVu,
       vouloir:       existing.vouloir       || false,
       nonInteresse:  existing.nonInteresse  || false,

@@ -877,12 +877,10 @@ function applySeriesSort(sortBy) {
     }
     if (_seriesSortBy === 'annee')       return (parseInt(b.anneeSortie) || 0) - (parseInt(a.anneeSortie) || 0);
     if (_seriesSortBy === 'noteAC') {
-      const na = a.allocineId ? (_userdata[`s:${a.allocineId}`]?.noteAC ?? -1) : -1;
-      const nb = b.allocineId ? (_userdata[`s:${b.allocineId}`]?.noteAC ?? -1) : -1;
-      if (na === -1 && nb === -1) return b.notePresse - a.notePresse;
-      if (na === -1) return 1;   // sans note → fin de liste
-      if (nb === -1) return -1;
-      return nb - na || b.notePresse - a.notePresse;
+      // Les notes vont de 0.5 à 5 → sans note = 0, toujours en dessous
+      const na = (a.allocineId && _userdata[`s:${a.allocineId}`]?.noteAC) || 0;
+      const nb = (b.allocineId && _userdata[`s:${b.allocineId}`]?.noteAC) || 0;
+      return (nb - na) || (b.notePresse - a.notePresse);
     }
     return 0;
   });

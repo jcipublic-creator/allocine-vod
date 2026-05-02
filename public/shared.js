@@ -628,6 +628,16 @@ function applySort(critere) {
 
   UI.updateSortButtons(_sortBy);
 
+  // Si tri par noteAC et _userdata ne contient pas encore de notes → recharger
+  // (peut arriver si la page était ouverte avant l'import des notes)
+  if (_sortBy === 'noteAC') {
+    const hasNotes = Object.values(_userdata).some(u => u.noteAC);
+    if (!hasNotes) {
+      loadUserdata().then(() => applySort());
+      return;
+    }
+  }
+
   _allFilms.sort((a, b) => {
     if (_sortBy === 'annee') {
       const ya = parseInt(a.anneeReelle || a.anneeSortie) || 0;
@@ -646,12 +656,10 @@ function applySort(critere) {
       return sb - sa || (b.notePresse ?? 0) - (a.notePresse ?? 0) || a.titre.localeCompare(b.titre, 'fr');
     }
     if (_sortBy === 'noteAC') {
-      const na = _userdata[a.allocineId]?.noteAC ?? -1;
-      const nb = _userdata[b.allocineId]?.noteAC ?? -1;
-      if (na === -1 && nb === -1) return b.notePresse - a.notePresse;
-      if (na === -1) return 1;   // sans note → fin de liste
-      if (nb === -1) return -1;
-      return nb - na || b.notePresse - a.notePresse;
+      // Les notes vont de 0.5 à 5 → sans note = 0, toujours en dessous
+      const na = _userdata[a.allocineId]?.noteAC || 0;
+      const nb = _userdata[b.allocineId]?.noteAC || 0;
+      return (nb - na) || (b.notePresse - a.notePresse);
     }
     return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
   });

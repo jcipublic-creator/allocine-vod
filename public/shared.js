@@ -250,7 +250,7 @@ function switchUser(userId) {
 // ── Pavé numérique partagé (sans <input>, invisible pour les MDM) ─────────────
 const _numpadStyle = {
   overlay: 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.92);align-items:center;justify-content:center',
-  box:     'background:var(--card);border-radius:16px;padding:24px 20px;width:280px;text-align:center;user-select:none',
+  box:     'background:var(--card);border-radius:16px;padding:24px 20px;width:min(280px,calc(100vw - 40px));text-align:center;user-select:none',
   dots:    'font-size:26px;letter-spacing:10px;min-height:38px;margin:12px 0 4px;color:var(--text)',
   err:     'color:#e55;font-size:12px;min-height:16px;margin-bottom:8px',
   grid:    'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px',
@@ -308,7 +308,15 @@ function _runNumpad(id, { title, sub, maxLen = 8, onOk, onCancel, extraBtn, forg
 
   if (extraBtn) {
     let eb = el.querySelector(`#${id}-extra`);
-    if (!eb) { eb = document.createElement('button'); eb.id = `${id}-extra`; eb.style.cssText = 'width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid rgba(255,80,80,.3);background:transparent;color:#e55;cursor:pointer;font-size:13px'; el.querySelector('div > div:last-child').after(eb); }
+    if (!eb) {
+      eb = document.createElement('button');
+      eb.id = `${id}-extra`;
+      eb.style.cssText = 'width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid rgba(255,80,80,.3);background:transparent;color:#e55;cursor:pointer;font-size:13px';
+      // Insérer à l'intérieur de la carte (firstElementChild), avant le slot forgot
+      const forgotEl = el.querySelector(`#${id}-forgot`);
+      if (forgotEl) el.firstElementChild.insertBefore(eb, forgotEl);
+      else el.firstElementChild.appendChild(eb);
+    }
     eb.textContent = extraBtn.label;
     eb.onclick = extraBtn.action;
     eb.style.display = '';

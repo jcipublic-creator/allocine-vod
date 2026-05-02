@@ -332,20 +332,98 @@ function openSetPin(userId, userName) {
   });
 }
 
-/** Supprime immédiatement le PIN d'un profil (admin JC only, appelé depuis bloc admin). */
-async function deletePin(userId, userName) {
+
+// ─── Gestion des utilisateurs (JC only) ──────────────────────────────────────
+
+async function openUserManagement() {
+  const ID = 'user-mgmt-modal';
+  let el = document.getElementById(ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = ID;
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,14,27,.88);align-items:flex-end;justify-content:center;padding:20px';
+    el.innerHTML = `
+      <div style="background:var(--card);border-radius:16px;padding:24px 20px;width:100%;max-width:460px;max-height:82vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <span style="font-size:15px;font-weight:700;color:var(--text)">👥 Gestion des utilisateurs</span>
+          <button onclick="closeUserManagement()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div id="user-mgmt-content"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>`;
+    el.addEventListener('click', e => { if (e.target === el) closeUserManagement(); });
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  await _renderUserMgmt();
+}
+
+function closeUserManagement() {
+  const el = document.getElementById('user-mgmt-modal');
+  if (el) el.style.display = 'none';
+}
+
+async function _renderUserMgmt() {
+  const el = document.getElementById('user-mgmt-content');
+  if (!el) return;
+  try {
+    const [usersResp, statsResp] = await Promise.all([
+      fetch('/api/users'),
+      fetch('/api/userdata/stats'),
+    ]);
+    const usersList = usersResp.ok ? await usersResp.json() : [];
+    const stats     = statsResp.ok ? await statsResp.json() : {};
+    const fmtDate = iso => iso
+      ? new Date(iso).toLocaleDateString('fr-FR') + ' ' +
+        new Date(iso).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+      : '—';
+    const btnStyle = 'font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;';
+    const rows = usersList.map(u => {
+      const p = stats[u.id] || {};
+      const hasPin = u.hasPin;
+      const pinBadge = hasPin
+        ? `<span style="font-size:11px;color:#4c9;background:rgba(68,204,153,.12);padding:2px 7px;border-radius:10px">🔒 PIN actif</span>`
+        : `<span style="font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:2px 7px;border-radius:10px">🔓 Sans PIN</span>`;
+      const setPinBtn = `<button onclick="_umSetPin('${u.id}','${esc(u.name)}')" style="${btnStyle}border:1px solid rgba(255,255,255,.2);background:transparent;color:var(--muted)">✏️ ${hasPin ? 'Changer' : 'Définir'}</button>`;
+      const delPinBtn = hasPin
+        ? `<button onclick="_umDelPin('${u.id}','${esc(u.name)}')" style="${btnStyle}border:1px solid rgba(255,80,80,.3);background:transparent;color:#e55">✕ Suppr.</button>`
+        : '';
+      return `
+      <div style="padding:14px 0;border-bottom:1px solid rgba(42,79,112,.3)">
+        <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+          <span style="font-size:14px;font-weight:600;color:var(--text)">${esc(u.name)}</span>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">${pinBadge}${setPinBtn}${delPinBtn}</div>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:3px 12px;font-size:12px;color:var(--muted)">
+          <span>Connexions</span><span style="color:var(--text)">${p.connectionCount ?? '—'}</span>
+          <span>Dernière connexion</span><span style="color:var(--text)">${fmtDate(p.lastConnection)}</span>
+          <span>🎬 Films vus</span><span style="color:var(--text)">${p.films?.vu ?? 0}</span>
+          <span>🔖 Films à voir</span><span style="color:var(--text)">${p.films?.vouloir ?? 0}</span>
+          <span>✕ Films non</span><span style="color:var(--text)">${p.films?.nonInteresse ?? 0}</span>
+          <span>📺 Séries vues</span><span style="color:var(--text)">${p.series?.vu ?? 0}</span>
+          <span>🔖 Séries à voir</span><span style="color:var(--text)">${p.series?.vouloir ?? 0}</span>
+          <span>⏳ Séries à suivre</span><span style="color:var(--text)">${p.series?.asuivre ?? 0}</span>
+          <span>✕ Séries non</span><span style="color:var(--text)">${p.series?.nonInteresse ?? 0}</span>
+        </div>
+      </div>`;
+    }).join('');
+    el.innerHTML = rows || '<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
+  } catch(e) { el.innerHTML = '<p style="color:#e55;font-size:13px">Erreur de chargement.</p>'; }
+}
+
+async function _umSetPin(userId, userName) {
+  await openSetPin(userId, userName);
+  await _renderUserMgmt();
+}
+
+async function _umDelPin(userId, userName) {
   if (!confirm(`Supprimer le PIN de "${userName}" ?`)) return;
   try {
-    const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
+    await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
       body: JSON.stringify({ pin: '' })
     });
-    if (r.ok) {
-      // Rafraîchit le modal info pour refléter le nouveau statut
-      await _fetchInfoData();
-      renderInfo();
-    }
+    await _renderUserMgmt();
   } catch(e) { alert('Erreur lors de la suppression du PIN.'); }
 }
 
@@ -494,6 +572,10 @@ function updateDebugVisibility(userName) {
     const el = document.getElementById(id);
     if (el) el.style.display = show ? '' : 'none';
   });
+
+  // Bouton gestion des utilisateurs (JC only)
+  const btnUsr = document.getElementById('btn-user-mgmt');
+  if (btnUsr) btnUsr.style.display = show ? '' : 'none';
 
   // Option de tri "↓ Ma note" — ajoutée uniquement pour JC
   const sortSel = document.getElementById('fil-sort');
@@ -1034,39 +1116,6 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`;
   })();
 
-  // Bloc admin (JC only) : connexions + stats + gestion PIN tous les profils
-  const adminBlock = (() => {
-    if (!isJCProfile()) return '';
-    const entries = Object.entries(udStats);
-    if (!entries.length) return '';
-    const rows = entries.map(([uid, p]) => {
-      const lastConn = p.lastConnection
-        ? new Date(p.lastConnection).toLocaleDateString('fr-FR') + ' ' +
-          new Date(p.lastConnection).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
-        : '—';
-      const btnStyle = 'font-size:11px;padding:2px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.2);background:transparent;cursor:pointer;margin-left:4px';
-      const setPinBtn  = `<button onclick="openSetPin('${uid}','${esc(p.name)}')" style="${btnStyle};color:var(--muted)">✏️ ${p.hasPin ? 'Changer' : 'Définir'}</button>`;
-      const delPinBtn  = p.hasPin
-        ? `<button onclick="deletePin('${uid}','${esc(p.name)}')" style="${btnStyle};color:#e55;border-color:rgba(255,80,80,.3)">✕ Supprimer</button>`
-        : '';
-      const pinStatus  = p.hasPin
-        ? `<span style="font-size:11px;color:#4c9;margin-left:6px">🔒 PIN actif</span>`
-        : `<span style="font-size:11px;color:var(--muted);margin-left:6px">🔓 Sans PIN</span>`;
-      return `
-    <div class="info-section-title" style="display:flex;align-items:center;flex-wrap:wrap;gap:2px">👤 ${esc(p.name)}${pinStatus}${setPinBtn}${delPinBtn}</div>
-    <div class="info-row"><span class="lbl">Connexions</span><span class="val">${p.connectionCount}</span></div>
-    <div class="info-row"><span class="lbl">Dernière connexion</span><span class="val">${lastConn}</span></div>
-    <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>
-    <div class="info-row"><span class="lbl">🔖 Films à voir</span><span class="val">${p.films.vouloir}</span></div>
-    <div class="info-row"><span class="lbl">✕ Films non</span><span class="val">${p.films.nonInteresse}</span></div>
-    <div class="info-row"><span class="lbl">📺 Séries vues</span><span class="val">${p.series.vu}</span></div>
-    <div class="info-row"><span class="lbl">🔖 Séries à voir</span><span class="val">${p.series.vouloir}</span></div>
-    <div class="info-row"><span class="lbl">⏳ Séries à suivre</span><span class="val">${p.series.asuivre}</span></div>
-    <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`;
-    }).join('');
-    return `<div class="info-section-title" style="margin-top:.5rem;border-top:1px solid rgba(255,255,255,.08);padding-top:.75rem">🔐 Admin — Profils</div>${rows}`;
-  })();
-
   el.innerHTML = `
     ${notesBlock}
     <div class="info-section-title">Serveur</div>
@@ -1094,6 +1143,5 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.besteverDetails)}
     ${myStatsBlock}
-    ${adminBlock}
   `;
 }

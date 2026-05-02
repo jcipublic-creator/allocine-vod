@@ -156,6 +156,7 @@ const redis = process.env.UPSTASH_REDIS_REST_URL
 let users    = {};  // { userId: { id, name, createdAt } }
 let userdata = {};  // { userId: { allocineId: { vu, vouloir, nonInteresse, asuivre } } }
 let prefsDB  = {};  // { userId: { showDocumentaires, showAnimations, hideVus, hideNonInteresse } }
+let profileResetAt = null; // ISO string — forcé par /api/reset-profile-choice, lu au démarrage
 
 /**
  * Détecte l'ancien format plat mono-utilisateur :
@@ -255,6 +256,9 @@ async function loadUserdata() {
       if (besteverTsRaw) lastBesteverScrape = besteverTsRaw;
       const besteverDetailsTsRaw = await redis.get('lastBesteverDetailsScrape');
       if (besteverDetailsTsRaw) lastBesteverDetailsScrape = besteverDetailsTsRaw;
+      // Réinitialisation forcée des profils côté client
+      const resetRaw = await redis.get('profileResetAt');
+      if (resetRaw) profileResetAt = resetRaw;
     } catch(e) { console.warn('Erreur chargement Redis:', e.message); }
   }
 
@@ -815,7 +819,26 @@ function dedupeAndSortFilms(films, noteMin) {
  * Réponse: { secret: string }
  */
 app.get('/api/config', (_req, res) => {
-  res.json({ secret: APP_SECRET || '' });
+  res.json({ secret: APP_SECRET || '', profileResetAt: profileResetAt || null });
+});
+
+/**
+ * POST /api/reset-profile-choice
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Force tous les clients à re-choisir leur profil à la prochaine visite.
+ *        Le client compare profileResetAt avec sa valeur en localStorage :
+ *        si le serveur est plus récent, il efface le profil mémorisé.
+ *
+ * Réponse: { ok: true, profileResetAt }
+ */
+app.post('/api/reset-profile-choice', requireSecret, async (req, res) => {
+  profileResetAt = new Date().toISOString();
+  if (redis) {
+    try { await redis.set('profileResetAt', profileResetAt); }
+    catch(e) { console.warn('Erreur sauvegarde profileResetAt:', e.message); }
+  }
+  console.log(`🔄 Réinitialisation des choix de profil : ${profileResetAt}`);
+  res.json({ ok: true, profileResetAt });
 });
 
 app.get('/api/films', (_req, res) => {

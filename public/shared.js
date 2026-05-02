@@ -16,11 +16,25 @@ window.fetch = function(url, opts = {}) {
   }
   return _origFetch(url, opts);
 };
-/** Charge le secret applicatif depuis le serveur (appelé une fois à l'init de la page). */
+const LS_PROFILE_RESET = 'vod_profile_reset_at';
+
+/** Charge le secret + vérifie si un reset de profil a été demandé côté serveur. */
 async function loadAppSecret() {
   try {
     const r = await _origFetch('/api/config', { signal: AbortSignal.timeout(3000) });
-    if (r.ok) { const d = await r.json(); _appSecret = d.secret || ''; }
+    if (r.ok) {
+      const d = await r.json();
+      _appSecret = d.secret || '';
+      // Si le serveur a demandé un reset plus récent que le dernier vu par ce client,
+      // on efface le profil mémorisé pour forcer la modal de sélection.
+      if (d.profileResetAt) {
+        const localReset = localStorage.getItem(LS_PROFILE_RESET);
+        if (!localReset || d.profileResetAt > localReset) {
+          localStorage.removeItem('vod_user_id');
+          localStorage.setItem(LS_PROFILE_RESET, d.profileResetAt);
+        }
+      }
+    }
   } catch(e) { /* pas de secret → mode dev local */ }
 }
 
@@ -406,7 +420,12 @@ async function _renderUserMgmt() {
         </div>
       </div>`;
     }).join('');
-    el.innerHTML = rows || '<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>';
+    el.innerHTML = (rows || '<p style="color:var(--muted);font-size:13px">Aucun utilisateur.</p>') + `
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid rgba(42,79,112,.3)">
+        <button onclick="_umResetProfiles()" style="width:100%;padding:10px;border-radius:8px;border:1px solid rgba(255,200,0,.3);background:transparent;color:var(--gold);cursor:pointer;font-size:13px">
+          🔄 Forcer la re-sélection du profil pour tous
+        </button>
+      </div>`;
   } catch(e) { el.innerHTML = '<p style="color:#e55;font-size:13px">Erreur de chargement.</p>'; }
 }
 
@@ -425,6 +444,18 @@ async function _umDelPin(userId, userName) {
     });
     await _renderUserMgmt();
   } catch(e) { alert('Erreur lors de la suppression du PIN.'); }
+}
+
+async function _umResetProfiles() {
+  if (!confirm('Forcer tous les utilisateurs à re-choisir leur profil à la prochaine visite ?')) return;
+  try {
+    const r = await fetch('/api/reset-profile-choice', {
+      method: 'POST',
+      headers: { 'x-app-secret': _appSecret || '' }
+    });
+    if (r.ok) alert('✓ Fait. Tous les utilisateurs devront re-sélectionner leur profil à la prochaine ouverture de l\'appli.');
+    else alert('Erreur serveur.');
+  } catch(e) { alert('Erreur réseau.'); }
 }
 
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */

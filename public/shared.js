@@ -202,14 +202,17 @@ function openACSync() {
         <h3>🔄 Sync notes AlloCiné</h3>
         <p style="font-size:13px;color:var(--text,#c8dcf0);line-height:1.7;margin-bottom:8px">
           Glisse ce signet dans ta barre de favoris.<br>
-          Quand tu es sur <strong style="color:var(--gold,#f0c040)">AlloCiné — Mes films vus</strong>,
-          clique dessus pour tout synchroniser automatiquement.
+          Fonctionne sur <strong style="color:var(--gold,#f0c040)">Mes films vus</strong>
+          et <strong style="color:var(--gold,#f0c040)">Mes séries vues</strong> —
+          il détecte automatiquement la page.
         </p>
         <div id="ac-bm-container" style="text-align:center;margin:20px 0"></div>
         <ol>
           <li>Glisse le bouton jaune dans ta barre de favoris</li>
           <li>Va sur <a href="https://mon.allocine.fr/mes-films/vus/" target="_blank"
-              style="color:var(--gold,#f0c040)">mon.allocine.fr → Mes films vus</a></li>
+              style="color:var(--gold,#f0c040)">Mes films vus</a>
+              ou <a href="https://mon.allocine.fr/mes-series/vues/" target="_blank"
+              style="color:var(--gold,#f0c040)">Mes séries vues</a></li>
           <li>Clique sur le signet "🔄 Sync VOD"</li>
         </ol>
         <button class="ac-close"
@@ -217,9 +220,13 @@ function openACSync() {
       </div>`;
     document.body.appendChild(modal);
 
-    // Bookmarklet incrémental : ne recharge que depuis la dernière sync
+    // Bookmarklet incrémental : détecte films ou séries selon la page AlloCiné
     const bm = '(async()=>{' +
-      'const LS=\'vod_ac_sync_marker\';' +
+      // Détecter si on est sur la page séries
+      'const isSeries=window.location.href.includes(\'/mes-series/\');' +
+      'const LS=isSeries?\'vod_ac_sync_marker_series\':\'vod_ac_sync_marker_films\';' +
+      'const re=new RegExp(isSeries?\'ficheserie_gen_cserie=(\\\\d+)\':\'fichefilm_gen_cfilm=(\\\\d+)\');' +
+      'const type=isSeries?\'série(s)\':\'film(s)\';' +
       'const marker=localStorage.getItem(LS);' +
       // Notification flottante
       'const n=m=>{let e=document.getElementById(\'_vod\');' +
@@ -229,9 +236,10 @@ function openACSync() {
       'borderRadius:\'8px\',zIndex:\'99999\',fontSize:\'13px\',' +
       'boxShadow:\'0 4px 12px rgba(0,0,0,.5)\'});' +
       'document.body.appendChild(e)}e.textContent=m};' +
-      // Extrait l'allocineId d'une card
-      'const getId=c=>{const l=c.querySelector(\'a[href*="fichefilm"]\');' +
-      'const m=(l?.getAttribute(\'href\')||\'\'). match(/fichefilm_gen_cfilm=(\\d+)/);' +
+      // Extrait l'allocineId d'une card (films ou séries selon re)
+      'const getId=c=>{const sel=isSeries?\'a[href*="ficheserie"]\':\'a[href*="fichefilm"]\';' +
+      'const l=c.querySelector(sel);' +
+      'const m=(l?.getAttribute(\'href\')||\'\').match(re);' +
       'return m?m[1]:null};' +
       'n(marker?\'⏳ Sync incrémentale...\':\'⏳ Chargement complet...\');' +
       // Charger les pages jusqu'à trouver le marqueur (ou tout charger si première fois)
@@ -240,7 +248,7 @@ function openACSync() {
       'const b=document.querySelector(\'.load-more-button\');' +
       'if(!b)break;' +
       'b.click();await new Promise(r=>setTimeout(r,1200))}' +
-      // Extraire uniquement les films avant le marqueur
+      // Extraire uniquement les entrées avant le marqueur
       'n(\'🔍 Extraction des notes...\');' +
       'const allCards=[...document.querySelectorAll(\'.card-userspace\')];' +
       'const markerIdx=marker?allCards.findIndex(c=>getId(c)===marker):-1;' +
@@ -253,15 +261,15 @@ function openACSync() {
       'if(!f.length){n(\'✅ Déjà à jour !\');' +
       'setTimeout(()=>document.getElementById(\'_vod\')?.remove(),3000);return}' +
       // Envoyer
-      'n(\'📤 Envoi de \'+f.length+\' film(s)...\');' +
+      'n(\'📤 Envoi de \'+f.length+\' \'+type+\'...\');' +
       'const r=await fetch(\'https://allocine-vod-production.up.railway.app/api/userdata/import-ac-notes\',' +
       '{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},' +
       'body:JSON.stringify({userId:\'user_default\',films:f})});' +
       'const d=await r.json();' +
-      // Mettre à jour le marqueur = premier film actuel
+      // Mettre à jour le marqueur = première entrée actuelle
       'const newMarker=getId(allCards[0]);' +
       'if(newMarker)localStorage.setItem(LS,newMarker);' +
-      'n(\'✅ \'+d.imported+\' film(s) synchronisé(s) !\');' +
+      'n(\'✅ \'+d.imported+\' \'+type+\' synchronisé(s) !\');' +
       'setTimeout(()=>document.getElementById(\'_vod\')?.remove(),5000)' +
       '})()';
     const link = document.createElement('a');

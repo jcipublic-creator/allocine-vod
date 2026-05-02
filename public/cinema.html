@@ -432,6 +432,12 @@ body {
 
 <div class="cards" id="cards"></div>
 <div class="empty" id="empty">Aucun film trouvé avec ces critères.</div>
+<div id="first-launch" style="display:none;text-align:center;padding:60px 20px;">
+  <div style="font-size:40px;margin-bottom:16px;">🎥</div>
+  <div style="color:var(--text);font-size:15px;margin-bottom:8px;">Pas encore de données</div>
+  <div style="color:var(--muted);font-size:13px;margin-bottom:24px;">Lancez le premier scraping pour afficher les films actuellement au cinéma.</div>
+  <button id="btn-first-scrape" onclick="startScrape()" style="background:var(--gold);color:#0d2137;border:none;border-radius:10px;padding:12px 24px;font-size:15px;font-weight:700;cursor:pointer;opacity:.5;" disabled>▶ Scraper maintenant</button>
+</div>
 
 <div id="profiles-modal" onclick="if(event.target===this)closeProfiles()">
   <div class="prefs-sheet">
@@ -500,6 +506,8 @@ const UI = {
     document.getElementById('error-banner').style.display = 'none';
     document.getElementById('prog-fill').style.width = '0%';
     document.getElementById('prog-lbl').textContent = 'Scraping en arrière-plan…';
+    document.getElementById('empty').classList.remove('show');
+    document.getElementById('first-launch').style.display = 'none';
   },
   onScrapeProgress(pct, count) {
     document.getElementById('prog-fill').style.width = pct + '%';
@@ -521,6 +529,7 @@ const UI = {
   },
   onCacheLoaded(label) {
     document.getElementById('server-status').textContent = '📦';
+    document.getElementById('first-launch').style.display = 'none';
     this.populateGenreFilter();
     applySort();
     document.getElementById('filter-bar').classList.add('show');
@@ -556,11 +565,6 @@ const UI = {
     document.getElementById('profiles-modal').classList.add('open');
   }
 };
-
-// ─── Helper escape ────────────────────────────────────────────────────────────
-function esc(s) {
-  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-}
 
 // ─── Rendu des cartes ─────────────────────────────────────────────────────────
 function renderCards(films) {
@@ -671,6 +675,8 @@ async function pingServer() {
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = '🟢';
       if (btnEl) btnEl.disabled = false;
+      const btnFirst = document.getElementById('btn-first-scrape');
+      if (btnFirst) { btnFirst.disabled = false; btnFirst.style.opacity = '1'; }
       return d;
     } else { throw new Error('non-ok'); }
   } catch {
@@ -945,14 +951,14 @@ function parseDateCI(str) {
 function startScrape() {
   const btn = document.getElementById('btn-run');
   UI.onScrapeStart(btn);
-  const pendingFilms = [];
+  let totalFound = 0;
   const es = new EventSource(`/api/cinema/scrape`);
   es.onmessage = e => {
     const d = JSON.parse(e.data);
     if (d.type === 'progress') {
       const pct = Math.round(d.page / d.total * 100);
-      pendingFilms.length = 0; // sera remplacé au done
-      UI.onScrapeProgress(pct, 0);
+      totalFound += (d.found || 0);
+      UI.onScrapeProgress(pct, totalFound);
     }
     if (d.type === 'error') UI.showError(`⚠ Erreur page ${d.page} : ${d.message}`);
     if (d.type === 'done') {
@@ -1004,7 +1010,10 @@ async function loadCinemaFromServer() {
     const r = await fetch('/api/cinema', { signal: AbortSignal.timeout(10000) });
     if (!r.ok) return false;
     const d = await r.json();
-    if (!d.films || d.films.length === 0) return false;
+    if (!d.films || d.films.length === 0) {
+      document.getElementById('first-launch').style.display = 'block';
+      return false;
+    }
     _allFilms = d.films;
     saveCacheCI();
     UI.populateGenreFilter();

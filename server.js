@@ -1271,17 +1271,18 @@ app.get('/api/details', async (req, res) => {
       return res.json({ pays: null, annee: null, allocineId: resolvedId, allocineUrl: filmUrl, providers: [], error: 'soft_block' });
     }
 
-    // Pays et année de production (via scan de lignes)
+    // Pays, année de production et durée (via scan de lignes)
     const lines = htmlToLines(filmResp.data);
-    let pays = null, annee = null;
+    let pays = null, annee = null, duree = null;
     for (let i = 0; i < lines.length - 1; i++) {
       if (lines[i] === 'Nationalité' || lines[i] === 'Nationalités') pays = lines[i + 1];
       if (lines[i] === 'Année de production') annee = lines[i + 1];
-      if (pays && annee) break;
+      if (lines[i] === 'Durée') duree = lines[i + 1];
+      if (pays && annee && duree) break;
     }
 
     const providers = extractProviders(filmResp.data);
-    const data = { pays, annee, allocineId: resolvedId, allocineUrl: filmUrl, providers };
+    const data = { pays, annee, duree, allocineId: resolvedId, allocineUrl: filmUrl, providers };
 
     // Ne pas mettre en cache une page vide (fiche introuvable)
     if (pays || annee || providers.length > 0) {

@@ -701,7 +701,7 @@ function extractProviders(html) {
     const name = $(el).text().trim();
     if (!name || seen.has(name)) return;
     if (PROVIDERS_BLACKLIST.has(name.toLowerCase())) return;
-    if (/coffret|édition|edition/i.test(name)) return;
+    if (/coffret|édition|edition|collector|blu-ray/i.test(name)) return;
     seen.add(name);
 
     const tileText = $(el).parent().text().toLowerCase();

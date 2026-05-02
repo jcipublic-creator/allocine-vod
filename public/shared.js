@@ -213,8 +213,8 @@ function promptPinModal(userId) {
           <div style="font-size:28px;margin-bottom:8px">🔒</div>
           <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">Profil protégé</div>
           <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Entre le code PIN pour accéder à ce profil.</div>
-          <input id="pin-input" type="password" inputmode="numeric" maxlength="10"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:18px;letter-spacing:.2em;text-align:center;outline:none"
+          <input id="pin-input" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:18px;letter-spacing:.2em;text-align:center;outline:none;-webkit-text-security:disc"
             placeholder="••••">
           <div id="pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
           <div style="display:flex;gap:10px;margin-top:16px">
@@ -276,12 +276,12 @@ function openSetPin(userId, userName) {
           <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">🔐 Définir un code PIN</div>
           <div id="set-pin-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:18px"></div>
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Nouveau code PIN</label>
-          <input id="set-pin-1" type="password" inputmode="numeric" maxlength="10"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;margin-bottom:12px"
+          <input id="set-pin-1" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;-webkit-text-security:disc;margin-bottom:12px"
             placeholder="••••">
           <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Confirmer le code PIN</label>
-          <input id="set-pin-2" type="password" inputmode="numeric" maxlength="10"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none"
+          <input id="set-pin-2" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;-webkit-text-security:disc"
             placeholder="••••">
           <div id="set-pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
           <div style="display:flex;gap:10px;margin-top:16px">

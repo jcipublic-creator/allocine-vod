@@ -1733,18 +1733,14 @@ async function autoScrapeFilmsListIfStale() {
 
 // ── Phase 2 : plateformes des films ───────────────────────────────────────
 /**
- * Scrape les plateformes/détails films si lastDetailsScrape > AUTO_SCRAPE_DAYS jours,
- * ou si la liste a été rescrapée plus récemment que les détails.
- * Déclenché au démarrage et chaque nuit à 3h15 par scheduleNightlyScraping().
+ * Scrape les plateformes/détails films si lastDetailsScrape > AUTO_SCRAPE_DAYS jours.
+ * Déclenché chaque nuit à 3h15 par scheduleNightlyScraping().
  */
 async function autoScrapeFilmsDetailsIfStale() {
   if (isScraping) return;
   const ageDetDays  = lastDetailsScrape ? (Date.now() - new Date(lastDetailsScrape).getTime()) / 86400000 : Infinity;
-  const ageListDays = lastScrape        ? (Date.now() - new Date(lastScrape).getTime())        / 86400000 : Infinity;
-  // Scrape si détails périmés OU si la liste est plus fraîche que les détails
-  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
-  const listMoreRecent = ageListDays < ageDetDays;
-  if (!detStale && !listMoreRecent) {
+  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
+  if (!detStale) {
     console.log(`⏭️  Films plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
   isScraping    = true;
@@ -1849,17 +1845,14 @@ async function autoScrapeSeriesListIfStale() {
 
 // ── Phase 4 : détails des séries ───────────────────────────────────────────
 /**
- * Scrape les détails séries si lastSeriesDetailsScrape > AUTO_SCRAPE_DAYS jours,
- * ou si la liste a été rescrapée plus récemment que les détails.
- * Déclenché au démarrage et chaque nuit à 3h45 par scheduleNightlyScraping().
+ * Scrape les détails séries si lastSeriesDetailsScrape > AUTO_SCRAPE_DAYS jours.
+ * Déclenché chaque nuit à 3h45 par scheduleNightlyScraping().
  */
 async function autoScrapeSeriesDetailsIfStale() {
   if (isScrapingSeries) return;
   const ageDetDays  = lastSeriesDetailsScrape ? (Date.now() - new Date(lastSeriesDetailsScrape).getTime()) / 86400000 : Infinity;
-  const ageListDays = lastSeriesScrape        ? (Date.now() - new Date(lastSeriesScrape).getTime())        / 86400000 : Infinity;
-  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
-  const listMoreRecent = ageListDays < ageDetDays;
-  if (!detStale && !listMoreRecent) {
+  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
+  if (!detStale) {
     console.log(`⏭️  Séries détails OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
   isScrapingSeries    = true;
@@ -2937,15 +2930,13 @@ async function autoScrapeBesteverListIfStale() {
 /**
  * Scrape les plateformes des meilleurs films si lastBesteverDetailsScrape > AUTO_SCRAPE_DAYS jours.
  * Réutilise detailsCache (partagé avec VOD films) — évite les doublons.
- * Déclenché au démarrage et chaque nuit à 4h15 par scheduleNightlyScraping().
+ * Déclenché chaque nuit à 4h15 par scheduleNightlyScraping().
  */
 async function autoScrapeBesteverDetailsIfStale() {
   if (isBesteverScraping) return;
   const ageDetDays  = lastBesteverDetailsScrape ? (Date.now() - new Date(lastBesteverDetailsScrape).getTime()) / 86400000 : Infinity;
-  const ageListDays = lastBesteverScrape         ? (Date.now() - new Date(lastBesteverScrape).getTime())         / 86400000 : Infinity;
-  const detStale       = ageDetDays >= AUTO_SCRAPE_DAYS;
-  const listMoreRecent = ageListDays < ageDetDays;
-  if (!detStale && !listMoreRecent) {
+  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
+  if (!detStale) {
     console.log(`⏭️  Bestever plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
   }
   isBesteverScraping = true;

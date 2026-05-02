@@ -83,11 +83,12 @@ const APP_URL        = process.env.APP_URL        || 'https://allocine-vod-produ
  * Envoie un email via l'API HTTP Resend (pas de dépendance supplémentaire, utilise axios).
  * Retourne true si succès, false sinon.
  */
-async function sendEmail({ to, subject, html }) {
+async function sendEmail({ to, subject, html, text }) {
   if (!RESEND_API_KEY) { console.warn('[email] RESEND_API_KEY non configuré — email non envoyé'); return false; }
   try {
-    await axios.post('https://api.resend.com/emails',
-      { from: FROM_EMAIL, to: [to], subject, html },
+    const body = { from: FROM_EMAIL, to: [to], subject, html };
+    if (text) body.text = text;
+    await axios.post('https://api.resend.com/emails', body,
       { headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 }
     );
     return true;
@@ -1050,28 +1051,78 @@ app.post('/api/users/:id/request-pin-reset',
     _pinResetTokens.set(token, { userId: id, expiresAt: Date.now() + 60 * 60 * 1000 });
 
     const resetUrl = `${APP_URL}?reset_token=${token}`;
-    const html = `
-      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
-        <h2 style="color:#1a1a2e;margin-bottom:8px">🔒 Réinitialisation de ton PIN</h2>
-        <p style="color:#444;margin-bottom:20px">
-          Quelqu'un (peut-être toi !) a demandé la réinitialisation du PIN
-          du profil <strong>${user.name}</strong> sur <em>Meilleurs films VOD</em>.
-        </p>
-        <a href="${resetUrl}"
-           style="display:inline-block;padding:12px 28px;background:#f5c518;color:#000;
-                  font-weight:700;border-radius:8px;text-decoration:none;font-size:15px">
-          Réinitialiser mon PIN
-        </a>
-        <p style="color:#888;font-size:12px;margin-top:20px">
-          Ce lien est valable <strong>1 heure</strong>. Si tu n'es pas à l'origine de cette
-          demande, ignore simplement cet email — ton PIN reste inchangé.
-        </p>
-      </div>`;
+    const fromDomain = FROM_EMAIL.split('@')[1] || 'jciandco.fr';
+
+    const html = `<!DOCTYPE html>
+<html lang="fr">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f4f4f5;font-family:Arial,Helvetica,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f4f4f5;padding:32px 16px">
+    <tr><td align="center">
+      <table width="480" cellpadding="0" cellspacing="0" border="0" style="max-width:480px;width:100%;background:#ffffff;border-radius:12px;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,0.08)">
+
+        <!-- En-tête -->
+        <tr><td style="background:#0e1c2f;padding:24px 32px;text-align:center">
+          <span style="font-size:22px;font-weight:700;color:#f5c518;letter-spacing:0.5px">Meilleurs films VOD</span>
+        </td></tr>
+
+        <!-- Corps -->
+        <tr><td style="padding:32px">
+          <p style="margin:0 0 8px;font-size:18px;font-weight:700;color:#0e1c2f">Bonjour ${user.name},</p>
+          <p style="margin:0 0 24px;font-size:14px;color:#555;line-height:1.6">
+            Une demande d'accès a été effectuée pour ton profil sur l'application
+            <strong>Meilleurs films VOD</strong>. Clique sur le bouton ci-dessous
+            pour accéder à ton espace et définir un nouvel identifiant.
+          </p>
+
+          <!-- Bouton -->
+          <table cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 28px">
+            <tr><td align="center" style="background:#f5c518;border-radius:8px">
+              <a href="${resetUrl}" target="_blank"
+                 style="display:inline-block;padding:13px 32px;font-size:15px;font-weight:700;color:#0e1c2f;text-decoration:none;border-radius:8px">
+                Accéder à mon profil
+              </a>
+            </td></tr>
+          </table>
+
+          <p style="margin:0 0 8px;font-size:13px;color:#888;line-height:1.6">
+            Ce lien est valable pendant <strong>1 heure</strong>. Si tu n'es pas
+            à l'origine de cette demande, aucune action n'est requise.
+          </p>
+          <p style="margin:0;font-size:11px;color:#bbb;word-break:break-all">
+            Ou copie ce lien dans ton navigateur :<br>${resetUrl}
+          </p>
+        </td></tr>
+
+        <!-- Pied de page -->
+        <tr><td style="background:#f9f9f9;padding:16px 32px;border-top:1px solid #eee;text-align:center">
+          <p style="margin:0;font-size:11px;color:#aaa">
+            Cet email a été envoyé depuis ${fromDomain} · Usage privé
+          </p>
+        </td></tr>
+
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`;
+
+    const text = `Bonjour ${user.name},
+
+Une demande d'accès a été effectuée pour ton profil sur Meilleurs films VOD.
+
+Pour accéder à ton espace, ouvre ce lien dans ton navigateur (valable 1 heure) :
+${resetUrl}
+
+Si tu n'es pas à l'origine de cette demande, ignore simplement cet email.
+
+— ${fromDomain}`;
 
     const sent = await sendEmail({
       to: user.email,
-      subject: `🔒 Réinitialisation de ton PIN — ${user.name}`,
-      html
+      subject: `Accès à ton profil ${user.name} — Meilleurs films VOD`,
+      html,
+      text
     });
 
     res.json(sent ? { ok: true } : { ok: false, error: 'email_failed' });

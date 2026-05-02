@@ -256,7 +256,7 @@ async function openSetPin(userId, userName) {
   try {
     const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-secret': _secret || '' },
+      headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
       body: JSON.stringify({ pin: pin.trim() })
     });
     if (r.ok) {

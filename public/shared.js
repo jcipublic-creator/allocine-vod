@@ -848,7 +848,23 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Séries notées</span><span class="val">${seriesAvecNote}</span></div>`;
   })();
 
-  // Bloc admin (JC only) : connexions + stats par profil
+  // Bloc stats profil courant (tous les profils sauf JC)
+  const myStatsBlock = (() => {
+    if (isJCProfile() || !_currentUserId) return '';
+    const p = udStats[_currentUserId];
+    if (!p) return '';
+    return `
+    <div class="info-section-title">👤 Mon profil</div>
+    <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>
+    <div class="info-row"><span class="lbl">🔖 Films à voir</span><span class="val">${p.films.vouloir}</span></div>
+    <div class="info-row"><span class="lbl">✕ Films non</span><span class="val">${p.films.nonInteresse}</span></div>
+    <div class="info-row"><span class="lbl">📺 Séries vues</span><span class="val">${p.series.vu}</span></div>
+    <div class="info-row"><span class="lbl">🔖 Séries à voir</span><span class="val">${p.series.vouloir}</span></div>
+    <div class="info-row"><span class="lbl">⏳ Séries à suivre</span><span class="val">${p.series.asuivre}</span></div>
+    <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`;
+  })();
+
+  // Bloc admin (JC only) : connexions + stats tous les profils
   const adminBlock = (() => {
     if (!isJCProfile()) return '';
     const entries = Object.entries(udStats);
@@ -899,6 +915,7 @@ function renderInfo() {
     ${progressBlock(st?.besteverList)}
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.besteverDetails)}
+    ${myStatsBlock}
     ${adminBlock}
   `;
 }

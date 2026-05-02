@@ -74,7 +74,7 @@ function _showPinResetFeedback() {
     const name = window._pinResetSuccess;
     delete window._pinResetSuccess;
     const t = document.createElement('div');
-    t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:rgba(68,204,153,.15);border:1px solid rgba(68,204,153,.3);border-radius:10px;padding:14px 20px;font-size:13px;color:#4c9;box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:300px';
+    t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#1a3d2b;border:1px solid #4c9;border-radius:10px;padding:16px 22px;font-size:13px;color:#4c9;box-shadow:0 4px 24px rgba(0,0,0,.7);text-align:center;max-width:300px;font-weight:600';
     t.textContent = `✅ PIN de "${name}" supprimé. Choisis ton profil pour te connecter.`;
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 7000);
@@ -82,7 +82,7 @@ function _showPinResetFeedback() {
   if (window._pinResetError) {
     delete window._pinResetError;
     const t = document.createElement('div');
-    t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:rgba(229,85,85,.15);border:1px solid rgba(229,85,85,.3);border-radius:10px;padding:14px 20px;font-size:13px;color:#e55;box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:300px';
+    t.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#3d1a1a;border:1px solid #e55;border-radius:10px;padding:16px 22px;font-size:13px;color:#e55;box-shadow:0 4px 24px rgba(0,0,0,.7);text-align:center;max-width:300px;font-weight:600';
     t.textContent = '❌ Lien de réinitialisation invalide ou expiré.';
     document.body.appendChild(t);
     setTimeout(() => t.remove(), 6000);
@@ -392,7 +392,7 @@ async function _requestPinReset(userId) {
   if (!toast) {
     toast = document.createElement('div');
     toast.id = toastId;
-    toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:var(--card);border-radius:10px;padding:14px 20px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:280px;display:none';
+    toast.style.cssText = 'position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);z-index:9999;background:#0e1c2f;border:1px solid rgba(255,255,255,.2);border-radius:10px;padding:16px 22px;font-size:13px;color:var(--text);box-shadow:0 4px 24px rgba(0,0,0,.8);text-align:center;max-width:280px;font-weight:600;display:none';
     document.body.appendChild(toast);
   }
 

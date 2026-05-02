@@ -2772,15 +2772,10 @@ app.listen(PORT, () => {
   // Séquence d'initialisation :
   //   1. Charge Redis (films, séries, bestever, utilisateurs, prefs, caches)
   //   2. Crée les profils par défaut s'ils n'existent pas
-  //   3–8. Lance les 6 auto-scrapes si le cache est périmé
-  //   9. Programme le scraping nocturne quotidien (3h00–4h15, heure Paris)
+  //   3. Programme le scraping nocturne quotidien (3h00–4h15, heure Paris)
+  //   Le scraping au démarrage est désactivé : seul le cron nocturne ou
+  //   le menu Debug déclenchent un scraping.
   loadUserdata()
     .then(() => seedDefaultProfiles())
-    .then(() => autoScrapeFilmsListIfStale())
-    .then(() => autoScrapeFilmsDetailsIfStale())
-    .then(() => autoScrapeSeriesListIfStale())
-    .then(() => autoScrapeSeriesDetailsIfStale())
-    .then(() => autoScrapeBesteverListIfStale())
-    .then(() => autoScrapeBesteverDetailsIfStale())
     .then(() => scheduleNightlyScraping());
 });

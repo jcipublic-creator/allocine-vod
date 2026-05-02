@@ -1,0 +1,21 @@
+#!/bin/bash
+# pushvod — commit & deploy tout en une commande
+# Usage : pushvod "message optionnel"
+
+set -e
+
+REPO_DIR="$(cd "$(dirname "$0")" && pwd)"
+cd "$REPO_DIR"
+
+MSG="${1:-deploy}"
+
+echo "📦 git add -A"
+git add -A
+
+echo "✏️  git commit: $MSG"
+git commit -m "$MSG" || { echo "Rien à committer."; exit 0; }
+
+echo "🚀 git push origin main"
+git push origin main
+
+echo "✅ Déployé sur Railway !"

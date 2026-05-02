@@ -151,9 +151,9 @@ function flagFor(pays) {
 }
 
 function renderPlatBadges(providers) {
-  if (!providers || providers.length === 0) return '<span class="pb-none">—</span>';
+  if (!providers || providers.length === 0) return '<span class="pb-none">Non disponible</span>';
   const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name));
-  if (filtered.length === 0) return '<span class="pb-none">—</span>';
+  if (filtered.length === 0) return '<span class="pb-none">Non disponible</span>';
   return filtered.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('');
 }
 
@@ -1243,7 +1243,7 @@ async function fetchDetails(idx, gen) {
     if (!resp.ok) {
       const errMsg = `HTTP ${resp.status} pour "${film.titre}"`;
       _details[key] = { providers: [] };
-      const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
+      const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">Non disponible</span>';
       return errMsg;
     }
 
@@ -1252,7 +1252,7 @@ async function fetchDetails(idx, gen) {
 
     if (data.error) {
       _details[key] = { providers: [] };
-      const el = platEl(); if (el) el.innerHTML = `<span class="pb-none" title="${data.error}">⚠</span>`;
+      const el = platEl(); if (el) el.innerHTML = `<span class="pb-none" title="${data.error}">Non disponible</span>`;
       return data.error;
     }
 
@@ -1272,7 +1272,7 @@ async function fetchDetails(idx, gen) {
     if (_loadGen !== gen) return null;
     const errMsg = `Réseau: ${e.message}`;
     _details[key] = { providers: [] };
-    const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">—</span>';
+    const el = platEl(); if (el) el.innerHTML = '<span class="pb-none">Non disponible</span>';
     return errMsg;
   }
 }

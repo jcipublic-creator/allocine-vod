@@ -179,6 +179,84 @@ function switchUser(userId) {
   localStorage.setItem(LS_USER_ID, userId);
 }
 
+/** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */
+function openACSync() {
+  const ID = 'ac-sync-modal';
+  if (!document.getElementById(ID)) {
+    const style = document.createElement('style');
+    style.textContent = [
+      `#ac-sync-modal{display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,14,27,.85);align-items:flex-end;justify-content:center;padding:20px}`,
+      `#ac-sync-modal.open{display:flex}`,
+      `#ac-sync-modal .ac-sheet{background:#0f2540;border-radius:18px;padding:20px;width:100%;max-width:480px;max-height:80vh;overflow-y:auto}`,
+      `#ac-sync-modal h3{color:var(--gold,#f0c040);font-size:15px;margin-bottom:16px}`,
+      `#ac-sync-modal ol{color:var(--muted,#5a8fc0);font-size:12px;padding-left:18px;line-height:2.2;margin-top:12px}`,
+      `#ac-sync-modal .ac-close{width:100%;margin-top:16px;padding:12px;border-radius:10px;background:var(--blue3,#1a3a5c);border:none;color:var(--text,#c8dcf0);font-size:14px;font-weight:600;cursor:pointer}`
+    ].join('');
+    document.head.appendChild(style);
+
+    const modal = document.createElement('div');
+    modal.id = ID;
+    modal.onclick = e => { if (e.target === modal) modal.classList.remove('open'); };
+    modal.innerHTML = `
+      <div class="ac-sheet">
+        <h3>🔄 Sync notes AlloCiné</h3>
+        <p style="font-size:13px;color:var(--text,#c8dcf0);line-height:1.7;margin-bottom:8px">
+          Glisse ce signet dans ta barre de favoris.<br>
+          Quand tu es sur <strong style="color:var(--gold,#f0c040)">AlloCiné — Mes films vus</strong>,
+          clique dessus pour tout synchroniser automatiquement.
+        </p>
+        <div id="ac-bm-container" style="text-align:center;margin:20px 0"></div>
+        <ol>
+          <li>Glisse le bouton jaune dans ta barre de favoris</li>
+          <li>Va sur <a href="https://mon.allocine.fr/mes-films/vus/" target="_blank"
+              style="color:var(--gold,#f0c040)">mon.allocine.fr → Mes films vus</a></li>
+          <li>Clique sur le signet "🔄 Sync VOD"</li>
+        </ol>
+        <button class="ac-close"
+          onclick="document.getElementById('ac-sync-modal').classList.remove('open')">Fermer</button>
+      </div>`;
+    document.body.appendChild(modal);
+
+    // Lien bookmarklet construit via DOM pour éviter tout problème d'échappement
+    const bm = '(async()=>{' +
+      'const n=m=>{let e=document.getElementById(\'_vod\');' +
+      'if(!e){e=document.createElement(\'div\');e.id=\'_vod\';' +
+      'Object.assign(e.style,{position:\'fixed\',top:\'20px\',right:\'20px\',' +
+      'background:\'#0f2540\',color:\'#f0c040\',padding:\'12px 16px\',' +
+      'borderRadius:\'8px\',zIndex:\'99999\',fontSize:\'13px\',' +
+      'boxShadow:\'0 4px 12px rgba(0,0,0,.5)\'});' +
+      'document.body.appendChild(e)}e.textContent=m};' +
+      'n(\'⏳ Chargement des films...\');' +
+      'for(let i=0;i<80;i++){const b=document.querySelector(\'.load-more-button\');' +
+      'if(!b)break;b.click();await new Promise(r=>setTimeout(r,1200))}' +
+      'n(\'🔍 Extraction des notes...\');' +
+      'const f=[];document.querySelectorAll(\'.card-userspace\').forEach(c=>{' +
+      'const l=c.querySelector(\'a[href*="fichefilm"]\');' +
+      'const m=(l?.getAttribute(\'href\')||\'\'). match(/fichefilm_gen_cfilm=(\\d+)/);' +
+      'const s=c.querySelectorAll(\'.rating-star.active\').length;' +
+      'if(m&&s)f.push({allocineId:m[1],noteAC:s/2})});' +
+      'n(\'📤 Envoi de \'+f.length+\' films...\');' +
+      'const r=await fetch(\'https://allocine-vod-production.up.railway.app/api/userdata/import-ac-notes\',' +
+      '{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},' +
+      'body:JSON.stringify({userId:\'user_default\',films:f})});' +
+      'const d=await r.json();' +
+      'n(\'✅ \'+d.imported+\' films synchronisés !\');' +
+      'setTimeout(()=>document.getElementById(\'_vod\')?.remove(),5000)' +
+      '})()';
+    const link = document.createElement('a');
+    link.href = 'javascript:' + bm;
+    link.textContent = '🔄 Sync VOD';
+    Object.assign(link.style, {
+      display: 'inline-block', background: 'var(--gold,#f0c040)', color: '#000',
+      padding: '10px 24px', borderRadius: '8px', fontWeight: '700',
+      fontSize: '14px', textDecoration: 'none', cursor: 'grab', userSelect: 'none',
+      boxShadow: '0 2px 8px rgba(240,192,64,.3)'
+    });
+    document.getElementById('ac-bm-container').appendChild(link);
+  }
+  document.getElementById(ID).classList.add('open');
+}
+
 /** Masque le menu Debug pour tous les profils sauf "JC" */
 function updateDebugVisibility(userName) {
   const show = (userName || '').trim().toUpperCase() === 'JC';

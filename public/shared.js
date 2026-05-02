@@ -286,9 +286,32 @@ function openACSync() {
   document.getElementById(ID).classList.add('open');
 }
 
+/** Nom du profil courant — mis à jour par updateDebugVisibility */
+let _currentUserName = '';
+
+/** Retourne true si le profil actif est JC (seul profil avec notes AlloCiné) */
+function isJCProfile() {
+  return _currentUserName.trim().toUpperCase() === 'JC';
+}
+
+/**
+ * Retourne le HTML du badge de note AlloCiné.
+ * N'afficher que si isJCProfile() === true.
+ */
+function renderNoteAC(noteAC) {
+  if (!noteAC) return '';
+  // Étoiles pleines + demie selon la valeur (ex: 4.5 → ★★★★½☆ non, juste ★ 4.5)
+  const full = Math.floor(noteAC);
+  const half = (noteAC % 1) >= 0.5 ? 1 : 0;
+  const empty = 5 - full - half;
+  const stars = '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
+  return `<span class="ua-note-ac" title="Ma note AlloCiné">${stars} <span class="ua-note-val">${noteAC}/5</span></span>`;
+}
+
 /** Masque le menu Debug pour tous les profils sauf "JC" */
 function updateDebugVisibility(userName) {
-  const show = (userName || '').trim().toUpperCase() === 'JC';
+  _currentUserName = (userName || '').trim();
+  const show = _currentUserName.toUpperCase() === 'JC';
   ['btn-debug-toggle', 'submenu-debug', 'debug-separator'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = show ? '' : 'none';

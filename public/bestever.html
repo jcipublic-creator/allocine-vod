@@ -185,7 +185,7 @@ body {
 .card-synopsis-meta { margin-top: 5px; font-size: 10px; color: var(--muted); display: flex; gap: 10px; flex-wrap: wrap; }
 
 /* Boutons actions utilisateur */
-.card-ua { display: flex; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(42,79,112,.5); }
+.card-ua { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; padding-top: 7px; border-top: 1px solid rgba(42,79,112,.5); }
 .ua-btn {
   flex: 1; background: none; border: 1px solid var(--blue3); color: var(--muted);
   border-radius: 8px; padding: 5px 4px; font-size: 11px; cursor: pointer;
@@ -194,6 +194,8 @@ body {
 .ua-btn.active-vu   { border-color: #4caf7d; color: #4caf7d; background: rgba(76,175,125,.12); }
 .ua-btn.active-voir { border-color: #3498db; color: #3498db; background: rgba(52,152,219,.12); }
 .ua-btn.active-nope { border-color: #e74c3c; color: #e74c3c; background: rgba(231,76,60,.12); }
+.ua-note-ac { flex-basis: 100%; text-align: center; font-size: 11px; color: var(--gold, #f0c040); letter-spacing: 1px; margin-top: 2px; }
+.ua-note-ac .ua-note-val { font-size: 10px; opacity: .75; margin-left: 3px; }
 
 /* Empty */
 .empty { text-align: center; padding: 60px 20px; color: var(--muted); display: none; }
@@ -591,6 +593,7 @@ const UI = {
       <button class="ua-btn ${ud.vu ? 'active-vu' : ''}" onclick="toggleUA('${id}',${idx},'vu')">👁 Vu</button>
       <button class="ua-btn ${ud.vouloir ? 'active-voir' : ''}" onclick="toggleUA('${id}',${idx},'vouloir')">🔖 À voir</button>
       <button class="ua-btn ${ud.nonInteresse ? 'active-nope' : ''}" onclick="toggleUA('${id}',${idx},'nonInteresse')">✕ Non</button>
+      ${isJCProfile() && ud.noteAC ? renderNoteAC(ud.noteAC) : ''}
     </div>`;
   },
   getPlatEl(film) {

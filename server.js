@@ -703,17 +703,9 @@ function extractProviders(html) {
     if (PROVIDERS_BLACKLIST.has(name.toLowerCase())) return;
     if (/coffret|édition|edition|collector|blu-ray/i.test(name)) return;
 
-    // Exclure les tuiles dans une section DVD/Blu-ray (remonter jusqu'à 8 niveaux)
-    let $anc = $(el);
-    let inDvdSection = false;
-    for (let i = 0; i < 8; i++) {
-      $anc = $anc.parent();
-      if (!$anc.length || $anc.is('body')) break;
-      const cls = ($anc.attr('class') || '') + ' ' + ($anc.attr('id') || '');
-      const heading = $anc.find('h2,h3,h4,[class*="title"],[class*="heading"]').first().text();
-      if (/dvd|blu.ray/i.test(cls) || /dvd|blu.ray/i.test(heading)) { inDvdSection = true; break; }
-    }
-    if (inDvdSection) return;
+    // Exclure les tuiles DVD : le div.provider-tile parent porte la classe "dvd-tile"
+    const $providerTile = $(el).closest('.provider-tile');
+    if ($providerTile.hasClass('dvd-tile')) return;
 
     seen.add(name);
 

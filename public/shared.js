@@ -196,146 +196,162 @@ function switchUser(userId) {
 
 // ─── Protection PIN ───────────────────────────────────────────────────────────
 
+// ── Pavé numérique partagé (sans <input>, invisible pour les MDM) ─────────────
+const _numpadStyle = {
+  overlay: 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.92);align-items:center;justify-content:center',
+  box:     'background:var(--card);border-radius:16px;padding:24px 20px;width:280px;text-align:center;user-select:none',
+  dots:    'font-size:26px;letter-spacing:10px;min-height:38px;margin:12px 0 4px;color:var(--text)',
+  err:     'color:#e55;font-size:12px;min-height:16px;margin-bottom:8px',
+  grid:    'display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px',
+  key:     'padding:14px 0;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.07);color:var(--text);font-size:18px;font-weight:600;cursor:pointer',
+  cancel:  'flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px',
+  ok:      'flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px',
+};
+
+function _buildNumpad(containerId) {
+  const wrap = document.createElement('div');
+  wrap.id = containerId;
+  wrap.style.cssText = _numpadStyle.overlay;
+  wrap.innerHTML = `
+    <div style="${_numpadStyle.box}">
+      <div id="${containerId}-title"  style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:2px"></div>
+      <div id="${containerId}-sub"    style="font-size:12px;color:var(--muted);margin-bottom:4px"></div>
+      <div id="${containerId}-dots"   style="${_numpadStyle.dots}">○○○○</div>
+      <div id="${containerId}-err"    style="${_numpadStyle.err}"></div>
+      <div style="${_numpadStyle.grid}" id="${containerId}-grid"></div>
+      <div style="display:flex;gap:10px">
+        <button id="${containerId}-cancel" style="${_numpadStyle.cancel}">Annuler</button>
+        <button id="${containerId}-ok"     style="${_numpadStyle.ok}">Valider</button>
+      </div>
+    </div>`;
+  const grid = wrap.querySelector(`#${containerId}-grid`);
+  [1,2,3,4,5,6,7,8,9,'⌫',0,''].forEach(k => {
+    const btn = document.createElement('button');
+    btn.dataset.k = k;
+    btn.style.cssText = k === '' ? 'visibility:hidden' : _numpadStyle.key;
+    btn.textContent = k === '' ? '' : k;
+    grid.appendChild(btn);
+  });
+  document.body.appendChild(wrap);
+  return wrap;
+}
+
+function _runNumpad(id, { title, sub, maxLen = 8, onOk, onCancel, extraBtn }) {
+  let val = '';
+  const el     = document.getElementById(id);
+  const dots   = el.querySelector(`#${id}-dots`);
+  const err    = el.querySelector(`#${id}-err`);
+  const btnOk  = el.querySelector(`#${id}-ok`);
+  const btnCan = el.querySelector(`#${id}-cancel`);
+  const grid   = el.querySelector(`#${id}-grid`);
+
+  el.querySelector(`#${id}-title`).textContent = title || '';
+  el.querySelector(`#${id}-sub`).textContent   = sub   || '';
+  err.textContent = '';
+  val = '';
+  _updateDots();
+  el.style.display = 'flex';
+
+  if (extraBtn) {
+    let eb = el.querySelector(`#${id}-extra`);
+    if (!eb) { eb = document.createElement('button'); eb.id = `${id}-extra`; eb.style.cssText = 'width:100%;margin-top:8px;padding:9px;border-radius:8px;border:1px solid rgba(255,80,80,.3);background:transparent;color:#e55;cursor:pointer;font-size:13px'; el.querySelector('div > div:last-child').after(eb); }
+    eb.textContent = extraBtn.label;
+    eb.onclick = extraBtn.action;
+    eb.style.display = '';
+  } else {
+    const eb = el.querySelector(`#${id}-extra`);
+    if (eb) eb.style.display = 'none';
+  }
+
+  function _updateDots() {
+    dots.textContent = val.length ? '●'.repeat(val.length) : '○○○○';
+  }
+
+  grid.onclick = e => {
+    const k = e.target.dataset.k;
+    if (k === undefined) return;
+    err.textContent = '';
+    if (k === '⌫') { val = val.slice(0, -1); }
+    else if (val.length < maxLen) { val += k; }
+    _updateDots();
+  };
+
+  btnOk.onclick  = () => { if (!val) { err.textContent = 'Saisis un code.'; return; } onOk(val, err, () => { val=''; _updateDots(); }); };
+  btnCan.onclick = () => { el.style.display = 'none'; onCancel(); };
+}
+
 /**
- * Affiche une modal de saisie PIN pour le profil userId.
- * Retourne une Promise<boolean> : true si PIN correct, false si annulé/incorrect.
+ * Affiche un pavé numérique pour vérifier le PIN d'un profil.
+ * Retourne une Promise<boolean>.
  */
 function promptPinModal(userId) {
   return new Promise(resolve => {
-    const ID = 'pin-modal';
-    let el = document.getElementById(ID);
-    if (!el) {
-      el = document.createElement('div');
-      el.id = ID;
-      el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center';
-      el.innerHTML = `
-        <div style="background:var(--card);border-radius:14px;padding:28px 24px;width:280px;text-align:center">
-          <div style="font-size:28px;margin-bottom:8px">🔒</div>
-          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:6px">Profil protégé</div>
-          <div style="font-size:13px;color:var(--muted);margin-bottom:18px">Entre le code PIN pour accéder à ce profil.</div>
-          <input id="pin-input" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:18px;letter-spacing:.2em;text-align:center;outline:none;-webkit-text-security:disc"
-            placeholder="••••">
-          <div id="pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
-          <div style="display:flex;gap:10px;margin-top:16px">
-            <button id="pin-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
-            <button id="pin-confirm" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Valider</button>
-          </div>
-        </div>`;
-      document.body.appendChild(el);
-    }
-
-    const input   = el.querySelector('#pin-input');
-    const errDiv  = el.querySelector('#pin-error');
-    const btnOk   = el.querySelector('#pin-confirm');
-    const btnCancel = el.querySelector('#pin-cancel');
-
-    input.value = '';
-    errDiv.textContent = '';
-    el.style.display = 'flex';
-    setTimeout(() => input.focus(), 50);
-
-    async function attempt() {
-      const pin = input.value.trim();
-      if (!pin) { input.focus(); return; }
-      btnOk.disabled = true;
-      try {
-        const r = await fetch(`/api/users/${encodeURIComponent(userId)}/verify-pin`, {
-          method: 'POST', headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pin })
-        });
-        const { ok } = await r.json();
-        if (ok) { close(); resolve(true); }
-        else { errDiv.textContent = 'Code incorrect.'; input.value = ''; input.focus(); btnOk.disabled = false; }
-      } catch(e) { errDiv.textContent = 'Erreur réseau.'; btnOk.disabled = false; }
-    }
-
-    function close() { el.style.display = 'none'; input.onkeydown = null; }
-    function cancel() { close(); resolve(false); }
-
-    input.onkeydown = e => { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); };
-    btnOk.onclick = attempt;
-    btnCancel.onclick = cancel;
+    const ID = 'pin-numpad';
+    if (!document.getElementById(ID)) _buildNumpad(ID);
+    _runNumpad(ID, {
+      title: '🔒 Profil protégé',
+      sub:   'Entre ton code pour accéder à ce profil.',
+      onCancel: () => resolve(false),
+      onOk: async (pin, errEl, reset) => {
+        try {
+          const r = await fetch(`/api/users/${encodeURIComponent(userId)}/verify-pin`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ pin })
+          });
+          const { ok } = await r.json();
+          if (ok) { document.getElementById(ID).style.display = 'none'; resolve(true); }
+          else { errEl.textContent = 'Code incorrect.'; reset(); }
+        } catch(e) { errEl.textContent = 'Erreur réseau.'; }
+      }
+    });
   });
 }
 
 /**
- * Ouvre une modal pour définir ou supprimer le PIN d'un profil (admin JC only).
- * Double saisie pour éviter les erreurs. Appelé depuis le bloc admin du menu Info.
+ * Ouvre un pavé numérique pour définir (ou supprimer) le PIN d'un profil.
+ * Etape 1 : saisie du nouveau code. Etape 2 : confirmation.
  */
 function openSetPin(userId, userName) {
   return new Promise(resolve => {
-    const ID = 'set-pin-modal';
-    let el = document.getElementById(ID);
-    if (!el) {
-      el = document.createElement('div');
-      el.id = ID;
-      el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center';
-      el.innerHTML = `
-        <div style="background:var(--card);border-radius:14px;padding:28px 24px;width:300px">
-          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">🔐 Définir un code PIN</div>
-          <div id="set-pin-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:18px"></div>
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Nouveau code PIN</label>
-          <input id="set-pin-1" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;-webkit-text-security:disc;margin-bottom:12px"
-            placeholder="••••">
-          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Confirmer le code PIN</label>
-          <input id="set-pin-2" type="text" inputmode="numeric" maxlength="10" autocomplete="off"
-            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;-webkit-text-security:disc"
-            placeholder="••••">
-          <div id="set-pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
-          <div style="display:flex;gap:10px;margin-top:16px">
-            <button id="set-pin-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
-            <button id="set-pin-del" style="padding:10px 14px;border-radius:8px;border:1px solid rgba(255,80,80,.4);background:transparent;color:#e55;cursor:pointer;font-size:13px">Supprimer</button>
-            <button id="set-pin-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Valider</button>
-          </div>
-        </div>`;
-      document.body.appendChild(el);
+    const ID = 'setpin-numpad';
+    if (!document.getElementById(ID)) _buildNumpad(ID);
+    let step1val = '';
+
+    function showStep1() {
+      _runNumpad(ID, {
+        title: '🔐 Nouveau code',
+        sub:   `Profil : ${userName}`,
+        onCancel: () => resolve(false),
+        extraBtn: { label: '✕ Supprimer le code existant', action: () => savePin('') },
+        onOk: (val) => { step1val = val; showStep2(); }
+      });
     }
 
-    const inp1    = el.querySelector('#set-pin-1');
-    const inp2    = el.querySelector('#set-pin-2');
-    const errDiv  = el.querySelector('#set-pin-error');
-    const subtitle = el.querySelector('#set-pin-subtitle');
-    const btnOk   = el.querySelector('#set-pin-ok');
-    const btnDel  = el.querySelector('#set-pin-del');
-    const btnCancel = el.querySelector('#set-pin-cancel');
+    function showStep2() {
+      _runNumpad(ID, {
+        title: '🔐 Confirmer le code',
+        sub:   'Saisis à nouveau le même code.',
+        onCancel: () => resolve(false),
+        onOk: async (val, errEl) => {
+          if (val !== step1val) { errEl.textContent = 'Les codes ne correspondent pas.'; return; }
+          savePin(val);
+        }
+      });
+    }
 
-    inp1.value = inp2.value = '';
-    errDiv.textContent = '';
-    subtitle.textContent = `Profil : ${userName}`;
-    el.style.display = 'flex';
-    setTimeout(() => inp1.focus(), 50);
-
-    async function save(pin) {
-      btnOk.disabled = btnDel.disabled = true;
+    async function savePin(pin) {
       try {
         const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
           body: JSON.stringify({ pin })
         });
-        if (r.ok) { close(); resolve(true); }
-        else { errDiv.textContent = 'Erreur serveur.'; btnOk.disabled = btnDel.disabled = false; }
-      } catch(e) { errDiv.textContent = 'Erreur réseau.'; btnOk.disabled = btnDel.disabled = false; }
+        document.getElementById(ID).style.display = 'none';
+        if (r.ok) resolve(true); else resolve(false);
+      } catch(e) { resolve(false); }
     }
 
-    function attempt() {
-      const p1 = inp1.value.trim(), p2 = inp2.value.trim();
-      if (!p1) { errDiv.textContent = 'Saisis un code PIN.'; inp1.focus(); return; }
-      if (p1 !== p2) { errDiv.textContent = 'Les deux codes ne correspondent pas.'; inp2.value = ''; inp2.focus(); return; }
-      errDiv.textContent = '';
-      save(p1);
-    }
-
-    function close() { el.style.display = 'none'; inp1.onkeydown = null; inp2.onkeydown = null; }
-    function cancel() { close(); resolve(false); }
-
-    inp1.onkeydown = e => { if (e.key === 'Enter') inp2.focus(); if (e.key === 'Escape') cancel(); };
-    inp2.onkeydown = e => { if (e.key === 'Enter') attempt();    if (e.key === 'Escape') cancel(); };
-    btnOk.onclick     = attempt;
-    btnDel.onclick    = () => save('');
-    btnCancel.onclick = cancel;
+    showStep1();
   });
 }
 

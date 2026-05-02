@@ -314,14 +314,31 @@ function renderNoteAC(noteAC) {
   return `<span class="ua-note-ac" title="Ma note AlloCiné">${fullStars}${halfStar}${emptyStars} <span class="ua-note-val">${noteAC}/5</span></span>`;
 }
 
-/** Masque le menu Debug pour tous les profils sauf "JC" */
+/** Masque le menu Debug + option de tri "Ma note" pour tous les profils sauf "JC" */
 function updateDebugVisibility(userName) {
   _currentUserName = (userName || '').trim();
   const show = _currentUserName.toUpperCase() === 'JC';
+
+  // Menu debug
   ['btn-debug-toggle', 'submenu-debug', 'debug-separator'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = show ? '' : 'none';
   });
+
+  // Option de tri "↓ Ma note" — ajoutée uniquement pour JC
+  const sortSel = document.getElementById('fil-sort');
+  if (sortSel) {
+    const existing = sortSel.querySelector('option[value="noteAC"]');
+    if (show && !existing) {
+      const opt = document.createElement('option');
+      opt.value = 'noteAC';
+      opt.textContent = '↓ Ma note';
+      sortSel.appendChild(opt);
+    } else if (!show && existing) {
+      if (sortSel.value === 'noteAC') sortSel.value = 'presse';
+      existing.remove();
+    }
+  }
 }
 
 async function loadServerPrefs() {
@@ -627,6 +644,14 @@ function applySort(critere) {
       const sa = (a.notePresse ?? 0) + (a.noteSpect ?? 0);
       const sb = (b.notePresse ?? 0) + (b.noteSpect ?? 0);
       return sb - sa || (b.notePresse ?? 0) - (a.notePresse ?? 0) || a.titre.localeCompare(b.titre, 'fr');
+    }
+    if (_sortBy === 'noteAC') {
+      const na = _userdata[a.allocineId]?.noteAC ?? -1;
+      const nb = _userdata[b.allocineId]?.noteAC ?? -1;
+      if (na === -1 && nb === -1) return b.notePresse - a.notePresse;
+      if (na === -1) return 1;   // sans note → fin de liste
+      if (nb === -1) return -1;
+      return nb - na || b.notePresse - a.notePresse;
     }
     return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
   });

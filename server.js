@@ -973,7 +973,14 @@ app.post('/api/userdata', requireSecret, async (req, res) => {
  * Body   : { userId, films: [{ allocineId, noteAC }] }
  * Réponse: { ok: true, imported: N }
  */
+app.options('/api/userdata/import-ac-notes', (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
+  res.header('Access-Control-Allow-Methods', 'POST, OPTIONS');
+  res.header('Access-Control-Allow-Headers', 'Content-Type, x-app-secret');
+  res.sendStatus(200);
+});
 app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
+  res.header('Access-Control-Allow-Origin', '*');
   const { userId, films } = req.body;
   if (!userId || !users[userId] || !Array.isArray(films)) {
     return res.status(400).json({ error: 'userId invalide ou films manquant' });

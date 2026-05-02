@@ -940,22 +940,61 @@ app.get('/api/userdata', (req, res) => {
  *        Si toutes les valeurs booléennes sont false, l'entrée est supprimée
  *        (pas de stockage inutile d'entrées "vides").
  *
- * Body   : { userId, id, vu, vouloir, nonInteresse, asuivre }
+ * Body   : { userId, id, vu, vouloir, nonInteresse, asuivre, noteAC }
  * Réponse: { ok: true }
  * Erreur : 400 si userId ou id manquant
  */
 app.post('/api/userdata', requireSecret, async (req, res) => {
-  const { userId, id, vu, vouloir, nonInteresse, asuivre } = req.body;
+  const { userId, id, vu, vouloir, nonInteresse, asuivre, noteAC } = req.body;
   if (!userId || !id || !users[userId]) return res.status(400).json({ error: 'userId invalide ou id manquant' });
   if (!userdata[userId]) userdata[userId] = {};
+  const existing = userdata[userId][id] || {};
   const entry = { vu: !!vu, vouloir: !!vouloir, nonInteresse: !!nonInteresse, asuivre: !!asuivre };
-  if (!entry.vu && !entry.vouloir && !entry.nonInteresse && !entry.asuivre) {
+  // Conserver noteAC existant si non fourni, écraser si fourni (null = suppression)
+  const resolvedNote = noteAC !== undefined ? noteAC : existing.noteAC;
+  if (resolvedNote !== undefined && resolvedNote !== null) entry.noteAC = resolvedNote;
+  const isEmpty = !entry.vu && !entry.vouloir && !entry.nonInteresse && !entry.asuivre && !entry.noteAC;
+  if (isEmpty) {
     delete userdata[userId][id]; // purge les entrées entièrement vides
   } else {
     userdata[userId][id] = entry;
   }
   await saveUserdataFile();
   res.json({ ok: true });
+});
+
+/**
+ * POST /api/userdata/import-ac-notes
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Import en masse des notes AlloCiné pour un profil.
+ *        Chaque film est marqué vu:true avec sa noteAC.
+ *        Les champs vouloir/nonInteresse/asuivre existants sont préservés.
+ *
+ * Body   : { userId, films: [{ allocineId, noteAC }] }
+ * Réponse: { ok: true, imported: N }
+ */
+app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
+  const { userId, films } = req.body;
+  if (!userId || !users[userId] || !Array.isArray(films)) {
+    return res.status(400).json({ error: 'userId invalide ou films manquant' });
+  }
+  if (!userdata[userId]) userdata[userId] = {};
+  let count = 0;
+  for (const { allocineId, noteAC } of films) {
+    if (!allocineId) continue;
+    const existing = userdata[userId][String(allocineId)] || {};
+    userdata[userId][String(allocineId)] = {
+      vu:            true,
+      vouloir:       existing.vouloir       || false,
+      nonInteresse:  existing.nonInteresse  || false,
+      asuivre:       existing.asuivre       || false,
+      noteAC:        typeof noteAC === 'number' ? noteAC : existing.noteAC,
+    };
+    count++;
+  }
+  await saveUserdataFile();
+  console.log(`📥 Import AC notes : ${count} films pour userId=${userId}`);
+  res.json({ ok: true, imported: count });
 });
 
 /**

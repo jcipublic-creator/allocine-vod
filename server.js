@@ -175,6 +175,16 @@ let isBesteverScraping          = false;
 let besteverProgress            = { current: 0, total: 0 };
 let besteverDetailsProgress     = { current: 0, total: 0 };
 
+// ── État global Cinéma ──────────────────────────────────────────────────────
+const CINEMA_PAGES          = 7;
+const CINEMA_MIN_SEANCES    = 50;
+const CINEMA_MIN_COMBINED   = 7.2;
+const CINEMA_MAX_AGE_MONTHS = 2;
+let cachedCinema     = [];
+let lastCinemaScrape = null;
+let isCinemaScraping = false;
+let cinemaProgress   = { current: 0, total: 0 };
+
 app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.json());
 
@@ -295,6 +305,14 @@ async function loadUserdata() {
       if (besteverTsRaw) lastBesteverScrape = besteverTsRaw;
       const besteverDetailsTsRaw = await redis.get('lastBesteverDetailsScrape');
       if (besteverDetailsTsRaw) lastBesteverDetailsScrape = besteverDetailsTsRaw;
+      // Liste cinéma
+      const cinemaRaw = await redis.get('cinema');
+      if (cinemaRaw) {
+        cachedCinema = typeof cinemaRaw === 'string' ? JSON.parse(cinemaRaw) : cinemaRaw;
+        console.log(`🎥 Cinéma Redis chargé (${cachedCinema.length} films)`);
+      }
+      const cinemaTsRaw = await redis.get('lastCinemaScrape');
+      if (cinemaTsRaw) lastCinemaScrape = cinemaTsRaw;
       // Réinitialisation forcée des profils côté client
       const resetRaw = await redis.get('profileResetAt');
       if (resetRaw) profileResetAt = resetRaw;
@@ -1699,6 +1717,7 @@ function scheduleNightlyScraping() {
     setTimeout(() => autoScrapeSeriesDetailsIfStale(),    45 * 60 * 1000);               // 3h45
     setTimeout(() => autoScrapeBesteverListIfStale(),     60 * 60 * 1000);               // 4h00
     setTimeout(() => autoScrapeBesteverDetailsIfStale(),  75 * 60 * 1000);               // 4h15
+    setTimeout(() => autoScrapeCinemaIfStale(),           90 * 60 * 1000);               // 4h30
     // Reprogramme pour demain 3h00
     setTimeout(run, msTillParis(3, 0));
   }
@@ -2630,6 +2649,226 @@ app.get('/api/series/debug-lines', requireSecret, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SECTION CINÉMA
+// ══════════════════════════════════════════════════════════════════════════════
+
+const FR_MONTHS = { janvier:0,février:1,mars:2,avril:3,mai:4,juin:5,juillet:6,août:7,septembre:8,octobre:9,novembre:10,décembre:11 };
+function parseFrenchDate(str) {
+  if (!str) return null;
+  const m = str.toLowerCase().match(/(\d+)\s+(\w+)\s+(\d{4})/);
+  if (!m) return null;
+  const month = FR_MONTHS[m[2]];
+  if (month === undefined) return null;
+  return new Date(parseInt(m[3]), month, parseInt(m[1]));
+}
+
+function parseCinemaFilms(html) {
+  const $ = cheerio.load(html);
+  const films = [];
+  const seen = new Set();
+  $('.card.entity-card').each((_, card) => {
+    const $card = $(card);
+    const titleLink = $card.find('a.meta-title-link');
+    const href = titleLink.attr('href') || '';
+    const idMatch = href.match(/fichefilm[_-](?:gen[_-]cfilm=)?(\d+)/);
+    const allocineId = idMatch ? idMatch[1] : null;
+    const titre = titleLink.text().trim();
+    if (!titre || seen.has(allocineId || titre)) return;
+    seen.add(allocineId || titre);
+    // Séances
+    const seancesText = $card.find('a[href*="/seance/"]').text().replace(/\s/g, '');
+    const seancesMatch = seancesText.match(/\((\d+)\)/);
+    const nbSeances = seancesMatch ? parseInt(seancesMatch[1]) : 0;
+    // Notes
+    let notePresse = null, noteSpect = null;
+    $card.find('.rating-item,[class*="rating-item"]').each((_, ri) => {
+      const $ri = $(ri);
+      const txt = $ri.text();
+      const note = parseFloat($ri.find('.stareval-note,[class*="stareval-note"]').first().text().replace(',', '.'));
+      if (isNaN(note) || note <= 0 || note > 5) return;
+      if (/presse/i.test(txt) && notePresse === null) notePresse = note;
+      else if (/spectateur/i.test(txt) && noteSpect === null) noteSpect = note;
+    });
+    // Date sortie + durée
+    const metaText = $card.find('.meta-body-info').first().text();
+    const dateMatch = metaText.match(/(\d{1,2}\s+\w+\s+\d{4})/);
+    const dateSortie = dateMatch ? dateMatch[1].trim() : null;
+    const dureeMatch = metaText.match(/(\d+h\s*\d*\s*min?)/i);
+    const duree = dureeMatch ? dureeMatch[1].trim() : null;
+    // Genre
+    const genreArr = [];
+    $card.find('.meta-body-info .dark-grey-link,.meta-body-info a').each((_, a) => {
+      const t = $(a).text().trim();
+      if (t && t.length < 50 && !genreArr.includes(t)) genreArr.push(t);
+    });
+    // Réalisateur
+    let realisateur = '';
+    $card.find('.meta-body-direction,[class*="meta-body-direction"]').each((_, d) => {
+      if (realisateur) return;
+      const names = $(d).find('.dark-grey-link,a').map((_, a) => $(a).text().trim()).get().filter(Boolean);
+      if (names.length) realisateur = names.join(', ');
+    });
+    // Acteurs
+    let acteurs = '';
+    $card.find('.meta-body-actor,[class*="meta-body-actor"]').each((_, a) => {
+      if (acteurs) return;
+      const names = $(a).find('.dark-grey-link,a').map((_, al) => $(al).text().trim()).get().filter(Boolean);
+      if (names.length) acteurs = names.slice(0, 5).join(', ');
+    });
+    // Synopsis
+    const synopsis = $card.find('.content-txt,.synopsis-txt').first().text().trim().substring(0, 400);
+    // Poster
+    const $img = $card.find('img.thumbnail-img,img').first();
+    const rawSrc = $img.attr('data-src') || $img.attr('src') || '';
+    const poster = rawSrc && !/blank|placeholder|gif$/i.test(rawSrc) ? rawSrc : null;
+    films.push({ titre, allocineId, dateSortie, duree, genre: genreArr.join(', '), realisateur, acteurs, synopsis, poster, notePresse, noteSpect, nbSeances });
+  });
+  return films;
+}
+
+function isCinemaFilmValid(film) {
+  if (film.notePresse === null || film.noteSpect === null) return false;
+  if ((film.notePresse + film.noteSpect) <= CINEMA_MIN_COMBINED) return false;
+  if (film.nbSeances <= CINEMA_MIN_SEANCES) return false;
+  if (!film.dateSortie) return false;
+  const d = parseFrenchDate(film.dateSortie);
+  if (!d) return false;
+  const limit = new Date();
+  limit.setMonth(limit.getMonth() - CINEMA_MAX_AGE_MONTHS);
+  return d >= limit;
+}
+
+/**
+ * GET /api/cinema
+ */
+app.get('/api/cinema', (_req, res) => {
+  res.json({ films: cachedCinema, lastScrape: lastCinemaScrape, count: cachedCinema.length });
+});
+
+/**
+ * GET /api/cinema/health
+ */
+app.get('/api/cinema/health', (_req, res) => {
+  res.json({ ok: true, cachedFilms: cachedCinema.length, lastScrape: lastCinemaScrape, isScraping: isCinemaScraping, pages: CINEMA_PAGES });
+});
+
+/**
+ * GET /api/cinema/scrape-status
+ */
+app.get('/api/cinema/scrape-status', (_req, res) => {
+  const pct = cinemaProgress.total ? Math.round(cinemaProgress.current / cinemaProgress.total * 100) : 0;
+  res.json({ isScraping: isCinemaScraping, pct });
+});
+
+/**
+ * GET /api/cinema/scrape — SSE manuel (debug)
+ */
+app.get('/api/cinema/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 1000), async (req, res) => {
+  if (isCinemaScraping) return res.status(409).json({ error: 'Scraping déjà en cours' });
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  const send = d => res.write(`data: ${JSON.stringify(d)}\n\n`);
+  isCinemaScraping = true;
+  scrapingPhase    = 'cinema';
+  cinemaProgress   = { current: 0, total: CINEMA_PAGES };
+  try {
+    const allFilms = [];
+    for (let page = 1; page <= CINEMA_PAGES; page++) {
+      cinemaProgress.current = page;
+      const url = `https://www.allocine.fr/film/aucinema/?page=${page}`;
+      try {
+        const r = await fetchWithRetry(url);
+        const raw = parseCinemaFilms(r.data).filter(isCinemaFilmValid);
+        allFilms.push(...raw);
+        send({ type: 'progress', page, total: CINEMA_PAGES, found: raw.length });
+      } catch(e) {
+        send({ type: 'error', page, message: e.message });
+      }
+      await sleep(1500 + Math.random() * 500);
+    }
+    // Dédupliquer par allocineId
+    const seen = new Set();
+    const result = allFilms.filter(f => {
+      const k = f.allocineId || f.titre;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    }).sort((a, b) => b.nbSeances - a.nbSeances);
+    cachedCinema     = result;
+    lastCinemaScrape = new Date().toISOString();
+    if (redis) {
+      try { await redis.set('cinema', JSON.stringify(result)); await redis.set('lastCinemaScrape', lastCinemaScrape); }
+      catch(e) { console.warn('[cinema] Redis:', e.message); }
+    }
+    send({ type: 'done', totalFilms: result.length, lastScrape: lastCinemaScrape });
+    res.end();
+  } finally {
+    isCinemaScraping = false;
+    scrapingPhase    = null;
+    cinemaProgress   = { current: 0, total: 0 };
+  }
+});
+
+/**
+ * POST /api/cinema/clear
+ */
+app.post('/api/cinema/clear', requireSecret, async (_req, res) => {
+  const count  = cachedCinema.length;
+  cachedCinema = [];
+  lastCinemaScrape = null;
+  if (redis) {
+    try { await redis.del('cinema'); await redis.del('lastCinemaScrape'); }
+    catch(e) { console.warn('Redis del cinema:', e.message); }
+  }
+  res.json({ ok: true, cleared: count });
+});
+
+/**
+ * Auto-scrape cinéma nocturne
+ */
+async function autoScrapeCinemaIfStale() {
+  if (isCinemaScraping) return;
+  const ageDays = lastCinemaScrape ? (Date.now() - new Date(lastCinemaScrape).getTime()) / 86400000 : Infinity;
+  if (ageDays < AUTO_SCRAPE_DAYS) {
+    console.log(`⏭️  Cinéma OK (${ageDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  isCinemaScraping = true;
+  scrapingPhase    = 'cinema';
+  cinemaProgress   = { current: 0, total: CINEMA_PAGES };
+  try {
+    const allFilms = [];
+    for (let page = 1; page <= CINEMA_PAGES; page++) {
+      cinemaProgress.current = page;
+      const url = `https://www.allocine.fr/film/aucinema/?page=${page}`;
+      try {
+        const r = await fetchWithRetry(url);
+        const raw = parseCinemaFilms(r.data).filter(isCinemaFilmValid);
+        allFilms.push(...raw);
+        console.log(`[auto][cinema] Page ${page}/${CINEMA_PAGES} → ${raw.length} films retenus`);
+      } catch(e) { console.warn(`[auto][cinema] Page ${page} erreur: ${e.message}`); }
+      await sleep(1500 + Math.random() * 500);
+    }
+    const seen = new Set();
+    const result = allFilms.filter(f => {
+      const k = f.allocineId || f.titre;
+      if (seen.has(k)) return false;
+      seen.add(k); return true;
+    }).sort((a, b) => b.nbSeances - a.nbSeances);
+    cachedCinema     = result;
+    lastCinemaScrape = new Date().toISOString();
+    if (redis) {
+      try { await redis.set('cinema', JSON.stringify(result)); await redis.set('lastCinemaScrape', lastCinemaScrape); }
+      catch(e) { console.warn('[auto][cinema] Redis:', e.message); }
+    }
+    console.log(`✅ Cinéma : ${result.length} films retenus\n`);
+  } finally {
+    isCinemaScraping = false;
+    scrapingPhase    = null;
+    cinemaProgress   = { current: 0, total: 0 };
+  }
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  SECTION 12 — BESTEVER : MEILLEURS FILMS DE TOUS LES TEMPS

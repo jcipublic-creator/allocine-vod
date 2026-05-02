@@ -18,8 +18,36 @@ window.fetch = function(url, opts = {}) {
 };
 const LS_PROFILE_RESET = 'vod_profile_reset_at';
 
-/** Charge le secret + vérifie si un reset de profil a été demandé côté serveur. */
+/** Charge le secret + vérifie si un reset de profil a été demandé côté serveur.
+ *  Gère aussi les tokens de reset PIN arrivant via ?reset_token=xxx dans l'URL. */
 async function loadAppSecret() {
+  // ── Vérification d'un token de reset PIN dans l'URL ──────────────────────
+  const urlParams = new URLSearchParams(window.location.search);
+  const resetToken = urlParams.get('reset_token');
+  if (resetToken) {
+    // Nettoyer l'URL sans recharger la page
+    const cleanUrl = window.location.pathname;
+    window.history.replaceState({}, '', cleanUrl);
+    // Soumettre le token au serveur
+    try {
+      const r = await _origFetch('/api/reset-pin-by-token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: resetToken }),
+        signal: AbortSignal.timeout(5000)
+      });
+      if (r.ok) {
+        const d = await r.json();
+        // Forcer la sélection de profil + afficher un message de succès
+        localStorage.removeItem('vod_user_id');
+        // Afficher un toast après chargement de la page
+        window._pinResetSuccess = d.userName || 'ton profil';
+      } else {
+        window._pinResetError = true;
+      }
+    } catch(e) { window._pinResetError = true; }
+  }
+
   try {
     const r = await _origFetch('/api/config', { signal: AbortSignal.timeout(3000) });
     if (r.ok) {
@@ -36,6 +64,29 @@ async function loadAppSecret() {
       }
     }
   } catch(e) { /* pas de secret → mode dev local */ }
+  // Afficher le feedback de reset PIN après que le DOM soit prêt
+  setTimeout(_showPinResetFeedback, 800);
+}
+
+/** Affiche un toast de confirmation si un PIN vient d'être réinitialisé via email. */
+function _showPinResetFeedback() {
+  if (window._pinResetSuccess) {
+    const name = window._pinResetSuccess;
+    delete window._pinResetSuccess;
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(68,204,153,.15);border:1px solid rgba(68,204,153,.3);border-radius:10px;padding:14px 20px;font-size:13px;color:#4c9;box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:300px';
+    t.textContent = `✅ PIN de "${name}" supprimé. Choisis ton profil pour te connecter.`;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 7000);
+  }
+  if (window._pinResetError) {
+    delete window._pinResetError;
+    const t = document.createElement('div');
+    t.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:rgba(229,85,85,.15);border:1px solid rgba(229,85,85,.3);border-radius:10px;padding:14px 20px;font-size:13px;color:#e55;box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:300px';
+    t.textContent = '❌ Lien de réinitialisation invalide ou expiré.';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 6000);
+  }
 }
 
 // ─── État global ──────────────────────────────────────────────────────────────
@@ -223,6 +274,9 @@ function _buildNumpad(containerId) {
         <button id="${containerId}-cancel" style="${_numpadStyle.cancel}">Annuler</button>
         <button id="${containerId}-ok"     style="${_numpadStyle.ok}">Valider</button>
       </div>
+      <div id="${containerId}-forgot" style="display:none;text-align:center;margin-top:10px">
+        <button style="background:none;border:none;color:var(--muted);font-size:12px;cursor:pointer;text-decoration:underline;padding:4px">PIN oublié ?</button>
+      </div>
     </div>`;
   const grid = wrap.querySelector(`#${containerId}-grid`);
   [1,2,3,4,5,6,7,8,9,'⌫',0,''].forEach(k => {
@@ -236,7 +290,7 @@ function _buildNumpad(containerId) {
   return wrap;
 }
 
-function _runNumpad(id, { title, sub, maxLen = 8, onOk, onCancel, extraBtn }) {
+function _runNumpad(id, { title, sub, maxLen = 8, onOk, onCancel, extraBtn, forgotFn }) {
   let val = '';
   const el     = document.getElementById(id);
   const dots   = el.querySelector(`#${id}-dots`);
@@ -261,6 +315,17 @@ function _runNumpad(id, { title, sub, maxLen = 8, onOk, onCancel, extraBtn }) {
   } else {
     const eb = el.querySelector(`#${id}-extra`);
     if (eb) eb.style.display = 'none';
+  }
+
+  // Lien "PIN oublié ?" — visible uniquement si forgotFn est fournie
+  const forgotWrap = el.querySelector(`#${id}-forgot`);
+  if (forgotWrap) {
+    if (forgotFn) {
+      forgotWrap.style.display = '';
+      forgotWrap.querySelector('button').onclick = () => { el.style.display = 'none'; forgotFn(); };
+    } else {
+      forgotWrap.style.display = 'none';
+    }
   }
 
   function _updateDots() {
@@ -302,9 +367,51 @@ function promptPinModal(userId) {
           if (ok) { document.getElementById(ID).style.display = 'none'; resolve(true); }
           else { errEl.textContent = 'Code incorrect.'; reset(); }
         } catch(e) { errEl.textContent = 'Erreur réseau.'; }
-      }
+      },
+      forgotFn: () => { _requestPinReset(userId); resolve(false); }
     });
   });
+}
+
+/**
+ * Demande la réinitialisation du PIN par email.
+ * Affiche un toast informatif selon le résultat.
+ */
+async function _requestPinReset(userId) {
+  // Afficher un overlay d'attente simple
+  const toastId = '_pin-reset-toast';
+  let toast = document.getElementById(toastId);
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = toastId;
+    toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:9999;background:var(--card);border-radius:10px;padding:14px 20px;font-size:13px;color:var(--text);box-shadow:0 4px 20px rgba(0,0,0,.5);text-align:center;max-width:280px;display:none';
+    document.body.appendChild(toast);
+  }
+
+  const show = (msg, color = 'var(--text)', ms = 4000) => {
+    toast.style.color = color;
+    toast.textContent = msg;
+    toast.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => { toast.style.display = 'none'; }, ms);
+  };
+
+  show('⏳ Envoi en cours…', 'var(--muted)', 30000);
+  try {
+    const r = await fetch(`/api/users/${encodeURIComponent(userId)}/request-pin-reset`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+    });
+    const d = await r.json();
+    if (d.ok) {
+      show('✅ Email envoyé ! Vérifie ta boîte mail.', '#4c9', 6000);
+    } else if (d.error === 'no_email') {
+      show('⚠️ Aucun email enregistré pour ce profil. Contacte JC.', '#e5a', 6000);
+    } else if (d.error === 'no_pin') {
+      show('ℹ️ Ce profil n\'a pas de PIN.', 'var(--muted)', 4000);
+    } else {
+      show('❌ L\'envoi a échoué. Réessaie plus tard.', '#e55', 5000);
+    }
+  } catch(e) { show('❌ Erreur réseau.', '#e55', 5000); }
 }
 
 /**

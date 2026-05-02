@@ -37,6 +37,7 @@ const express = require('express');
 const axios   = require('axios');
 const path    = require('path');
 const fs      = require('fs');
+const crypto  = require('crypto');
 const cheerio = require('cheerio');
 const { Redis } = require('@upstash/redis');
 
@@ -67,6 +68,43 @@ function requireSecret(req, res, next) {
   if (req.headers['x-app-secret'] !== APP_SECRET)
     return res.status(403).json({ error: 'Accès non autorisé' });
   next();
+}
+
+// ── Email — Resend (réinitialisation PIN) ─────────────────────────────────
+// Variables Railway à configurer :
+//   RESEND_API_KEY  → clé API Resend (ex : re_xxxxxxxxxxxxxxxxxxxxxxxx)
+//   FROM_EMAIL      → adresse d'expédition vérifiée (ex : noreply@votredomaine.com)
+//   APP_URL         → URL publique de l'app (ex : https://allocine-vod-production.up.railway.app)
+const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
+const FROM_EMAIL     = process.env.FROM_EMAIL     || 'noreply@example.com';
+const APP_URL        = process.env.APP_URL        || 'https://allocine-vod-production.up.railway.app';
+
+/**
+ * Envoie un email via l'API HTTP Resend (pas de dépendance supplémentaire, utilise axios).
+ * Retourne true si succès, false sinon.
+ */
+async function sendEmail({ to, subject, html }) {
+  if (!RESEND_API_KEY) { console.warn('[email] RESEND_API_KEY non configuré — email non envoyé'); return false; }
+  try {
+    await axios.post('https://api.resend.com/emails',
+      { from: FROM_EMAIL, to: [to], subject, html },
+      { headers: { Authorization: `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' }, timeout: 8000 }
+    );
+    return true;
+  } catch(e) {
+    console.error('[email] Échec Resend :', e.response?.data || e.message);
+    return false;
+  }
+}
+
+// Store en mémoire des tokens de reset PIN (TTL 1h — suffisant, tokens éphémères)
+// token (hex 64 chars) → { userId: string, expiresAt: number }
+const _pinResetTokens = new Map();
+
+/** Supprime les tokens expirés du store. */
+function _cleanExpiredTokens() {
+  const now = Date.now();
+  for (const [t, v] of _pinResetTokens) if (v.expiresAt < now) _pinResetTokens.delete(t);
 }
 
 // ── Sécurité — Rate limiter simple (sans dépendance externe) ──────────────
@@ -983,6 +1021,84 @@ app.post('/api/users/:id/verify-pin', async (req, res) => {
   const { pin } = req.body;
   const ok = !!users[id].pin && users[id].pin === String(pin || '').trim();
   res.json({ ok });
+});
+
+/**
+ * POST /api/users/:id/request-pin-reset
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Génère un token de réinitialisation de PIN (TTL 1h) et envoie un
+ *        email à l'adresse enregistrée pour ce profil.
+ *        Répond toujours { ok: true } pour ne pas révéler si l'utilisateur existe.
+ *
+ * Rate limit : 3 tentatives / 15 min par IP.
+ * Réponse : { ok: true } ou { ok: false, error: 'no_email' | 'email_failed' | 'no_pin' }
+ */
+app.post('/api/users/:id/request-pin-reset',
+  requireRateLimit(3, 15 * 60 * 1000),
+  async (req, res) => {
+    const { id } = req.params;
+    const user = users[id];
+    // Silencieux si profil inexistant (anti-enumeration)
+    if (!user) return res.json({ ok: true });
+    // Pas de PIN → rien à réinitialiser
+    if (!user.pin) return res.json({ ok: false, error: 'no_pin' });
+    // Pas d'email enregistré
+    if (!user.email) return res.json({ ok: false, error: 'no_email' });
+
+    _cleanExpiredTokens();
+    const token = crypto.randomBytes(32).toString('hex');
+    _pinResetTokens.set(token, { userId: id, expiresAt: Date.now() + 60 * 60 * 1000 });
+
+    const resetUrl = `${APP_URL}?reset_token=${token}`;
+    const html = `
+      <div style="font-family:sans-serif;max-width:480px;margin:0 auto;padding:24px">
+        <h2 style="color:#1a1a2e;margin-bottom:8px">🔒 Réinitialisation de ton PIN</h2>
+        <p style="color:#444;margin-bottom:20px">
+          Quelqu'un (peut-être toi !) a demandé la réinitialisation du PIN
+          du profil <strong>${user.name}</strong> sur <em>Meilleurs films VOD</em>.
+        </p>
+        <a href="${resetUrl}"
+           style="display:inline-block;padding:12px 28px;background:#f5c518;color:#000;
+                  font-weight:700;border-radius:8px;text-decoration:none;font-size:15px">
+          Réinitialiser mon PIN
+        </a>
+        <p style="color:#888;font-size:12px;margin-top:20px">
+          Ce lien est valable <strong>1 heure</strong>. Si tu n'es pas à l'origine de cette
+          demande, ignore simplement cet email — ton PIN reste inchangé.
+        </p>
+      </div>`;
+
+    const sent = await sendEmail({
+      to: user.email,
+      subject: `🔒 Réinitialisation de ton PIN — ${user.name}`,
+      html
+    });
+
+    res.json(sent ? { ok: true } : { ok: false, error: 'email_failed' });
+  }
+);
+
+/**
+ * POST /api/reset-pin-by-token
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Supprime le PIN d'un profil après vérification du token de reset.
+ *        Le token est à usage unique et expire après 1h.
+ *
+ * Body   : { token: string }
+ * Réponse: { ok: true, userId, userName } ou 400 { error: 'invalid_token' }
+ */
+app.post('/api/reset-pin-by-token', async (req, res) => {
+  const { token } = req.body;
+  _cleanExpiredTokens();
+  const entry = _pinResetTokens.get(String(token || ''));
+  if (!entry) return res.status(400).json({ error: 'invalid_token' });
+  _pinResetTokens.delete(token); // à usage unique
+  const { userId } = entry;
+  if (!users[userId]) return res.status(404).json({ error: 'Profil introuvable' });
+  delete users[userId].pin;
+  await saveUsers();
+  console.log(`[pin-reset] PIN supprimé pour ${users[userId].name} via token`);
+  res.json({ ok: true, userId, userName: users[userId].name });
 });
 
 /**

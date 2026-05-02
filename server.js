@@ -888,6 +888,24 @@ app.delete('/api/users/:id', requireSecret, async (req, res) => {
 });
 
 /**
+ * POST /api/users/:id/ping
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Enregistre une connexion pour un profil (incrémente connectionCount
+ *        et met à jour lastConnection). Appelé une fois par session côté client.
+ *
+ * Réponse: { ok: true }
+ * Erreur : 404 si profil introuvable
+ */
+app.post('/api/users/:id/ping', async (req, res) => {
+  const { id } = req.params;
+  if (!users[id]) return res.status(404).json({ error: 'Profil introuvable' });
+  users[id].connectionCount = (users[id].connectionCount || 0) + 1;
+  users[id].lastConnection  = new Date().toISOString();
+  await saveUsers();
+  res.json({ ok: true });
+});
+
+/**
  * GET /api/prefs?userId=…
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Retourne les préférences d'affichage d'un profil utilisateur.
@@ -981,7 +999,9 @@ app.get('/api/userdata/stats', (_req, res) => {
     const u = users[userId];
     if (!u) continue;
     const stats = {
-      name: u.name,
+      name:            u.name,
+      connectionCount: u.connectionCount || 0,
+      lastConnection:  u.lastConnection  || null,
       films:  { vu: 0, vouloir: 0, nonInteresse: 0 },
       series: { vu: 0, vouloir: 0, asuivre: 0, nonInteresse: 0 },
     };

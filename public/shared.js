@@ -408,6 +408,8 @@ function renderPrefs() {
 }
 
 // ─── Base de données utilisateur ──────────────────────────────────────────────
+let _connectionPinged = false;
+
 async function loadUserdata() {
   if (!_currentUserId) return;
   try {
@@ -416,6 +418,11 @@ async function loadUserdata() {
     UI.reapplyUserActions();
     UI.applyFilters();
   } catch(e) { console.warn('Erreur chargement userdata:', e.message); }
+  // Ping connexion une seule fois par session
+  if (!_connectionPinged) {
+    _connectionPinged = true;
+    fetch(`/api/users/${encodeURIComponent(_currentUserId)}/ping`, { method: 'POST' }).catch(() => {});
+  }
 }
 
 async function saveUserdata(id) {
@@ -841,20 +848,29 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Séries notées</span><span class="val">${seriesAvecNote}</span></div>`;
   })();
 
-  // Stats par profil (films vus/à voir/non + séries vues/à voir/à suivre/non)
-  const profilesBlock = (() => {
+  // Bloc admin (JC only) : connexions + stats par profil
+  const adminBlock = (() => {
+    if (!isJCProfile()) return '';
     const entries = Object.entries(udStats);
     if (!entries.length) return '';
-    return entries.map(([, p]) => `
+    const rows = entries.map(([, p]) => {
+      const lastConn = p.lastConnection
+        ? new Date(p.lastConnection).toLocaleDateString('fr-FR') + ' ' +
+          new Date(p.lastConnection).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })
+        : '—';
+      return `
     <div class="info-section-title">👤 ${esc(p.name)}</div>
+    <div class="info-row"><span class="lbl">Connexions</span><span class="val">${p.connectionCount}</span></div>
+    <div class="info-row"><span class="lbl">Dernière connexion</span><span class="val">${lastConn}</span></div>
     <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>
     <div class="info-row"><span class="lbl">🔖 Films à voir</span><span class="val">${p.films.vouloir}</span></div>
     <div class="info-row"><span class="lbl">✕ Films non</span><span class="val">${p.films.nonInteresse}</span></div>
     <div class="info-row"><span class="lbl">📺 Séries vues</span><span class="val">${p.series.vu}</span></div>
     <div class="info-row"><span class="lbl">🔖 Séries à voir</span><span class="val">${p.series.vouloir}</span></div>
     <div class="info-row"><span class="lbl">⏳ Séries à suivre</span><span class="val">${p.series.asuivre}</span></div>
-    <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`
-    ).join('');
+    <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`;
+    }).join('');
+    return `<div class="info-section-title" style="margin-top:.5rem;border-top:1px solid rgba(255,255,255,.08);padding-top:.75rem">🔐 Admin — Profils</div>${rows}`;
   })();
 
   el.innerHTML = `
@@ -883,6 +899,6 @@ function renderInfo() {
     ${progressBlock(st?.besteverList)}
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.besteverDetails)}
-    ${profilesBlock}
+    ${adminBlock}
   `;
 }

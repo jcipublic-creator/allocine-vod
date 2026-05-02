@@ -579,7 +579,7 @@ async function _umEditContact(userId, userName) {
   el.id = 'contact-modal';
   el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center;padding:16px;box-sizing:border-box';
 
-  const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none';
+  const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;outline:none';
   const labelStyle = 'font-size:11px;color:var(--muted);display:block;margin-bottom:3px;margin-top:10px';
 
   el.innerHTML = `
@@ -725,7 +725,7 @@ async function _renderMyProfile() {
     const me = users.find(u => u.id === _currentUserId) || {};
     const hasPin = me.hasPin || false;
 
-    const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none';
+    const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;outline:none';
     const labelStyle = 'font-size:11px;color:var(--muted);display:block;margin-bottom:3px;margin-top:10px';
     const btnStyle   = 'width:100%;padding:10px;border-radius:8px;cursor:pointer;font-size:13px;margin-top:8px';
 

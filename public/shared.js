@@ -297,15 +297,21 @@ function isJCProfile() {
 /**
  * Retourne le HTML du badge de note AlloCiné.
  * N'afficher que si isJCProfile() === true.
+ * La demi-étoile est simulée en CSS : étoile pleine rognée à 50% sur étoile vide.
  */
 function renderNoteAC(noteAC) {
   if (!noteAC) return '';
-  // Étoiles pleines + demie selon la valeur (ex: 4.5 → ★★★★½☆ non, juste ★ 4.5)
-  const full = Math.floor(noteAC);
-  const half = (noteAC % 1) >= 0.5 ? 1 : 0;
+  const full  = Math.floor(noteAC);
+  const half  = (noteAC % 1) >= 0.5 ? 1 : 0;
   const empty = 5 - full - half;
-  const stars = '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(empty);
-  return `<span class="ua-note-ac" title="Ma note AlloCiné">${stars} <span class="ua-note-val">${noteAC}/5</span></span>`;
+  const fullStars  = '★'.repeat(full);
+  const halfStar   = half
+    ? '<span style="position:relative;display:inline-block">☆' +
+        '<span style="position:absolute;left:0;top:0;overflow:hidden;width:50%">★</span>' +
+      '</span>'
+    : '';
+  const emptyStars = '☆'.repeat(empty);
+  return `<span class="ua-note-ac" title="Ma note AlloCiné">${fullStars}${halfStar}${emptyStars} <span class="ua-note-val">${noteAC}/5</span></span>`;
 }
 
 /** Masque le menu Debug pour tous les profils sauf "JC" */

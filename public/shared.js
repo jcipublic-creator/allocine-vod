@@ -679,7 +679,7 @@ async function _umResetProfiles() {
 
 // ─── Mon profil (accessible à tous les utilisateurs) ─────────────────────────
 
-async function openMyProfile() {
+async function openMyProfile(isNew = false) {
   const ID = 'my-profile-modal';
   let el = document.getElementById(ID);
   if (!el) {
@@ -692,10 +692,20 @@ async function openMyProfile() {
           <span style="font-size:15px;font-weight:700;color:var(--text)">⚙️ Mon profil</span>
           <button onclick="closeMyProfile()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">×</button>
         </div>
+        <div id="my-profile-banner" style="display:none;background:rgba(245,197,24,.1);border:1px solid rgba(245,197,24,.3);border-radius:8px;padding:10px 12px;margin-bottom:16px;font-size:13px;color:var(--gold);line-height:1.4"></div>
         <div id="my-profile-content"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
       </div>`;
     el.addEventListener('click', e => { if (e.target === el) closeMyProfile(); });
     document.body.appendChild(el);
+  }
+  const banner = document.getElementById('my-profile-banner');
+  if (banner) {
+    if (isNew) {
+      banner.style.display = 'block';
+      banner.textContent = '👋 Bienvenue ! Complète tes coordonnées et crée un code d\'accès pour sécuriser ton profil.';
+    } else {
+      banner.style.display = 'none';
+    }
   }
   el.style.display = 'flex';
   await _renderMyProfile();

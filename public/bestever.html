@@ -1084,6 +1084,7 @@ async function onAddUser() {
     await loadUserdata();
     closeProfiles();
     updateProfileBadge();
+    setTimeout(() => openMyProfile(true), 300);
   } catch(e) {
     input.disabled = false;
     input.focus();

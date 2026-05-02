@@ -1372,6 +1372,7 @@ async function onAddUser() {
     closeProfiles();
     updateProfileBadge();
     renderSeriesCards(_allSeries);
+    setTimeout(() => openMyProfile(true), 300);
   } catch(e) { input.disabled = false; input.focus(); }
 }
 

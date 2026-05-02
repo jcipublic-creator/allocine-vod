@@ -475,6 +475,7 @@ body {
     <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
     <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
     <button class="menu-item" onclick="closeMenu();clearBesteverCache()">🗑️ Vider cache liste</button>
+    <button class="menu-item" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
     <button class="menu-item" onclick="closeMenu();openACSync()">🔄 Sync notes AlloCiné</button>
   </div>
 </div>
@@ -1104,6 +1105,15 @@ function updateProfileBadge() {
 }
 
 // ─── Cache actions ────────────────────────────────────────────────────────────
+async function clearDetailsCache() {
+  if (!confirm('Vider le cache plateformes (films + bestever) ? Les plateformes disparaîtront jusqu\'au prochain scraping.')) return;
+  try {
+    const r = await fetch('/api/clear-details-cache', { method: 'POST', headers: { 'x-app-secret': _appSecret } });
+    const d = await r.json();
+    UI.showError(`✅ Cache plateformes vidé — ${d.cleared} entrée(s) supprimées`);
+  } catch(e) { UI.showError('Erreur lors de la suppression du cache plateformes.'); }
+}
+
 async function clearBesteverCache() {
   if (!confirm('Vider le cache liste Best ever ? Les films disparaîtront jusqu\'au prochain scraping.')) return;
   try {

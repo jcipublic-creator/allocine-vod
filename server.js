@@ -1628,9 +1628,14 @@ app.get('/api/ping-allocine', requireSecret, async (_req, res) => {
  *
  * Réponse: { ok: true, cleared: number }
  */
-app.post('/api/clear-details-cache', requireSecret, (_req, res) => {
+app.post('/api/clear-details-cache', requireSecret, async (_req, res) => {
   const count = detailsCache.size;
   detailsCache.clear();
+  lastDetailsScrape = null;
+  if (redis) {
+    try { await redis.del('details'); await redis.del('lastDetailsScrape'); }
+    catch(e) { console.warn('Redis del details:', e.message); }
+  }
   console.log(`🗑️  Cache plateformes films vidé (${count} entrées supprimées)`);
   res.json({ ok: true, cleared: count });
 });

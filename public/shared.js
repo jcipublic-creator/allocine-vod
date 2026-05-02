@@ -264,7 +264,7 @@ function openACSync() {
       'n(\'📤 Envoi de \'+f.length+\' \'+type+\'...\');' +
       'const r=await fetch(\'https://allocine-vod-production.up.railway.app/api/userdata/import-ac-notes\',' +
       '{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},' +
-      'body:JSON.stringify({userId:\'user_default\',films:f})});' +
+      'body:JSON.stringify({userId:\'user_default\',films:f,isSeries:isSeries})});' +
       'const d=await r.json();' +
       // Mettre à jour le marqueur = première entrée actuelle
       'const newMarker=getId(allCards[0]);' +

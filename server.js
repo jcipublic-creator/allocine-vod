@@ -967,10 +967,13 @@ app.post('/api/userdata', requireSecret, async (req, res) => {
  * POST /api/userdata/import-ac-notes
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Import en masse des notes AlloCiné pour un profil.
- *        Chaque film est marqué vu:true avec sa noteAC.
- *        Les champs vouloir/nonInteresse/asuivre existants sont préservés.
+ *        Pour les films (isSeries absent ou false) : vu est forcé à true,
+ *        car la page "Mes films vus" garantit que le film a été regardé.
+ *        Pour les séries (isSeries: true) : vu est préservé, car une note
+ *        peut être donnée après quelques saisons sans avoir tout vu.
+ *        Les champs vouloir/nonInteresse/asuivre existants sont toujours préservés.
  *
- * Body   : { userId, films: [{ allocineId, noteAC }] }
+ * Body   : { userId, films: [{ allocineId, noteAC }], isSeries? }
  * Réponse: { ok: true, imported: N }
  */
 app.options('/api/userdata/import-ac-notes', (req, res) => {
@@ -981,7 +984,7 @@ app.options('/api/userdata/import-ac-notes', (req, res) => {
 });
 app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
   res.header('Access-Control-Allow-Origin', '*');
-  const { userId, films } = req.body;
+  const { userId, films, isSeries } = req.body;
   if (!userId || !users[userId] || !Array.isArray(films)) {
     return res.status(400).json({ error: 'userId invalide ou films manquant' });
   }
@@ -990,8 +993,11 @@ app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
   for (const { allocineId, noteAC } of films) {
     if (!allocineId) continue;
     const existing = userdata[userId][String(allocineId)] || {};
+    // Pour les séries : on ne force pas vu, on préserve la valeur existante
+    // (une note ≠ série entièrement visionnée — plusieurs saisons possibles)
+    const resolvedVu = isSeries ? (existing.vu || false) : true;
     userdata[userId][String(allocineId)] = {
-      vu:            true,
+      vu:            resolvedVu,
       vouloir:       existing.vouloir       || false,
       nonInteresse:  existing.nonInteresse  || false,
       asuivre:       existing.asuivre       || false,
@@ -1000,7 +1006,8 @@ app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
     count++;
   }
   await saveUserdataFile();
-  console.log(`📥 Import AC notes : ${count} films pour userId=${userId}`);
+  const label = isSeries ? 'séries' : 'films';
+  console.log(`📥 Import AC notes : ${count} ${label} pour userId=${userId}`);
   res.json({ ok: true, imported: count });
 });
 

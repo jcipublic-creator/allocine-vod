@@ -680,6 +680,8 @@ const PROVIDERS_BLACKLIST = new Set([
   'tenk', 'tënk', 'cinemutins', 'cinémutins',
   'capuseen', 'capuseën', 'orange', 'arte boutique',
   'ciné+', 'cine+', 'ocs', 'ciné+ ocs', 'cine+ ocs',
+  'benshi', 'cinemasalademande', 'free ciné', 'free cine',
+  'gaumont classique', 'shadows',
   'en dvd blu-ray', 'en dvd/blu-ray', 'dvd blu-ray', 'dvd/blu-ray',
   'blu-ray', 'dvd',
 ]);

@@ -886,6 +886,24 @@ app.post('/api/users', requireSecret, async (req, res) => {
 });
 
 /**
+ * PATCH /api/users/:id
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Met à jour les informations d'un profil (mobile, email).
+ *
+ * Body   : { mobile?, email? }
+ * Réponse: { ok: true }
+ */
+app.patch('/api/users/:id', requireSecret, async (req, res) => {
+  const { id } = req.params;
+  if (!users[id]) return res.status(404).json({ error: 'Profil introuvable' });
+  const { mobile, email } = req.body;
+  if (mobile !== undefined) users[id].mobile = String(mobile || '').trim();
+  if (email  !== undefined) users[id].email  = String(email  || '').trim();
+  await saveUsers();
+  res.json({ ok: true });
+});
+
+/**
  * DELETE /api/users/:id
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Supprime un profil utilisateur et toutes ses données (notes, prefs).

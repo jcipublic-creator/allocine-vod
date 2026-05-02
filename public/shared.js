@@ -217,8 +217,11 @@ function openACSync() {
       </div>`;
     document.body.appendChild(modal);
 
-    // Lien bookmarklet construit via DOM pour éviter tout problème d'échappement
+    // Bookmarklet incrémental : ne recharge que depuis la dernière sync
     const bm = '(async()=>{' +
+      'const LS=\'vod_ac_sync_marker\';' +
+      'const marker=localStorage.getItem(LS);' +
+      // Notification flottante
       'const n=m=>{let e=document.getElementById(\'_vod\');' +
       'if(!e){e=document.createElement(\'div\');e.id=\'_vod\';' +
       'Object.assign(e.style,{position:\'fixed\',top:\'20px\',right:\'20px\',' +
@@ -226,21 +229,39 @@ function openACSync() {
       'borderRadius:\'8px\',zIndex:\'99999\',fontSize:\'13px\',' +
       'boxShadow:\'0 4px 12px rgba(0,0,0,.5)\'});' +
       'document.body.appendChild(e)}e.textContent=m};' +
-      'n(\'⏳ Chargement des films...\');' +
-      'for(let i=0;i<80;i++){const b=document.querySelector(\'.load-more-button\');' +
-      'if(!b)break;b.click();await new Promise(r=>setTimeout(r,1200))}' +
-      'n(\'🔍 Extraction des notes...\');' +
-      'const f=[];document.querySelectorAll(\'.card-userspace\').forEach(c=>{' +
-      'const l=c.querySelector(\'a[href*="fichefilm"]\');' +
+      // Extrait l'allocineId d'une card
+      'const getId=c=>{const l=c.querySelector(\'a[href*="fichefilm"]\');' +
       'const m=(l?.getAttribute(\'href\')||\'\'). match(/fichefilm_gen_cfilm=(\\d+)/);' +
+      'return m?m[1]:null};' +
+      'n(marker?\'⏳ Sync incrémentale...\':\'⏳ Chargement complet...\');' +
+      // Charger les pages jusqu'à trouver le marqueur (ou tout charger si première fois)
+      'for(let i=0;i<80;i++){' +
+      'if(marker&&[...document.querySelectorAll(\'.card-userspace\')].some(c=>getId(c)===marker))break;' +
+      'const b=document.querySelector(\'.load-more-button\');' +
+      'if(!b)break;' +
+      'b.click();await new Promise(r=>setTimeout(r,1200))}' +
+      // Extraire uniquement les films avant le marqueur
+      'n(\'🔍 Extraction des notes...\');' +
+      'const allCards=[...document.querySelectorAll(\'.card-userspace\')];' +
+      'const markerIdx=marker?allCards.findIndex(c=>getId(c)===marker):-1;' +
+      'const toProcess=markerIdx>=0?allCards.slice(0,markerIdx):allCards;' +
+      'const f=[];toProcess.forEach(c=>{' +
+      'const id=getId(c);' +
       'const s=c.querySelectorAll(\'.rating-star.active\').length;' +
-      'if(m&&s)f.push({allocineId:m[1],noteAC:s/2})});' +
-      'n(\'📤 Envoi de \'+f.length+\' films...\');' +
+      'if(id&&s)f.push({allocineId:id,noteAC:s/2})});' +
+      // Déjà à jour
+      'if(!f.length){n(\'✅ Déjà à jour !\');' +
+      'setTimeout(()=>document.getElementById(\'_vod\')?.remove(),3000);return}' +
+      // Envoyer
+      'n(\'📤 Envoi de \'+f.length+\' film(s)...\');' +
       'const r=await fetch(\'https://allocine-vod-production.up.railway.app/api/userdata/import-ac-notes\',' +
       '{method:\'POST\',headers:{\'Content-Type\':\'application/json\'},' +
       'body:JSON.stringify({userId:\'user_default\',films:f})});' +
       'const d=await r.json();' +
-      'n(\'✅ \'+d.imported+\' films synchronisés !\');' +
+      // Mettre à jour le marqueur = premier film actuel
+      'const newMarker=getId(allCards[0]);' +
+      'if(newMarker)localStorage.setItem(LS,newMarker);' +
+      'n(\'✅ \'+d.imported+\' film(s) synchronisé(s) !\');' +
       'setTimeout(()=>document.getElementById(\'_vod\')?.remove(),5000)' +
       '})()';
     const link = document.createElement('a');

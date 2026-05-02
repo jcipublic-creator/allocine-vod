@@ -250,11 +250,10 @@ function promptPinModal(userId) {
       } catch(e) { errDiv.textContent = 'Erreur réseau.'; btnOk.disabled = false; }
     }
 
-    function close() { el.style.display = 'none'; input.removeEventListener('keydown', onKey); }
+    function close() { el.style.display = 'none'; input.onkeydown = null; }
     function cancel() { close(); resolve(false); }
-    function onKey(e) { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); }
 
-    input.addEventListener('keydown', onKey);
+    input.onkeydown = e => { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); };
     btnOk.onclick = attempt;
     btnCancel.onclick = cancel;
   });
@@ -329,19 +328,13 @@ function openSetPin(userId, userName) {
       save(p1);
     }
 
-    function close() {
-      el.style.display = 'none';
-      inp1.removeEventListener('keydown', onKey1);
-      inp2.removeEventListener('keydown', onKey2);
-    }
+    function close() { el.style.display = 'none'; inp1.onkeydown = null; inp2.onkeydown = null; }
     function cancel() { close(); resolve(false); }
-    function onKey1(e) { if (e.key === 'Enter') { inp2.focus(); } if (e.key === 'Escape') cancel(); }
-    function onKey2(e) { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); }
 
-    inp1.addEventListener('keydown', onKey1);
-    inp2.addEventListener('keydown', onKey2);
+    inp1.onkeydown = e => { if (e.key === 'Enter') inp2.focus(); if (e.key === 'Escape') cancel(); };
+    inp2.onkeydown = e => { if (e.key === 'Enter') attempt();    if (e.key === 'Escape') cancel(); };
     btnOk.onclick     = attempt;
-    btnDel.onclick    = () => save(''); // supprime le PIN
+    btnDel.onclick    = () => save('');
     btnCancel.onclick = cancel;
   });
 }

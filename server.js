@@ -964,6 +964,43 @@ app.post('/api/userdata', requireSecret, async (req, res) => {
 });
 
 /**
+ * GET /api/userdata/stats
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Retourne les compteurs films/séries par profil.
+ *        Films  → clés sans préfixe  (ex: "29")
+ *        Séries → clés avec préfixe  (ex: "s:22881")
+ *
+ * Réponse : { [userId]: { name, films: { vu, vouloir, nonInteresse }, series: { vu, vouloir, asuivre, nonInteresse } } }
+ */
+app.get('/api/userdata/stats', (_req, res) => {
+  const result = {};
+  for (const [userId, ud] of Object.entries(userdata)) {
+    const u = users[userId];
+    if (!u) continue;
+    const stats = {
+      name: u.name,
+      films:  { vu: 0, vouloir: 0, nonInteresse: 0 },
+      series: { vu: 0, vouloir: 0, asuivre: 0, nonInteresse: 0 },
+    };
+    for (const [key, entry] of Object.entries(ud)) {
+      const isSerie = key.startsWith('s:');
+      if (isSerie) {
+        if (entry.vu)           stats.series.vu++;
+        if (entry.vouloir)      stats.series.vouloir++;
+        if (entry.asuivre)      stats.series.asuivre++;
+        if (entry.nonInteresse) stats.series.nonInteresse++;
+      } else {
+        if (entry.vu)           stats.films.vu++;
+        if (entry.vouloir)      stats.films.vouloir++;
+        if (entry.nonInteresse) stats.films.nonInteresse++;
+      }
+    }
+    result[userId] = stats;
+  }
+  res.json(result);
+});
+
+/**
  * POST /api/userdata/import-ac-notes
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Import en masse des notes AlloCiné pour un profil.

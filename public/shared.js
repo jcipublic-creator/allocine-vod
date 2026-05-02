@@ -763,17 +763,19 @@ let _infoRefreshTimer = null;
 
 async function _fetchInfoData() {
   try {
-    const [rf, rs, rb, rst] = await Promise.all([
-      fetch('/api/health',          { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/series/health',   { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/bestever/health', { signal: AbortSignal.timeout(4000) }),
-      fetch('/api/scraping-status', { signal: AbortSignal.timeout(4000) }),
+    const [rf, rs, rb, rst, rstat] = await Promise.all([
+      fetch('/api/health',           { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/series/health',    { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/bestever/health',  { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/scraping-status',  { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/userdata/stats',   { signal: AbortSignal.timeout(4000) }),
     ]);
     _infoData = {
-      films:    rf.ok  ? await rf.json()  : null,
-      series:   rs.ok  ? await rs.json()  : null,
-      bestever: rb.ok  ? await rb.json()  : null,
-      status:   rst.ok ? await rst.json() : null,
+      films:    rf.ok    ? await rf.json()    : null,
+      series:   rs.ok    ? await rs.json()    : null,
+      bestever: rb.ok    ? await rb.json()    : null,
+      status:   rst.ok   ? await rst.json()   : null,
+      udStats:  rstat.ok ? await rstat.json() : null,
     };
   } catch(e) { _infoData = null; }
 }
@@ -812,6 +814,7 @@ function renderInfo() {
     ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
     : '—';
   const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, st = _infoData.status;
+  const udStats = _infoData.udStats || {};
   const fErrors = f?.lastScrapeErrors || [];
 
   function progressBlock(info) {
@@ -827,7 +830,7 @@ function renderInfo() {
     return active ? '<span class="info-scraping-badge">⟳ en cours</span>' : '';
   }
 
-  // Compteurs de notes AlloCiné (profil JC uniquement)
+  // Compteurs notes AlloCiné (profil JC uniquement, calculé depuis _userdata local)
   const notesBlock = (() => {
     if (!isJCProfile()) return '';
     const filmsAvecNote  = Object.entries(_userdata).filter(([k, v]) => !k.startsWith('s:') && v.noteAC).length;
@@ -836,6 +839,22 @@ function renderInfo() {
     <div class="info-section-title">⭐ Mes notes AlloCiné</div>
     <div class="info-row"><span class="lbl">Films notés</span><span class="val">${filmsAvecNote}</span></div>
     <div class="info-row"><span class="lbl">Séries notées</span><span class="val">${seriesAvecNote}</span></div>`;
+  })();
+
+  // Stats par profil (films vus/à voir/non + séries vues/à voir/à suivre/non)
+  const profilesBlock = (() => {
+    const entries = Object.entries(udStats);
+    if (!entries.length) return '';
+    return entries.map(([, p]) => `
+    <div class="info-section-title">👤 ${esc(p.name)}</div>
+    <div class="info-row"><span class="lbl">🎬 Films vus</span><span class="val">${p.films.vu}</span></div>
+    <div class="info-row"><span class="lbl">🔖 Films à voir</span><span class="val">${p.films.vouloir}</span></div>
+    <div class="info-row"><span class="lbl">✕ Films non</span><span class="val">${p.films.nonInteresse}</span></div>
+    <div class="info-row"><span class="lbl">📺 Séries vues</span><span class="val">${p.series.vu}</span></div>
+    <div class="info-row"><span class="lbl">🔖 Séries à voir</span><span class="val">${p.series.vouloir}</span></div>
+    <div class="info-row"><span class="lbl">⏳ Séries à suivre</span><span class="val">${p.series.asuivre}</span></div>
+    <div class="info-row"><span class="lbl">✕ Séries non</span><span class="val">${p.series.nonInteresse}</span></div>`
+    ).join('');
   })();
 
   el.innerHTML = `
@@ -864,5 +883,6 @@ function renderInfo() {
     ${progressBlock(st?.besteverList)}
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.besteverDetails)}
+    ${profilesBlock}
   `;
 }

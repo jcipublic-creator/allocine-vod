@@ -248,21 +248,88 @@ function promptPinModal(userId) {
 
 /**
  * Ouvre une modal pour définir ou supprimer le PIN d'un profil (admin JC only).
- * Appelé depuis le bloc admin du menu Info.
+ * Double saisie pour éviter les erreurs. Appelé depuis le bloc admin du menu Info.
  */
-async function openSetPin(userId, userName) {
-  const pin = window.prompt(`Code PIN pour "${userName}" (laisser vide pour supprimer) :`);
-  if (pin === null) return; // annulé
-  try {
-    const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
-      body: JSON.stringify({ pin: pin.trim() })
-    });
-    if (r.ok) {
-      alert(pin.trim() ? `PIN défini pour ${userName}.` : `PIN supprimé pour ${userName}.`);
+function openSetPin(userId, userName) {
+  return new Promise(resolve => {
+    const ID = 'set-pin-modal';
+    let el = document.getElementById(ID);
+    if (!el) {
+      el = document.createElement('div');
+      el.id = ID;
+      el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9500;background:rgba(4,14,27,.9);align-items:center;justify-content:center';
+      el.innerHTML = `
+        <div style="background:var(--card);border-radius:14px;padding:28px 24px;width:300px">
+          <div style="font-size:15px;font-weight:600;color:var(--text);margin-bottom:4px">🔐 Définir un code PIN</div>
+          <div id="set-pin-subtitle" style="font-size:12px;color:var(--muted);margin-bottom:18px"></div>
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Nouveau code PIN</label>
+          <input id="set-pin-1" type="password" inputmode="numeric" maxlength="10"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none;margin-bottom:12px"
+            placeholder="••••">
+          <label style="font-size:12px;color:var(--muted);display:block;margin-bottom:4px">Confirmer le code PIN</label>
+          <input id="set-pin-2" type="password" inputmode="numeric" maxlength="10"
+            style="width:100%;box-sizing:border-box;padding:10px 14px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:16px;letter-spacing:.15em;text-align:center;outline:none"
+            placeholder="••••">
+          <div id="set-pin-error" style="color:#e55;font-size:12px;min-height:18px;margin-top:8px"></div>
+          <div style="display:flex;gap:10px;margin-top:16px">
+            <button id="set-pin-cancel" style="flex:1;padding:10px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:transparent;color:var(--muted);cursor:pointer;font-size:13px">Annuler</button>
+            <button id="set-pin-del" style="padding:10px 14px;border-radius:8px;border:1px solid rgba(255,80,80,.4);background:transparent;color:#e55;cursor:pointer;font-size:13px">Supprimer</button>
+            <button id="set-pin-ok" style="flex:1;padding:10px;border-radius:8px;border:none;background:var(--gold);color:#000;font-weight:700;cursor:pointer;font-size:13px">Valider</button>
+          </div>
+        </div>`;
+      document.body.appendChild(el);
     }
-  } catch(e) { alert('Erreur lors de la définition du PIN.'); }
+
+    const inp1    = el.querySelector('#set-pin-1');
+    const inp2    = el.querySelector('#set-pin-2');
+    const errDiv  = el.querySelector('#set-pin-error');
+    const subtitle = el.querySelector('#set-pin-subtitle');
+    const btnOk   = el.querySelector('#set-pin-ok');
+    const btnDel  = el.querySelector('#set-pin-del');
+    const btnCancel = el.querySelector('#set-pin-cancel');
+
+    inp1.value = inp2.value = '';
+    errDiv.textContent = '';
+    subtitle.textContent = `Profil : ${userName}`;
+    el.style.display = 'flex';
+    setTimeout(() => inp1.focus(), 50);
+
+    async function save(pin) {
+      btnOk.disabled = btnDel.disabled = true;
+      try {
+        const r = await fetch(`/api/users/${encodeURIComponent(userId)}/set-pin`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
+          body: JSON.stringify({ pin })
+        });
+        if (r.ok) { close(); resolve(true); }
+        else { errDiv.textContent = 'Erreur serveur.'; btnOk.disabled = btnDel.disabled = false; }
+      } catch(e) { errDiv.textContent = 'Erreur réseau.'; btnOk.disabled = btnDel.disabled = false; }
+    }
+
+    function attempt() {
+      const p1 = inp1.value.trim(), p2 = inp2.value.trim();
+      if (!p1) { errDiv.textContent = 'Saisis un code PIN.'; inp1.focus(); return; }
+      if (p1 !== p2) { errDiv.textContent = 'Les deux codes ne correspondent pas.'; inp2.value = ''; inp2.focus(); return; }
+      errDiv.textContent = '';
+      save(p1);
+    }
+
+    function close() {
+      el.style.display = 'none';
+      inp1.removeEventListener('keydown', onKey1);
+      inp2.removeEventListener('keydown', onKey2);
+    }
+    function cancel() { close(); resolve(false); }
+    function onKey1(e) { if (e.key === 'Enter') { inp2.focus(); } if (e.key === 'Escape') cancel(); }
+    function onKey2(e) { if (e.key === 'Enter') attempt(); if (e.key === 'Escape') cancel(); }
+
+    inp1.addEventListener('keydown', onKey1);
+    inp2.addEventListener('keydown', onKey2);
+    btnOk.onclick     = attempt;
+    btnDel.onclick    = () => save(''); // supprime le PIN
+    btnCancel.onclick = cancel;
+  });
 }
 
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */

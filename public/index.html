@@ -564,10 +564,12 @@ const UI = {
   reapplyAfterSort(films) {
     films.forEach((film, i) => {
       const det = _details[filmKey(film)];
-      if (!det) return;
-      const platEl = document.getElementById(`card-plat-${i}`);
-      if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
-      updateCardMeta(i, det);
+      if (det) {
+        const platEl = document.getElementById(`card-plat-${i}`);
+        if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
+        updateCardMeta(i, det);
+      }
+      this.renderUserActions(film, i);
     });
   },
   renderUserActions(film, idx) {

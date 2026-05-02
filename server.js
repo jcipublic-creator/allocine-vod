@@ -479,7 +479,9 @@ function getCachedDetails(key) {
   const cached = detailsCache.get(key);
   if (!cached) return null;
   if (Date.now() - cached.cachedAt > DETAILS_TTL_MS) { detailsCache.delete(key); return null; }
-  return cached.value;
+  const val = cached.value;
+  if (val && val.providers) return { ...val, providers: filterProviders(val.providers) };
+  return val;
 }
 
 function setCachedDetails(key, value) {
@@ -686,6 +688,18 @@ const PROVIDERS_BLACKLIST = new Set([
   'blu-ray', 'dvd',
 ]);
 
+/** Filtre une liste de providers selon la blacklist et les mots-clés exclus.
+ *  Appliqué à la fois pendant le scraping ET au moment de servir le cache. */
+function filterProviders(providers) {
+  if (!providers) return [];
+  return providers.filter(p => {
+    const n = p.name.toLowerCase();
+    if (PROVIDERS_BLACKLIST.has(n)) return false;
+    if (/coffret|édition|edition|collector|blu-ray|dvd/i.test(p.name)) return false;
+    return true;
+  });
+}
+
 /**
  * Extrait les plateformes VOD/streaming depuis la page fiche d'un film ou d'une série.
  * Classe chaque plateforme en : svod | location | achat | vod (générique).
@@ -711,8 +725,6 @@ function extractProviders(html) {
 
     const name = $tile.find('.provider-tile-primary').text().trim();
     if (!name || seen.has(name)) return;
-    if (PROVIDERS_BLACKLIST.has(name.toLowerCase())) return;
-    if (/coffret|édition|edition|collector|blu-ray/i.test(name)) return;
     seen.add(name);
 
     let type = 'vod';
@@ -728,7 +740,7 @@ function extractProviders(html) {
     providers.push({ name, type });
   });
 
-  return providers;
+  return filterProviders(providers);
 }
 
 /**
@@ -1972,7 +1984,9 @@ function getCachedSeriesDetails(key) {
   const c = seriesDetailsCache.get(key);
   if (!c) return null;
   if (Date.now() - c.cachedAt > SERIES_DETAILS_TTL_MS) { seriesDetailsCache.delete(key); return null; }
-  return c.value;
+  const val = c.value;
+  if (val && val.providers) return { ...val, providers: filterProviders(val.providers) };
+  return val;
 }
 
 function setCachedSeriesDetails(key, value) {

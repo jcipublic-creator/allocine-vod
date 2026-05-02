@@ -697,27 +697,31 @@ function extractProviders(html) {
   const providers = [];
   const seen = new Set();
 
-  $('.provider-tile-primary').each((_, el) => {
-    const name = $(el).text().trim();
+  // AlloCiné structure :
+  //   .ovw-svod  > gd > .provider-tile.svod-tile > .provider-tile-primary (nom)
+  //   .ovw-vod   > gd > .provider-tile.vod-tile  > .provider-tile-primary (nom)
+  //   .ovw-dvd   > gd > .provider-tile.dvd-tile  → ignoré
+  $('.provider-tile').each((_, tile) => {
+    const $tile = $(tile);
+
+    // N'inclure que svod-tile et vod-tile — exclure dvd-tile et tout autre
+    if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
+
+    const name = $tile.find('.provider-tile-primary').text().trim();
     if (!name || seen.has(name)) return;
     if (PROVIDERS_BLACKLIST.has(name.toLowerCase())) return;
     if (/coffret|édition|edition|collector|blu-ray/i.test(name)) return;
-
-    // Exclure les tuiles DVD : le div.provider-tile parent porte la classe "dvd-tile"
-    const $providerTile = $(el).closest('.provider-tile');
-    if ($providerTile.hasClass('dvd-tile')) return;
-
     seen.add(name);
 
-    const tileText = $(el).parent().text().toLowerCase();
     let type = 'vod';
-    if (/inclus|abonnement|svod/i.test(tileText))     type = 'svod';
-    else if (/location/i.test(tileText))               type = 'location';
-    else if (/achat/i.test(tileText))                  type = 'achat';
-
-    // Fallback par nom : plateformes clairement SVOD
-    if (type === 'vod' && /netflix|prime video|disney\+|canal\+|ocs|paramount\+|crunchyroll|apple tv\+|molotov|arte|france\.tv/i.test(name))
+    if ($tile.hasClass('svod-tile')) {
       type = 'svod';
+    } else {
+      // vod-tile : location ou achat selon le texte de la tuile
+      const tileText = $tile.text().toLowerCase();
+      if (/location/i.test(tileText))     type = 'location';
+      else if (/achat/i.test(tileText))   type = 'achat';
+    }
 
     providers.push({ name, type });
   });

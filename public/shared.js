@@ -677,6 +677,153 @@ async function _umResetProfiles() {
   } catch(e) { alert('Erreur réseau.'); }
 }
 
+// ─── Mon profil (accessible à tous les utilisateurs) ─────────────────────────
+
+async function openMyProfile() {
+  const ID = 'my-profile-modal';
+  let el = document.getElementById(ID);
+  if (!el) {
+    el = document.createElement('div');
+    el.id = ID;
+    el.style.cssText = 'display:none;position:fixed;inset:0;z-index:9000;background:rgba(4,14,27,.88);align-items:flex-end;justify-content:center;padding:20px';
+    el.innerHTML = `
+      <div style="background:var(--card);border-radius:16px;padding:24px 20px;width:100%;max-width:420px;max-height:85vh;overflow-y:auto">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:18px">
+          <span style="font-size:15px;font-weight:700;color:var(--text)">⚙️ Mon profil</span>
+          <button onclick="closeMyProfile()" style="background:none;border:none;color:var(--muted);font-size:20px;cursor:pointer;line-height:1">×</button>
+        </div>
+        <div id="my-profile-content"><p style="color:var(--muted);font-size:13px">Chargement…</p></div>
+      </div>`;
+    el.addEventListener('click', e => { if (e.target === el) closeMyProfile(); });
+    document.body.appendChild(el);
+  }
+  el.style.display = 'flex';
+  await _renderMyProfile();
+}
+
+function closeMyProfile() {
+  const el = document.getElementById('my-profile-modal');
+  if (el) el.style.display = 'none';
+}
+
+async function _renderMyProfile() {
+  const el = document.getElementById('my-profile-content');
+  if (!el) return;
+  el.innerHTML = '<p style="color:var(--muted);font-size:13px">Chargement…</p>';
+  try {
+    const users = await fetch('/api/users').then(r => r.json());
+    const me = users.find(u => u.id === _currentUserId) || {};
+    const hasPin = me.hasPin || false;
+
+    const inputStyle = 'width:100%;box-sizing:border-box;padding:9px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.15);background:rgba(255,255,255,.07);color:var(--text);font-size:14px;outline:none';
+    const labelStyle = 'font-size:11px;color:var(--muted);display:block;margin-bottom:3px;margin-top:10px';
+    const btnStyle   = 'width:100%;padding:10px;border-radius:8px;cursor:pointer;font-size:13px;margin-top:8px';
+
+    el.innerHTML = `
+      <!-- Section contact -->
+      <div style="margin-bottom:20px">
+        <div style="font-size:12px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">📋 Mes coordonnées</div>
+        <label style="${labelStyle}">📱 Mobile</label>
+        <input id="mp-mob1" type="tel" autocomplete="off" maxlength="20" placeholder="ex : 06 12 34 56 78"
+          style="${inputStyle}" value="${esc(me.mobile||'')}">
+        <label style="${labelStyle}">📱 Confirmer le mobile</label>
+        <input id="mp-mob2" type="tel" autocomplete="off" maxlength="20" placeholder="même numéro"
+          style="${inputStyle}" value="${esc(me.mobile||'')}">
+        <label style="${labelStyle};margin-top:14px">✉️ Email</label>
+        <input id="mp-mail1" type="email" autocomplete="off" maxlength="80" placeholder="ex : prenom@example.com"
+          style="${inputStyle}" value="${esc(me.email||'')}">
+        <label style="${labelStyle}">✉️ Confirmer l'email</label>
+        <input id="mp-mail2" type="email" autocomplete="off" maxlength="80" placeholder="même adresse"
+          style="${inputStyle}" value="${esc(me.email||'')}">
+        <div id="mp-contact-err" style="color:#e55;font-size:12px;min-height:14px;margin-top:6px"></div>
+        <button onclick="_mpSaveContact()" style="${btnStyle};background:var(--gold);color:#000;border:none;font-weight:700">
+          Enregistrer les coordonnées
+        </button>
+      </div>
+
+      <div style="border-top:1px solid rgba(42,79,112,.4);margin-bottom:16px"></div>
+
+      <!-- Section PIN -->
+      <div>
+        <div style="font-size:12px;font-weight:600;color:var(--gold);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">🔒 Code d'accès</div>
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px">
+          ${hasPin
+            ? '<span style="font-size:11px;color:#4c9;background:rgba(68,204,153,.12);padding:3px 9px;border-radius:10px">● Code actif</span>'
+            : '<span style="font-size:11px;color:var(--muted);background:rgba(255,255,255,.06);padding:3px 9px;border-radius:10px">○ Pas de code</span>'}
+        </div>
+        ${hasPin ? `
+          <button onclick="_mpChangePin()" style="${btnStyle};background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--text)">
+            ✏️ Changer mon code
+          </button>
+          <button onclick="_mpDeletePin()" style="${btnStyle};background:transparent;border:1px solid rgba(255,80,80,.3);color:#e55">
+            ✕ Supprimer mon code
+          </button>
+        ` : `
+          <button onclick="_mpSetPin()" style="${btnStyle};background:transparent;border:1px solid rgba(255,255,255,.2);color:var(--text)">
+            🔒 Définir un code d'accès
+          </button>
+        `}
+      </div>`;
+  } catch(e) {
+    el.innerHTML = '<p style="color:#e55;font-size:13px">Erreur de chargement.</p>';
+  }
+}
+
+async function _mpSaveContact() {
+  const mob1  = document.getElementById('mp-mob1')?.value.trim()  || '';
+  const mob2  = document.getElementById('mp-mob2')?.value.trim()  || '';
+  const mail1 = document.getElementById('mp-mail1')?.value.trim() || '';
+  const mail2 = document.getElementById('mp-mail2')?.value.trim() || '';
+  const errEl = document.getElementById('mp-contact-err');
+  if (errEl) errEl.textContent = '';
+
+  if (mob1 !== mob2)  { if (errEl) errEl.textContent = 'Les numéros de mobile ne correspondent pas.'; return; }
+  if (mail1 !== mail2) { if (errEl) errEl.textContent = 'Les adresses email ne correspondent pas.'; return; }
+
+  try {
+    const r = await fetch(`/api/users/${encodeURIComponent(_currentUserId)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
+      body: JSON.stringify({ mobile: mob1, email: mail1 })
+    });
+    if (r.ok) {
+      if (errEl) { errEl.style.color = '#4c9'; errEl.textContent = '✓ Enregistré'; setTimeout(() => { if (errEl) { errEl.textContent=''; errEl.style.color='#e55'; } }, 2500); }
+    } else {
+      if (errEl) errEl.textContent = 'Erreur serveur.';
+    }
+  } catch(e) { if (errEl) errEl.textContent = 'Erreur réseau.'; }
+}
+
+async function _mpSetPin() {
+  closeMyProfile();
+  await openSetPin(_currentUserId, _currentUserName);
+  openMyProfile();
+}
+
+async function _mpChangePin() {
+  closeMyProfile();
+  // Vérifier le code actuel avant d'autoriser le changement
+  const ok = await promptPinModal(_currentUserId);
+  if (!ok) { openMyProfile(); return; }
+  await openSetPin(_currentUserId, _currentUserName);
+  openMyProfile();
+}
+
+async function _mpDeletePin() {
+  closeMyProfile();
+  // Vérifier le code actuel avant suppression
+  const ok = await promptPinModal(_currentUserId);
+  if (!ok) { openMyProfile(); return; }
+  try {
+    await fetch(`/api/users/${encodeURIComponent(_currentUserId)}/set-pin`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-app-secret': _appSecret || '' },
+      body: JSON.stringify({ pin: '' })
+    });
+  } catch(e) { /* silencieux */ }
+  openMyProfile();
+}
+
 /** Ouvre la modal de synchronisation des notes AlloCiné (bookmarklet) */
 function openACSync() {
   const ID = 'ac-sync-modal';

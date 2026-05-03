@@ -1613,7 +1613,24 @@ app.get('/api/details', async (req, res) => {
       if (pays && annee && duree) break;
     }
 
-    const providers = extractProviders(filmResp.data);
+    let providers = extractProviders(filmResp.data);
+
+    // Fallback : si la fiche principale n'a pas de providers (contenu JS-only),
+    // on tente la page /telecharger-vod/ qui les a en HTML statique
+    if (providers.length === 0) {
+      try {
+        const vodUrl  = `https://www.allocine.fr/film/fichefilm-${resolvedId}/telecharger-vod/`;
+        const vodResp = await rateLimitedFetch(vodUrl);
+        const vodProviders = extractProviders(vodResp.data);
+        if (vodProviders.length > 0) {
+          providers = vodProviders;
+          console.log(`Providers via /telecharger-vod/ pour ${resolvedId} : ${vodProviders.length}`);
+        }
+      } catch(e) {
+        console.warn(`Fallback /telecharger-vod/ échoué pour ${resolvedId}:`, e.message);
+      }
+    }
+
     const data = { pays, annee, duree, allocineId: resolvedId, allocineUrl: filmUrl, providers };
 
     // Ne pas mettre en cache une page vide (fiche introuvable)

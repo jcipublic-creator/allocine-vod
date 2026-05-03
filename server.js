@@ -924,10 +924,10 @@ function parseFilms(html) {
 /**
  * Déduplique et trie les films par note presse décroissante.
  * La déduplication utilise la clé "titre|notePresse".
+ * Filtre : notePresse + noteSpect > 7 (les deux notes doivent être renseignées).
  * @param  {Array}  films
- * @param  {number} noteMin  note presse minimale (les films en dessous sont filtrés)
  */
-function dedupeAndSortFilms(films, noteMin) {
+function dedupeAndSortFilms(films) {
   const seen = new Set();
   return films
     .filter((film) => {
@@ -935,7 +935,7 @@ function dedupeAndSortFilms(films, noteMin) {
       if (seen.has(key)) return false;
       seen.add(key); return true;
     })
-    .filter((film) => film.notePresse >= noteMin)
+    .filter((film) => film.notePresse !== null && film.noteSpect !== null && (film.notePresse + film.noteSpect) > 7)
     .sort((a, b) => b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr'));
 }
 
@@ -1573,7 +1573,7 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
     }
   }
 
-  const result = dedupeAndSortFilms(allFilms, noteMin);
+  const result = dedupeAndSortFilms(allFilms);
   cachedFilms  = result;
   await saveLastScrape();
   if (redis) {
@@ -1954,7 +1954,7 @@ async function autoScrapeFilmsListIfStale() {
         await sleep(1500 + Math.random() * 500);
       }
     }
-    const result = dedupeAndSortFilms(allFilms, 3.5);
+    const result = dedupeAndSortFilms(allFilms);
     cachedFilms  = result;
     await saveLastScrape();
     if (redis) { try { await redis.set('films', JSON.stringify(result)); } catch(e) { console.warn('[auto] Redis films:', e.message); } }

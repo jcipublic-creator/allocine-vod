@@ -76,9 +76,11 @@ function requireSecret(req, res, next) {
 //   RESEND_API_KEY  → clé API Resend (ex : re_xxxxxxxxxxxxxxxxxxxxxxxx)
 //   FROM_EMAIL      → adresse d'expédition vérifiée (ex : noreply@votredomaine.com)
 //   APP_URL         → URL publique de l'app (ex : https://allocine-vod-production.up.railway.app)
+//   PROXY_URL       → proxy rotatif HTTP(S) (ex : http://user:pass@host:port) — optionnel
 const RESEND_API_KEY = process.env.RESEND_API_KEY || null;
 const FROM_EMAIL     = process.env.FROM_EMAIL     || 'noreply@example.com';
 const APP_URL        = process.env.APP_URL        || 'https://allocine-vod-production.up.railway.app';
+const PROXY_URL      = process.env.PROXY_URL      || null;
 
 /**
  * Envoie un email via l'API HTTP Resend (pas de dépendance supplémentaire, utilise axios).
@@ -407,11 +409,27 @@ const BROWSER_HEADERS = {
   'Sec-Fetch-Site':   'none',
 };
 
+/** Proxy Axios optionnel — actif si PROXY_URL est défini (ex: http://user:pass@host:port) */
+function buildProxyConfig(proxyUrl) {
+  if (!proxyUrl) return false;
+  try {
+    const u = new URL(proxyUrl);
+    const cfg = { host: u.hostname, port: Number(u.port), protocol: u.protocol };
+    if (u.username) cfg.auth = { username: decodeURIComponent(u.username), password: decodeURIComponent(u.password) };
+    console.log(`🔀 Proxy activé : ${u.protocol}//${u.hostname}:${u.port}`);
+    return cfg;
+  } catch (e) {
+    console.warn('⚠️  PROXY_URL invalide, proxy désactivé :', e.message);
+    return false;
+  }
+}
+
 /** Instance Axios commune avec timeout 15s et acceptance des 4xx (pour les gérer manuellement) */
 const http = axios.create({
   headers: BROWSER_HEADERS,
   timeout: 15000,
   validateStatus: (status) => status >= 200 && status < 500,
+  proxy: buildProxyConfig(PROXY_URL),
 });
 
 // ── Cache des pages de liste (20 min) ────────────────────────────────────────

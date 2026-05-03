@@ -1746,6 +1746,76 @@ app.get('/api/ping-allocine', requireSecret, async (_req, res) => {
 });
 
 /**
+ * GET /api/debug/providers?id=XXXXX
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Diagnostic : fetch les 3 pages AlloCiné pour un film et retourne l'analyse
+ * HTML complète pour comprendre pourquoi les providers ne sont pas trouvés.
+ */
+app.get('/api/debug/providers', requireSecret, async (req, res) => {
+  const id = String(req.query.id || '').trim();
+  if (!id) return res.status(400).json({ error: 'id requis (?id=187247)' });
+
+  const urls = [
+    { label: 'fiche_principale', url: `https://www.allocine.fr/film/fichefilm_gen_cfilm=${id}.html` },
+    { label: 'streaming',        url: `https://www.allocine.fr/film/fichefilm-${id}/streaming/` },
+    { label: 'telecharger_vod', url: `https://www.allocine.fr/film/fichefilm-${id}/telecharger-vod/` },
+  ];
+
+  const results = [];
+  for (const { label, url } of urls) {
+    try {
+      const resp = await rateLimitedFetch(url);
+      const html = resp.data || '';
+      const $ = cheerio.load(html);
+
+      // Classes contenant "provider", "svod", "vod", "streaming"
+      const relevantClasses = new Set();
+      $('[class]').each((_, el) => {
+        const cls = $(el).attr('class') || '';
+        cls.split(/\s+/).forEach(c => {
+          if (/provider|svod|vod|streaming|broadcast|platform/i.test(c)) relevantClasses.add(c);
+        });
+      });
+
+      // Cherche __NEXT_DATA__ ou __INITIAL_STATE__ ou Apollo
+      const scriptTags = [];
+      $('script').each((_, el) => {
+        const content = $(el).html() || '';
+        if (/broadcastMedium|provider|svod|streaming|netflix|disney/i.test(content)) {
+          // Extrait les 500 premiers chars du script pertinent
+          scriptTags.push(content.substring(0, 800).replace(/\s+/g, ' '));
+        }
+      });
+
+      // Alt des images
+      const imgAlts = [];
+      $('img[alt]').each((_, el) => {
+        const alt = $(el).attr('alt')?.trim();
+        if (alt && alt.length > 1 && alt.length < 50) imgAlts.push(alt);
+      });
+
+      // Providers trouvés par extractProviders
+      const foundProviders = extractProviders(html);
+
+      results.push({
+        label, url,
+        htmlSize: html.length,
+        httpStatus: resp.status,
+        providerTileCount: (html.match(/provider-tile/g) || []).length,
+        relevantClasses: [...relevantClasses],
+        imgAlts: [...new Set(imgAlts)].slice(0, 30),
+        scriptSnippets: scriptTags.slice(0, 3),
+        foundProviders,
+      });
+    } catch (e) {
+      results.push({ label, url, error: e.message, httpStatus: e.response?.status });
+    }
+  }
+
+  res.json({ id, results });
+});
+
+/**
  * POST /api/clear-details-cache
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Vide le cache mémoire des fiches films (pays, année, plateformes).

@@ -1244,7 +1244,7 @@ function startScrape() {
   const seen = new Set();
   const pendingFilms = [];
 
-  const es = new EventSource(`/api/bestever/scrape?pages=${pages}`);
+  const es = new EventSource(`/api/bestever/scrape?pages=${pages}&secret=${encodeURIComponent(_appSecret)}`);
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);

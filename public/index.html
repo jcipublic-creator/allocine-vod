@@ -524,6 +524,7 @@ body {
     <option value="3.8">≥ 3,8</option>
     <option value="3.5" selected>≥ 3,5</option>
   </select>
+  <label class="filter-toggle"><input type="checkbox" id="fil-blockbuster" onchange="applyFilters()"><span>🎬 Blockbusters</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
     <option value="presse">↓ Note presse</option>
@@ -812,14 +813,19 @@ function updateCardMeta(i, data) {
 
 // ─── Filtres ──────────────────────────────────────────────────────────────────
 function applyFiltersResponsive() {
-  const anneeFilter = document.getElementById('fil-annee').value;
-  const genreFilter = document.getElementById('fil-genre').value;
-  const typeFilter  = document.getElementById('fil-type').value;
-  const paysFilter  = document.getElementById('fil-pays').value;
-  const onlyVoir    = document.getElementById('fil-only-voir')?.checked;
+  const anneeFilter    = document.getElementById('fil-annee').value;
+  const genreFilter    = document.getElementById('fil-genre').value;
+  const typeFilter     = document.getElementById('fil-type').value;
+  const paysFilter     = document.getElementById('fil-pays').value;
+  const onlyVoir       = document.getElementById('fil-only-voir')?.checked;
+  const onlyBlockbuster = document.getElementById('fil-blockbuster')?.checked;
   // Desktop only (might not be visible but still read)
   const noteMin     = parseFloat(document.getElementById('fil-note')?.value || '0');
   const platFilter  = (document.getElementById('fil-plat')?.value || '').toLowerCase();
+
+  const BLOCKBUSTER_GENRES = ['action','aventure','science-fiction','fantastique','thriller'];
+  const BLOCKBUSTER_SPECT_MIN = 3.5;
+  const BLOCKBUSTER_COMEDIE_SPECT_MIN = 3.8;
 
   let visible = 0;
   _allFilms.forEach((film, i) => {
@@ -846,8 +852,14 @@ function applyFiltersResponsive() {
     const matchListe   = (!_prefs.hideVus           || !ud.vu)
                       && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
                       && (!onlyVoir                 || !!ud.vouloir);
+    const spect = film.noteSpect ?? 0;
+    const isBlockbuster = !onlyBlockbuster || (
+      genres.some(g => BLOCKBUSTER_GENRES.some(b => g.includes(b))) && spect >= BLOCKBUSTER_SPECT_MIN
+    ) || (
+      genres.some(g => g.includes('comédie')) && spect >= BLOCKBUSTER_COMEDIE_SPECT_MIN
+    );
 
-    const ok = matchAnnee && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe;
+    const ok = matchAnnee && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe && isBlockbuster;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

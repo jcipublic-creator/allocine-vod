@@ -715,7 +715,10 @@ function extractIdsFromSearchPage(html) {
 const PROVIDERS_BLACKLIST = new Set([
   'rakuten tv', 'viva', 'pathé home', 'pathe home', 'pathé', 'pathe',
   'premieremax', 'première max', 'premièremax',
-  'google play', 'microsoft', 'xbox', 'crunchyroll', 'molotov',
+  'filmotv', 'filmo tv', 'filmo', 'universciné', 'universcine',
+  'lionsgate+', 'salto', 'youtube', 'bbox', 'fnac', 'shadowz', 'shudder',
+  'sfr play', 'sfr',
+  'microsoft', 'xbox', 'crunchyroll', 'molotov',
   'sooner', 'tenk', 'tënk', 'cinemutins', 'cinémutins',
   'capuseen', 'capuseën', 'arte boutique',
   'benshi', 'cinemasalademande', 'free ciné', 'free cine',
@@ -1750,13 +1753,18 @@ app.get('/api/ping-allocine', requireSecret, async (_req, res) => {
  * HTML complète pour comprendre pourquoi les providers ne sont pas trouvés.
  */
 app.get('/api/debug/providers', requireSecret, async (req, res) => {
-  const id = String(req.query.id || '').trim();
-  if (!id) return res.status(400).json({ error: 'id requis (?id=187247)' });
+  const id   = String(req.query.id   || '').trim();
+  const type = String(req.query.type || 'film').trim(); // film | serie
+  if (!id) return res.status(400).json({ error: 'id requis (?id=187247 ou ?id=XXXXX&type=serie)' });
 
-  const urls = [
+  const urls = type === 'serie' ? [
+    { label: 'fiche_principale', url: `https://www.allocine.fr/series/ficheserie_gen_cserie=${id}.html` },
+    { label: 'streaming',        url: `https://www.allocine.fr/series/ficheserie-${id}/streaming/` },
+    { label: 'vod',              url: `https://www.allocine.fr/series/ficheserie-${id}/vod/` },
+  ] : [
     { label: 'fiche_principale', url: `https://www.allocine.fr/film/fichefilm_gen_cfilm=${id}.html` },
     { label: 'streaming',        url: `https://www.allocine.fr/film/fichefilm-${id}/streaming/` },
-    { label: 'telecharger_vod', url: `https://www.allocine.fr/film/fichefilm-${id}/telecharger-vod/` },
+    { label: 'telecharger_vod',  url: `https://www.allocine.fr/film/fichefilm-${id}/telecharger-vod/` },
   ];
 
   const results = [];
@@ -1795,6 +1803,9 @@ app.get('/api/debug/providers', requireSecret, async (req, res) => {
       // Providers trouvés par extractProviders
       const foundProviders = extractProviders(html);
 
+      // Extrait le dataLayerJan brut pour diagnostic
+      const dlRaw = html.match(/var dataLayerJan\s*=\s*(\{[^;]+\})/)?.[1] || null;
+
       results.push({
         label, url,
         htmlSize: html.length,
@@ -1802,7 +1813,7 @@ app.get('/api/debug/providers', requireSecret, async (req, res) => {
         providerTileCount: (html.match(/provider-tile/g) || []).length,
         relevantClasses: [...relevantClasses],
         imgAlts: [...new Set(imgAlts)].slice(0, 30),
-        scriptSnippets: scriptTags.slice(0, 3),
+        dataLayerJan: dlRaw ? dlRaw.substring(0, 400) : null,
         foundProviders,
       });
     } catch (e) {

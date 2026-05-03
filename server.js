@@ -745,82 +745,81 @@ function filterProviders(providers) {
  * @param  {string} html
  * @returns {{ name: string, type: 'svod'|'location'|'achat'|'vod' }[]}
  */
+// Correspondance slug AlloCiné → nom affiché
+const VOD_SLUG_TO_NAME = {
+  'orange': 'Orange', 'pathe-home': 'Pathé', 'premieremax': 'PremièreMax',
+  'rakuten-tv': 'Rakuten TV', 'viva': 'VIVA', 'netflix': 'Netflix',
+  'disney-plus': 'Disney+', 'amazon-prime-video': 'Amazon Prime Video',
+  'canal-plus': 'Canal+', 'ocs': 'OCS', 'apple-tv-plus': 'Apple TV+',
+  'paramount-plus': 'Paramount+', 'mubi': 'MUBI', 'filmo-tv': 'FilmoTV',
+  'arte': 'Arte', 'france-tv': 'France TV', 'max': 'Max',
+  'sfr-play': 'SFR Play', 'universcine': 'UniversCiné',
+  'la-cinetek': 'La Cinetek', 'shadowz': 'Shadowz', 'shudder': 'Shudder',
+  'lionsgate-plus': 'Lionsgate+', 'mycanal': 'MyCanal',
+  'tf1-plus': 'TF1+', 'salto': 'Salto', 'bbox': 'Bbox',
+  'fnac': 'Fnac', 'microsoft': 'Microsoft', 'youtube': 'YouTube',
+  'google-play': 'Google Play', 'itunes': 'iTunes',
+};
+
 function extractProviders(html) {
   const $ = cheerio.load(html);
   const providers = [];
   const seen = new Set();
 
-  // ── Méthode 1 : structure fiche film principale ──────────────────────────────
-  //   .ovw-svod  > gd > .provider-tile.svod-tile > .provider-tile-primary (nom)
-  //   .ovw-vod   > gd > .provider-tile.vod-tile  > .provider-tile-primary (nom)
-  //   .ovw-dvd   > gd > .provider-tile.dvd-tile  → ignoré
-  $('.provider-tile').each((_, tile) => {
-    const $tile = $(tile);
-    if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
-    const name = $tile.find('.provider-tile-primary').text().trim();
-    if (!name || seen.has(name)) return;
-    seen.add(name);
-    let type = 'vod';
-    if ($tile.hasClass('svod-tile')) {
-      type = 'svod';
-    } else {
-      const tileText = $tile.text().toLowerCase();
-      if (/location/i.test(tileText))     type = 'location';
-      else if (/achat/i.test(tileText))   type = 'achat';
-    }
-    providers.push({ name, type });
-  });
+  // ── Méthode 1 : dataLayerJan (source officielle AlloCiné, présente sur toutes les pages) ──
+  // Ex: "vod_providers":"orange|pathe-home|rakuten-tv|viva"
+  //     "svod_providers":"netflix|disney-plus"
+  const vodMatch  = html.match(/"vod_providers"\s*:\s*"([^"]+)"/);
+  const svodMatch = html.match(/"svod_providers"\s*:\s*"([^"]+)"/);
 
-  // ── Méthode 2 : pages /streaming/ et /telecharger-vod/ ──────────────────────
-  // Sur ces pages dédiées, AlloCiné utilise une structure différente :
-  //   .entity-card  ou  .card-entity-type  avec le nom du provider dedans
-  //   et le contexte (svod/location/achat) déterminé par la section parente
-  if (providers.length === 0) {
-    // Cherche la section SVOD (streaming inclus dans abonnement)
-    const $svod = $('.section-streaming, [class*="streaming"], .ovw-streaming');
-    $svod.find('a, .entity-card, [class*="card"]').each((_, el) => {
-      const name = $(el).find('img').attr('alt') || $(el).find('[class*="name"], [class*="title"], strong').first().text().trim();
-      if (!name || name.length < 2 || seen.has(name)) return;
-      seen.add(name);
-      providers.push({ name, type: 'svod' });
+  if (vodMatch && vodMatch[1] && vodMatch[1] !== 'undefined') {
+    vodMatch[1].split('|').forEach(slug => {
+      const name = VOD_SLUG_TO_NAME[slug] || slug;
+      if (!seen.has(name)) { seen.add(name); providers.push({ name, type: 'vod' }); }
     });
-
-    // Cherche la section VOD (location/achat)
-    const $vod = $('.section-vod, [class*="vod"]:not([class*="movie"]):not([class*="serie"])');
-    $vod.find('a, .entity-card, [class*="card"]').each((_, el) => {
-      const name = $(el).find('img').attr('alt') || $(el).find('[class*="name"], [class*="title"], strong').first().text().trim();
-      if (!name || name.length < 2 || seen.has(name)) return;
-      seen.add(name);
-      providers.push({ name, type: 'vod' });
+  }
+  if (svodMatch && svodMatch[1] && svodMatch[1] !== 'undefined') {
+    svodMatch[1].split('|').forEach(slug => {
+      const name = VOD_SLUG_TO_NAME[slug] || slug;
+      if (!seen.has(name)) { seen.add(name); providers.push({ name, type: 'svod' }); }
     });
   }
 
-  // ── Méthode 3 : alt des images de logos (pages /streaming/ et /vod/) ────────
-  // AlloCiné met le nom de la plateforme dans l'attribut alt des logos
+  // ── Méthode 2 : provider-tile (fallback si dataLayer absent) ─────────────────
+  // .provider-tile-primary peut contenir soit du texte, soit un <img alt="nom">
   if (providers.length === 0) {
-    const KNOWN = new Set([
-      'netflix','disney+','disney plus','canal+','amazon prime video','prime video',
-      'ocs','apple tv+','apple tv plus','paramount+','mycanal','mubi','filmo','filmotv',
-      'arte','france tv','france télévisions','max','rakuten tv','rakuten','orange',
-      'sfr play','pathé','pathe','universcine','la cinetek','cinetek','shadowz',
-      'shudder','allociné','allocine','lionsgate+','salto','tf1+','tf1 plus',
-      'bbox','youtube','google play','microsoft','itunes','apple','fnac','virgin'
-    ]);
-    // Détermine le type dominant selon les titres de section trouvés dans le HTML
-    const htmlLower = html.toLowerCase();
-    const isSvodPage = /streaming|abonnement|inclus/i.test(htmlLower.substring(0, 3000));
+    $('.provider-tile').each((_, tile) => {
+      const $tile = $(tile);
+      if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
+      const $primary = $tile.find('.provider-tile-primary');
+      const nameText = $primary.text().trim();
+      const nameAlt  = $primary.find('img').attr('alt') || '';
+      // L'alt peut être "Regarder X sur PROVIDER" ou "Acheter X sur PROVIDER"
+      const nameFromAlt = nameAlt.match(/\bsur\s+(.+)$/i)?.[1]?.trim() || nameAlt;
+      const name = nameText || nameFromAlt;
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      let type = 'vod';
+      if ($tile.hasClass('svod-tile')) {
+        type = 'svod';
+      } else {
+        const tileText = $tile.text().toLowerCase();
+        if (/location/i.test(tileText))   type = 'location';
+        else if (/achat/i.test(tileText)) type = 'achat';
+      }
+      providers.push({ name, type });
+    });
+  }
 
-    $('img[alt]').each((_, el) => {
-      const alt = $(el).attr('alt')?.trim();
-      if (!alt || alt.length < 2 || alt.length > 60) return;
-      const altLow = alt.toLowerCase();
-      if (!KNOWN.has(altLow) && !altLow.includes('+') && altLow.length < 4) return;
-      // Filtre les alts qui ressemblent à des titres de films ou à du texte générique
-      if (/^\d+$|^(et|ou|de|le|la|les|un|une|du|des|en|au|avec|dans|pour|sur|par)$/i.test(alt)) return;
-      if (!KNOWN.has(altLow) && !/tv|play|video|canal|netflix|prime|disney|ocs|mubi|apple|max|pathé|pathe|rakuten|sfr|orange|france|arte|filmo|cine|univers|shadow|shudder|lionsgate|salto|paramount|bbox|youtube|google|microsoft|itunes|fnac|virgin/i.test(alt)) return;
-      if (seen.has(alt)) return;
-      seen.add(alt);
-      providers.push({ name: alt, type: isSvodPage ? 'svod' : 'vod' });
+  // ── Méthode 3 : alt "... sur PROVIDER" dans les tiles (dernier recours) ──────
+  if (providers.length === 0) {
+    $('.provider-tile img[alt]').each((_, el) => {
+      const alt = $(el).attr('alt')?.trim() || '';
+      const name = alt.match(/\bsur\s+(.+)$/i)?.[1]?.trim();
+      if (!name || seen.has(name)) return;
+      seen.add(name);
+      const isSvod = /regarder/i.test(alt);
+      providers.push({ name, type: isSvod ? 'svod' : 'vod' });
     });
   }
 

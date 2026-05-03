@@ -3331,10 +3331,11 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
   res.setHeader('Connection', 'keep-alive');
   res.flushHeaders();
 
-  const send       = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
-  const allFilms   = [];
-  const totalPages = BESTEVER_DECADES.length * pagesPerDecade;
-  let   globalPage = 0;
+  const send            = (data) => res.write(`data: ${JSON.stringify(data)}\n\n`);
+  const allFilms        = [];
+  const BOXOFFICE_PAGES = 10;
+  const totalPages      = BESTEVER_DECADES.length * pagesPerDecade + BOXOFFICE_PAGES;
+  let   globalPage      = 0;
 
   try {
     for (const decade of BESTEVER_DECADES) {
@@ -3359,11 +3360,12 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
       }
     }
     // ── Box-office AlloCiné (complément bestever) ──────────────────────────────
-    const BOXOFFICE_PAGES = 10;
-    send({ type: 'progress', page: globalPage, total: totalPages + BOXOFFICE_PAGES, decade: 'boxoffice' });
     console.log('[bestever][boxoffice] Scraping box-office AlloCiné…');
     const boxOfficeFilms = [];
     for (let page = 1; page <= BOXOFFICE_PAGES; page++) {
+      globalPage++;
+      besteverProgress = { current: globalPage, total: totalPages };
+      send({ type: 'progress', page: globalPage, total: totalPages, decade: 'boxoffice' });
       const url = `https://www.allocine.fr/film/meilleurs/boxoffice/?page=${page}`;
       try {
         let html = getCachedPage(url);
@@ -3372,9 +3374,12 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
         // Filtre : note presse + note spectateurs > 7 (les deux doivent être renseignées)
         const filtered = raw.filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7);
         boxOfficeFilms.push(...filtered);
-        console.log(`[bestever][boxoffice] Page ${page}/${BOXOFFICE_PAGES} → ${raw.length} films bruts, ${filtered.length} retenus`);
+        send({ type: 'films', films: filtered, page: globalPage, total: totalPages, decade: 'boxoffice' });
+        console.log(`[bestever][boxoffice] Page ${page}/${BOXOFFICE_PAGES} → ${raw.length} bruts, ${filtered.length} retenus`);
       } catch(e) {
-        console.warn(`[bestever][boxoffice] Page ${page} erreur: ${e.message}`);
+        const msg = e.response ? `HTTP ${e.response.status}` : e.message;
+        console.warn(`[bestever][boxoffice] Page ${page} erreur: ${msg}`);
+        send({ type: 'error', page: globalPage, message: msg });
       }
       await sleep(1200 + Math.random() * 400);
     }

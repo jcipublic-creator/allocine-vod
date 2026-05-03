@@ -633,6 +633,9 @@ function applyFiltersCI() {
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
   const noteMin      = parseFloat(document.getElementById('fil-note')?.value || '0');
 
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - 2);
+
   let visible = 0;
   _allFilms.forEach((film, i) => {
     const card = document.getElementById(`card-${i}`);
@@ -642,6 +645,9 @@ function applyFiltersCI() {
     const ud = _userdata[film.allocineId] || {};
     const combinee = (film.notePresse ?? 0) + (film.noteSpect ?? 0);
 
+    const filmDate = parseDateCI(film.dateSortie);
+    const matchDate = !filmDate || filmDate >= cutoff;
+
     const matchGenre  = (!genreFilter || genres.some(g => g.includes(genreFilter)))
                      && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
                      && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
@@ -650,7 +656,7 @@ function applyFiltersCI() {
                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
                      && (!onlyVoir                 || !!ud.vouloir);
 
-    const ok = matchGenre && matchNote && matchListe;
+    const ok = matchDate && matchGenre && matchNote && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

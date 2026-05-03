@@ -968,6 +968,7 @@ function startScrape() {
       // Recharge depuis serveur pour avoir la liste finale
       loadCinemaFromServer().then(() => {
         const nouveaux = _allFilms.filter(f => f.allocineId && !prevIds.has(f.allocineId)).length;
+        _lastNouveaux.cinema = nouveaux;
         UI.onScrapeDone(btn, d.lastScrape, nouveaux);
       });
     }

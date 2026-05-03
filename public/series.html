@@ -1122,6 +1122,7 @@ function startSeriesScrape() {
 
     if (d.type === 'done') {
       const nouveaux = _allSeries.filter(s => s.allocineId && !prevSeriesIds.has(s.allocineId)).length;
+      _lastNouveaux.series = nouveaux;
       const newTxt = nouveaux > 0 ? ` · +${nouveaux} nouvelle${nouveaux > 1 ? 's' : ''}` : '';
       document.getElementById('prog-fill').style.width = '100%';
       document.getElementById('prog-lbl').textContent  = `✅ ${_allSeries.length} séries récupérées${newTxt}`;

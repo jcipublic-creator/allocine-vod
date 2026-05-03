@@ -1242,6 +1242,7 @@ function startScrape() {
     if (d.type === 'done') {
       es.close();
       const nouveaux = pendingFilms.filter(f => f.allocineId && !prevIds.has(f.allocineId)).length;
+      _lastNouveaux.bestever = nouveaux;
       _allFilms = pendingFilms;
       _allPlats = new Set(); _platsDone = 0;
       _scrapingDone = true;

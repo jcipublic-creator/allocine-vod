@@ -1151,6 +1151,7 @@ function startScrape() {
     if (d.type === 'done') {
       es.close();
       const nouveaux = pendingFilms.filter(f => f.allocineId && !prevIds.has(f.allocineId)).length;
+      _lastNouveaux.films = nouveaux;
       _allFilms = pendingFilms;
       _allPlats = new Set(); _platsDone = 0;
       _scrapingDone = true;
@@ -1420,12 +1421,16 @@ async function loadFilmsFromServer() {
 let _infoData         = null;
 let _infoRefreshTimer = null;
 
+// Compteurs "nouveaux" du dernier scraping (mis à jour par chaque page)
+const _lastNouveaux = { films: null, series: null, bestever: null, cinema: null };
+
 async function _fetchInfoData() {
   try {
-    const [rf, rs, rb, rst, rstat] = await Promise.all([
+    const [rf, rs, rb, rc, rst, rstat] = await Promise.all([
       fetch('/api/health',           { signal: AbortSignal.timeout(4000) }),
       fetch('/api/series/health',    { signal: AbortSignal.timeout(4000) }),
       fetch('/api/bestever/health',  { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/cinema/health',    { signal: AbortSignal.timeout(4000) }),
       fetch('/api/scraping-status',  { signal: AbortSignal.timeout(4000) }),
       fetch('/api/userdata/stats',   { signal: AbortSignal.timeout(4000) }),
     ]);
@@ -1433,6 +1438,7 @@ async function _fetchInfoData() {
       films:    rf.ok    ? await rf.json()    : null,
       series:   rs.ok    ? await rs.json()    : null,
       bestever: rb.ok    ? await rb.json()    : null,
+      cinema:   rc.ok    ? await rc.json()    : null,
       status:   rst.ok   ? await rst.json()   : null,
       udStats:  rstat.ok ? await rstat.json() : null,
     };
@@ -1472,7 +1478,7 @@ function renderInfo() {
   const fmt = iso => iso
     ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
     : '—';
-  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, st = _infoData.status;
+  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, c = _infoData.cinema, st = _infoData.status;
   const udStats = _infoData.udStats || {};
   const fErrors = f?.lastScrapeErrors || [];
 
@@ -1523,6 +1529,7 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Démarré</span><span class="val">${fmt(f?.serverStart)}</span></div>
     <div class="info-section-title">🎬 Films récents</div>
     <div class="info-row"><span class="lbl">En base</span><span class="val">${f?.cachedFilms ?? '—'} films</span></div>
+    ${_lastNouveaux.films !== null ? `<div class="info-row"><span class="lbl">Nouveaux ce scraping</span><span class="val" style="color:var(--green)">+${_lastNouveaux.films}</span></div>` : ''}
     <div class="info-row"><span class="lbl">Scraping liste${badge(st?.filmsList?.active)}</span><span class="val">${fmt(f?.lastScrape)}</span></div>
     ${progressBlock(st?.filmsList)}
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.filmsDetails?.active)}</span><span class="val">${fmt(f?.lastDetailsScrape)}</span></div>
@@ -1530,6 +1537,7 @@ function renderInfo() {
     ${fErrors.length > 0 ? `<div class="info-row"><span class="lbl">Erreurs</span><span class="val">⚠️ ${fErrors.length}</span></div><div class="info-errors">${fErrors.map(e => `Page ${e.page} (${e.annee}) : ${esc(e.message)}`).join('<br>')}</div>` : ''}
     <div class="info-section-title">📺 Séries</div>
     <div class="info-row"><span class="lbl">En base</span><span class="val">${s?.cachedSeries ?? '—'} séries</span></div>
+    ${_lastNouveaux.series !== null ? `<div class="info-row"><span class="lbl">Nouvelles ce scraping</span><span class="val" style="color:var(--green)">+${_lastNouveaux.series}</span></div>` : ''}
     <div class="info-row"><span class="lbl">Fiches détails</span><span class="val">${s?.cachedDetails ?? '—'} en mémoire</span></div>
     <div class="info-row"><span class="lbl">Scraping liste${badge(st?.seriesList?.active)}</span><span class="val">${fmt(s?.lastScrape)}</span></div>
     ${progressBlock(st?.seriesList)}
@@ -1537,11 +1545,16 @@ function renderInfo() {
     ${progressBlock(st?.seriesDetails)}
     <div class="info-section-title">🏆 Best ever</div>
     <div class="info-row"><span class="lbl">En base</span><span class="val">${b?.cachedFilms ?? '—'} films</span></div>
+    ${_lastNouveaux.bestever !== null ? `<div class="info-row"><span class="lbl">Nouveaux ce scraping</span><span class="val" style="color:var(--green)">+${_lastNouveaux.bestever}</span></div>` : ''}
     <div class="info-row"><span class="lbl">Pages / décennie</span><span class="val">${b?.pagesPerDecade ?? '—'} × ${b?.decades?.length ?? '—'} décennies</span></div>
     <div class="info-row"><span class="lbl">Scraping liste${badge(st?.besteverList?.active)}</span><span class="val">${fmt(b?.lastScrape)}</span></div>
     ${progressBlock(st?.besteverList)}
     <div class="info-row"><span class="lbl">Scraping plateformes${badge(st?.besteverDetails?.active)}</span><span class="val">${fmt(b?.lastDetailsScrape)}</span></div>
     ${progressBlock(st?.besteverDetails)}
+    <div class="info-section-title">🎥 Au cinéma</div>
+    <div class="info-row"><span class="lbl">En base</span><span class="val">${c?.cachedFilms ?? '—'} films</span></div>
+    ${_lastNouveaux.cinema !== null ? `<div class="info-row"><span class="lbl">Nouveaux ce scraping</span><span class="val" style="color:var(--green)">+${_lastNouveaux.cinema}</span></div>` : ''}
+    <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(c?.lastScrape)}</span></div>
     ${myStatsBlock}
   `;
 }

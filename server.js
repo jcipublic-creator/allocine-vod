@@ -3358,6 +3358,32 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
         await sleep(1500 + Math.random() * 500);
       }
     }
+    // ── Box-office AlloCiné (complément bestever) ──────────────────────────────
+    const BOXOFFICE_PAGES = 10;
+    send({ type: 'progress', page: globalPage, total: totalPages + BOXOFFICE_PAGES, decade: 'boxoffice' });
+    console.log('[bestever][boxoffice] Scraping box-office AlloCiné…');
+    const boxOfficeFilms = [];
+    for (let page = 1; page <= BOXOFFICE_PAGES; page++) {
+      const url = `https://www.allocine.fr/film/meilleurs/boxoffice/?page=${page}`;
+      try {
+        let html = getCachedPage(url);
+        if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+        const raw = parseBesteverFilms(html, 'boxoffice');
+        // Filtre : note presse + note spectateurs > 7 (les deux doivent être renseignées)
+        const filtered = raw.filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7);
+        boxOfficeFilms.push(...filtered);
+        console.log(`[bestever][boxoffice] Page ${page}/${BOXOFFICE_PAGES} → ${raw.length} films bruts, ${filtered.length} retenus`);
+      } catch(e) {
+        console.warn(`[bestever][boxoffice] Page ${page} erreur: ${e.message}`);
+      }
+      await sleep(1200 + Math.random() * 400);
+    }
+    // Merge : on n'ajoute que les films absents du corpus décennie (déduplique par allocineId)
+    const existingIds = new Set(allFilms.map(f => f.allocineId).filter(Boolean));
+    const newBoxOffice = boxOfficeFilms.filter(f => !f.allocineId || !existingIds.has(f.allocineId));
+    console.log(`[bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
+    allFilms.push(...newBoxOffice);
+
     const result   = dedupeAndSortBestever(allFilms);
     cachedBestever = result;
     lastBesteverScrape = new Date().toISOString();
@@ -3429,6 +3455,28 @@ async function autoScrapeBesteverListIfStale() {
         await sleep(1500 + Math.random() * 500);
       }
     }
+    // ── Box-office AlloCiné (complément bestever) ──────────────────────────────
+    console.log('[auto][bestever][boxoffice] Scraping box-office AlloCiné…');
+    const boxOfficeFilms = [];
+    for (let page = 1; page <= 10; page++) {
+      const url = `https://www.allocine.fr/film/meilleurs/boxoffice/?page=${page}`;
+      try {
+        let html = getCachedPage(url);
+        if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
+        const raw = parseBesteverFilms(html, 'boxoffice');
+        const filtered = raw.filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7);
+        boxOfficeFilms.push(...filtered);
+        console.log(`[auto][bestever][boxoffice] Page ${page}/10 → ${raw.length} films bruts, ${filtered.length} retenus`);
+      } catch(e) {
+        console.warn(`[auto][bestever][boxoffice] Page ${page} erreur: ${e.message}`);
+      }
+      await sleep(1200 + Math.random() * 400);
+    }
+    const existingIds = new Set(allFilms.map(f => f.allocineId).filter(Boolean));
+    const newBoxOffice = boxOfficeFilms.filter(f => !f.allocineId || !existingIds.has(f.allocineId));
+    console.log(`[auto][bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
+    allFilms.push(...newBoxOffice);
+
     const result       = dedupeAndSortBestever(allFilms);
     cachedBestever     = result;
     lastBesteverScrape = new Date().toISOString();

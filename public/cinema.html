@@ -412,12 +412,6 @@ body {
   <select id="fil-genre" onchange="applyFilters()">
     <option value="">Tous genres</option>
   </select>
-  <select id="fil-note" onchange="applyFilters()">
-    <option value="0">Toutes notes combinées</option>
-    <option value="7.5">≥ 7,5</option>
-    <option value="8">≥ 8,0</option>
-    <option value="8.5">≥ 8,5</option>
-  </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
     <option value="seances">↓ Séances</option>
@@ -631,8 +625,6 @@ function posterError(el) { el.parentNode.innerHTML = '<div class="card-poster-ph
 function applyFiltersCI() {
   const genreFilter  = document.getElementById('fil-genre').value;
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
-  const noteMin      = parseFloat(document.getElementById('fil-note')?.value || '0');
-
   const cutoff = new Date();
   cutoff.setMonth(cutoff.getMonth() - 2);
 
@@ -651,12 +643,11 @@ function applyFiltersCI() {
     const matchGenre  = (!genreFilter || genres.some(g => g.includes(genreFilter)))
                      && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
                      && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
-    const matchNote   = combinee >= noteMin;
     const matchListe  = (!_prefs.hideVus           || !ud.vu)
                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
                      && (!onlyVoir                 || !!ud.vouloir);
 
-    const ok = matchDate && matchGenre && matchNote && matchListe;
+    const ok = matchDate && matchGenre && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

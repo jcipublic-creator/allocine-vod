@@ -520,12 +520,6 @@ body {
   <select class="desktop-only" id="fil-plat" onchange="applyFilters()">
     <option value="">Toutes les plateformes</option>
   </select>
-  <select class="desktop-only" id="fil-note" onchange="applyFilters()">
-    <option value="0">Toutes les notes</option>
-    <option value="4.5">≥ 4,5</option>
-    <option value="4">≥ 4,0</option>
-    <option value="3.5">≥ 3,5</option>
-  </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-blockbuster" onchange="applyFilters()"><span>🎬 Blockbusters</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
@@ -811,7 +805,6 @@ function applyFiltersResponsive() {
   const paysFilter      = document.getElementById('fil-pays').value;
   const onlyVoir        = document.getElementById('fil-only-voir')?.checked;
   const onlyBlockbuster = document.getElementById('fil-blockbuster')?.checked;
-  const noteMin      = parseFloat(document.getElementById('fil-note')?.value || '0');
   const platFilter   = (document.getElementById('fil-plat')?.value || '').toLowerCase();
 
   const BB_ACTION_GENRES = ['action','aventure','science-fiction'];
@@ -839,7 +832,6 @@ function applyFiltersResponsive() {
                      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
                      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
     const matchPays   = !paysFilter  || filmPays.some(p => p === paysFilter);
-    const matchNote   = (film.notePresse ?? 0) >= noteMin;
     const matchPlat   = !platFilter  || providers.some(p => p.includes(platFilter));
     const matchListe  = (!_prefs.hideVus           || !ud.vu)
                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
@@ -856,7 +848,7 @@ function applyFiltersResponsive() {
       )
     );
 
-    const ok = matchDecade && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe && isBlockbuster;
+    const ok = matchDecade && matchGenre && matchType && matchPays && matchPlat && matchListe && isBlockbuster;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

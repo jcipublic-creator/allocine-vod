@@ -711,14 +711,13 @@ function extractIdsFromSearchPage(html) {
   return titleToId;
 }
 
-/** Plateformes à exclure de l'affichage (boutiques achats unitaires, services niches) */
+/** Plateformes à exclure de l'affichage (services très niches, non-VOD) */
 const PROVIDERS_BLACKLIST = new Set([
-  'universciné', 'universcine', 'rakuten tv', 'filmo', 'viva',
+  'rakuten tv', 'viva', 'pathé home', 'pathe home', 'pathé', 'pathe',
+  'premieremax', 'première max', 'premièremax',
   'google play', 'microsoft', 'xbox', 'crunchyroll', 'molotov',
-  'sooner', 'pathé home', 'pathe home', 'premieremax', 'première max',
-  'tenk', 'tënk', 'cinemutins', 'cinémutins',
-  'capuseen', 'capuseën', 'orange', 'arte boutique',
-  'ciné+', 'cine+', 'ocs', 'ciné+ ocs', 'cine+ ocs',
+  'sooner', 'tenk', 'tënk', 'cinemutins', 'cinémutins',
+  'capuseen', 'capuseën', 'arte boutique',
   'benshi', 'cinemasalademande', 'free ciné', 'free cine',
   'gaumont classique', 'shadows',
   'en dvd blu-ray', 'en dvd/blu-ray', 'dvd blu-ray', 'dvd/blu-ray',

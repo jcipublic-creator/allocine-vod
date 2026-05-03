@@ -145,7 +145,7 @@ body {
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew strong { color: var(--text); font-weight: 600; }
-.card-pays  { color: var(--muted); font-weight: 400; }
+.card-pays  { color: var(--muted); font-weight: 400; white-space: nowrap; }
 .card-actors { font-size: 10px; color: var(--muted); margin-top: 1px; font-style: italic; }
 .year-pill {
   display: inline-block; font-size: 9px; font-weight: 700;
@@ -736,7 +736,7 @@ function renderCards(films) {
     <div class="card-info">
       <div class="card-title">${esc(f.titre)}${annee ? `<span class="year-pill" id="card-year-${i}">${esc(annee)}</span>` : `<span class="year-pill" id="card-year-${i}" style="display:none"></span>`}</div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
-      <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}${f.duree ? ` <span style="opacity:.75">· ${esc(f.duree)}</span>` : ''}</div>
+      <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}${f.duree ? ` <span style="opacity:.75;white-space:nowrap">· ${esc(f.duree)}</span>` : ''}</div>
       ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
       ${f.acteurs ? `<div class="card-actors">${esc(f.acteurs.split(',').map(a=>a.trim()).filter(Boolean).slice(0,5).join(', '))}</div>` : ''}
     </div>

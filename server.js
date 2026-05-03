@@ -750,32 +750,79 @@ function extractProviders(html) {
   const providers = [];
   const seen = new Set();
 
-  // AlloCiné structure :
+  // ── Méthode 1 : structure fiche film principale ──────────────────────────────
   //   .ovw-svod  > gd > .provider-tile.svod-tile > .provider-tile-primary (nom)
   //   .ovw-vod   > gd > .provider-tile.vod-tile  > .provider-tile-primary (nom)
   //   .ovw-dvd   > gd > .provider-tile.dvd-tile  → ignoré
   $('.provider-tile').each((_, tile) => {
     const $tile = $(tile);
-
-    // N'inclure que svod-tile et vod-tile — exclure dvd-tile et tout autre
     if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
-
     const name = $tile.find('.provider-tile-primary').text().trim();
     if (!name || seen.has(name)) return;
     seen.add(name);
-
     let type = 'vod';
     if ($tile.hasClass('svod-tile')) {
       type = 'svod';
     } else {
-      // vod-tile : location ou achat selon le texte de la tuile
       const tileText = $tile.text().toLowerCase();
       if (/location/i.test(tileText))     type = 'location';
       else if (/achat/i.test(tileText))   type = 'achat';
     }
-
     providers.push({ name, type });
   });
+
+  // ── Méthode 2 : pages /streaming/ et /telecharger-vod/ ──────────────────────
+  // Sur ces pages dédiées, AlloCiné utilise une structure différente :
+  //   .entity-card  ou  .card-entity-type  avec le nom du provider dedans
+  //   et le contexte (svod/location/achat) déterminé par la section parente
+  if (providers.length === 0) {
+    // Cherche la section SVOD (streaming inclus dans abonnement)
+    const $svod = $('.section-streaming, [class*="streaming"], .ovw-streaming');
+    $svod.find('a, .entity-card, [class*="card"]').each((_, el) => {
+      const name = $(el).find('img').attr('alt') || $(el).find('[class*="name"], [class*="title"], strong').first().text().trim();
+      if (!name || name.length < 2 || seen.has(name)) return;
+      seen.add(name);
+      providers.push({ name, type: 'svod' });
+    });
+
+    // Cherche la section VOD (location/achat)
+    const $vod = $('.section-vod, [class*="vod"]:not([class*="movie"]):not([class*="serie"])');
+    $vod.find('a, .entity-card, [class*="card"]').each((_, el) => {
+      const name = $(el).find('img').attr('alt') || $(el).find('[class*="name"], [class*="title"], strong').first().text().trim();
+      if (!name || name.length < 2 || seen.has(name)) return;
+      seen.add(name);
+      providers.push({ name, type: 'vod' });
+    });
+  }
+
+  // ── Méthode 3 : alt des images de logos (pages /streaming/ et /vod/) ────────
+  // AlloCiné met le nom de la plateforme dans l'attribut alt des logos
+  if (providers.length === 0) {
+    const KNOWN = new Set([
+      'netflix','disney+','disney plus','canal+','amazon prime video','prime video',
+      'ocs','apple tv+','apple tv plus','paramount+','mycanal','mubi','filmo','filmotv',
+      'arte','france tv','france télévisions','max','rakuten tv','rakuten','orange',
+      'sfr play','pathé','pathe','universcine','la cinetek','cinetek','shadowz',
+      'shudder','allociné','allocine','lionsgate+','salto','tf1+','tf1 plus',
+      'bbox','youtube','google play','microsoft','itunes','apple','fnac','virgin'
+    ]);
+    // Détermine le type dominant selon les titres de section trouvés dans le HTML
+    const htmlLower = html.toLowerCase();
+    const isSvodPage = /streaming|abonnement|inclus/i.test(htmlLower.substring(0, 3000));
+
+    $('img[alt]').each((_, el) => {
+      const alt = $(el).attr('alt')?.trim();
+      if (!alt || alt.length < 2 || alt.length > 60) return;
+      const altLow = alt.toLowerCase();
+      if (!KNOWN.has(altLow) && !altLow.includes('+') && altLow.length < 4) return;
+      // Filtre les alts qui ressemblent à des titres de films ou à du texte générique
+      if (/^\d+$|^(et|ou|de|le|la|les|un|une|du|des|en|au|avec|dans|pour|sur|par)$/i.test(alt)) return;
+      if (!KNOWN.has(altLow) && !/tv|play|video|canal|netflix|prime|disney|ocs|mubi|apple|max|pathé|pathe|rakuten|sfr|orange|france|arte|filmo|cine|univers|shadow|shudder|lionsgate|salto|paramount|bbox|youtube|google|microsoft|itunes|fnac|virgin/i.test(alt)) return;
+      if (seen.has(alt)) return;
+      seen.add(alt);
+      providers.push({ name: alt, type: isSvodPage ? 'svod' : 'vod' });
+    });
+  }
 
   return filterProviders(providers);
 }
@@ -850,12 +897,13 @@ function parseFilms(html) {
       if (origIdx >= 0 && seg[origIdx + 1]) titreOriginal = seg[origIdx + 1];
     }
 
-    // Synopsis : première ligne longue (> 80 chars) après la note
+    // Synopsis : première ligne longue (> 40 chars) après la note
     let synopsis = '';
     const synStart = lines[i + 2] === 'Spectateurs' ? i + 4 : i + 2;
-    for (let k = synStart; k < Math.min(lines.length, synStart + 12); k++) {
+    for (let k = synStart; k < Math.min(lines.length, synStart + 20); k++) {
       if (lines[k].endsWith(' VOD')) break;
-      if (lines[k].length > 80 && !/^\d/.test(lines[k]) && !lines[k].startsWith('Dès ')) {
+      if (lines[k].length > 40 && !/^\d/.test(lines[k]) && !lines[k].startsWith('Dès ')
+          && !/^(Voir|Avec|De |Par |Genre|Sortie|Durée|National|France|Date|Séance)/i.test(lines[k])) {
         synopsis = lines[k]; break;
       }
     }
@@ -1603,7 +1651,7 @@ app.get('/api/details', async (req, res) => {
       return res.json({ pays: null, annee: null, allocineId: resolvedId, allocineUrl: filmUrl, providers: [], error: 'soft_block' });
     }
 
-    // Pays, année de production et durée (via scan de lignes)
+    // Pays, année de production, durée et synopsis (via scan de lignes)
     const lines = htmlToLines(filmResp.data);
     let pays = null, annee = null, duree = null;
     for (let i = 0; i < lines.length - 1; i++) {
@@ -1612,6 +1660,10 @@ app.get('/api/details', async (req, res) => {
       if (lines[i] === 'Durée') duree = lines[i + 1];
       if (pays && annee && duree) break;
     }
+    // Synopsis : cherche via cheerio (plus fiable que text-lines sur la fiche film)
+    const $film = cheerio.load(filmResp.data);
+    const synopsis = $film('.synopsis-txt, .content-txt, [class*="synopsis"] p, .ovw-synopsis p')
+      .first().text().trim().substring(0, 500) || null;
 
     let providers = extractProviders(filmResp.data);
 
@@ -1642,16 +1694,25 @@ app.get('/api/details', async (req, res) => {
       console.log(`[providers] Total après fallback film ${resolvedId}: ${providers.length}`);
     }
 
-    const data = { pays, annee, duree, allocineId: resolvedId, allocineUrl: filmUrl, providers };
+    const data = { pays, annee, duree, synopsis, allocineId: resolvedId, allocineUrl: filmUrl, providers };
 
     // Ne pas mettre en cache une page vide (fiche introuvable)
-    if (pays || annee || providers.length > 0) {
+    if (pays || annee || providers.length > 0 || synopsis) {
       setCachedDetails(cacheKey, data);
       if (query && !allocineId) setCachedDetails(`id:${resolvedId}`, data);
     }
 
+    // Met à jour le synopsis dans cachedFilms si le film n'en avait pas
+    if (synopsis && resolvedId) {
+      const filmInCache = cachedFilms.find(f => String(f.allocineId) === String(resolvedId));
+      if (filmInCache && !filmInCache.synopsis) {
+        filmInCache.synopsis = synopsis;
+        console.log(`[synopsis] Mis à jour pour film ${resolvedId} via fiche film`);
+      }
+    }
+
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
-    console.log(`Détails "${query || resolvedId}" → ${pays || '?'} (${annee || '?'}) | ${pNames}`);
+    console.log(`Détails "${query || resolvedId}" → ${pays || '?'} (${annee || '?'}) | synopsis:${synopsis ? 'oui' : 'non'} | ${pNames}`);
     return res.json(data);
 
   } catch (error) {

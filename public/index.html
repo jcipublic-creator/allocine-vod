@@ -784,6 +784,30 @@ function updateCardMeta(i, data) {
     const yearEl = document.getElementById(`card-year-${i}`);
     if (yearEl) { yearEl.textContent = data.annee; yearEl.style.display = ''; }
   }
+  // Mise à jour synopsis si la carte n'en avait pas
+  if (data.synopsis) {
+    const film = _allFilms[i];
+    if (film && !film.synopsis) {
+      film.synopsis = data.synopsis;
+      // Injecter le synopsis dans la carte si elle n'en a pas encore
+      const platEl = document.getElementById(`card-plat-${i}`);
+      const metaEl = document.getElementById(`card-meta-${i}`);
+      if (platEl && metaEl && !metaEl.closest('.card-synopsis-wrap')) {
+        const LIMIT = 120;
+        const full = data.synopsis;
+        const short = full.length > LIMIT ? full.slice(0, full.lastIndexOf(' ', LIMIT)) : full;
+        const rest = full.length > LIMIT ? full.slice(short.length) : '';
+        const synWrap = document.createElement('div');
+        synWrap.className = 'card-synopsis-wrap';
+        synWrap.onclick = e => e.stopPropagation();
+        synWrap.innerHTML = `<span class="card-synopsis-preview">${esc(short)}</span>`
+          + (rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSynopsis(${i})">… Lire la suite</span>` : '')
+          + `<div class="card-synopsis-meta" id="card-meta-${i}"></div>`;
+        platEl.before(synWrap);
+        metaEl.remove(); // l'ancien card-meta standalone est remplacé par celui dans synWrap
+      }
+    }
+  }
 }
 
 // ─── Filtres ──────────────────────────────────────────────────────────────────

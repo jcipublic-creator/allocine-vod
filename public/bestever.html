@@ -814,9 +814,10 @@ function applyFiltersResponsive() {
   const noteMin      = parseFloat(document.getElementById('fil-note')?.value || '0');
   const platFilter   = (document.getElementById('fil-plat')?.value || '').toLowerCase();
 
-  const BLOCKBUSTER_GENRES = ['action','aventure','science-fiction','fantastique','thriller'];
-  const BLOCKBUSTER_SPECT_MIN = 3.5;
-  const BLOCKBUSTER_COMEDIE_SPECT_MIN = 3.8;
+  const BB_ACTION_GENRES = ['action','aventure','science-fiction'];
+  const BB_SPECT_MIN     = 3.8;
+  const BB_PRESSE_MIN    = 2.5;
+  const BB_COMEDIE_SPECT = 4.0;
 
   let visible = 0;
   _allFilms.forEach((film, i) => {
@@ -843,11 +844,13 @@ function applyFiltersResponsive() {
     const matchListe  = (!_prefs.hideVus           || !ud.vu)
                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
                      && (!onlyVoir                 || !!ud.vouloir);
-    const spect = film.noteSpect ?? 0;
+    const spect  = film.noteSpect  ?? 0;
+    const presse = film.notePresse ?? 0;
+    const hasBlockGenre       = genres.some(g => BB_ACTION_GENRES.some(b => g.includes(b)));
+    const isComedyBlockbuster = genres.some(g => g.includes('comédie')) && spect >= BB_COMEDIE_SPECT;
     const isBlockbuster = !onlyBlockbuster || (
-      genres.some(g => BLOCKBUSTER_GENRES.some(b => g.includes(b))) && spect >= BLOCKBUSTER_SPECT_MIN
-    ) || (
-      genres.some(g => g.includes('comédie')) && spect >= BLOCKBUSTER_COMEDIE_SPECT_MIN
+      (hasBlockGenre && spect >= BB_SPECT_MIN && presse >= BB_PRESSE_MIN)
+      || isComedyBlockbuster
     );
 
     const ok = matchDecade && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe && isBlockbuster;

@@ -3236,6 +3236,7 @@ function dedupeAndSortBestever(films) {
       if (seen.has(key)) return false;
       seen.add(key); return true;
     })
+    .filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7)
     .sort((a, b) =>
       Number(b.decade) - Number(a.decade) ||
       (b.notePresse ?? 0) - (a.notePresse ?? 0) ||

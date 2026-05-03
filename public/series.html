@@ -722,7 +722,7 @@ function renderSeriesCards(series) {
       : `<div class="card-poster"><div class="card-poster-ph">📺</div></div>`;
 
     return `
-<div class="card" id="card-${i}" data-idx="${i}" onclick="window.open('${url}','_blank')">
+<div class="card" id="card-${i}" data-idx="${i}" onclick="window.location.href='${url}'">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">

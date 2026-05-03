@@ -759,7 +759,7 @@ function renderCards(films) {
   }).join('');
 }
 
-function openFilm(url) { window.open(url, '_blank'); }
+function openFilm(url) { window.location.href = url; }
 
 function toggleSynopsis(i) {
   const btn = document.getElementById(`syn-btn-${i}`);

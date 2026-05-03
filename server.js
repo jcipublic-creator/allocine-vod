@@ -1616,19 +1616,27 @@ app.get('/api/details', async (req, res) => {
     let providers = extractProviders(filmResp.data);
 
     // Fallback : si la fiche principale n'a pas de providers (contenu JS-only),
-    // on tente la page /telecharger-vod/ qui les a en HTML statique
+    // on fetche les deux pages dédiées qui ont le HTML statique :
+    //   /streaming/       → SVOD (abonnements : Netflix, Disney+…)
+    //   /telecharger-vod/ → achat / location (Pathé, Rakuten, Orange…)
     if (providers.length === 0) {
-      try {
-        const vodUrl  = `https://www.allocine.fr/film/fichefilm-${resolvedId}/telecharger-vod/`;
-        const vodResp = await rateLimitedFetch(vodUrl);
-        const vodProviders = extractProviders(vodResp.data);
-        if (vodProviders.length > 0) {
-          providers = vodProviders;
-          console.log(`Providers via /telecharger-vod/ pour ${resolvedId} : ${vodProviders.length}`);
+      const extraPages = [
+        `https://www.allocine.fr/film/fichefilm-${resolvedId}/streaming/`,
+        `https://www.allocine.fr/film/fichefilm-${resolvedId}/telecharger-vod/`,
+      ];
+      const seen = new Set();
+      for (const url of extraPages) {
+        try {
+          const resp = await rateLimitedFetch(url);
+          const found = extractProviders(resp.data).filter(p => !seen.has(p.name));
+          found.forEach(p => seen.add(p.name));
+          providers.push(...found);
+        } catch(e) {
+          console.warn(`Fallback ${url} échoué pour ${resolvedId}:`, e.message);
         }
-      } catch(e) {
-        console.warn(`Fallback /telecharger-vod/ échoué pour ${resolvedId}:`, e.message);
       }
+      if (providers.length > 0)
+        console.log(`Providers via pages dédiées pour ${resolvedId} : ${providers.length}`);
     }
 
     const data = { pays, annee, duree, allocineId: resolvedId, allocineUrl: filmUrl, providers };
@@ -1974,7 +1982,22 @@ async function autoScrapeSeriesDetailsIfStale() {
           if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
           if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
         }
-        const providers = extractProviders(html);
+        let providers = extractProviders(html);
+        if (providers.length === 0) {
+          const extraPagesSerie = [
+            `https://www.allocine.fr/series/ficheserie-${serie.allocineId}/streaming/`,
+            `https://www.allocine.fr/series/ficheserie-${serie.allocineId}/vod/`,
+          ];
+          const seenSerie = new Set();
+          for (const extraUrl of extraPagesSerie) {
+            try {
+              const extraResp = await rateLimitedFetch(extraUrl);
+              const found = extractProviders(extraResp.data).filter(p => !seenSerie.has(p.name));
+              found.forEach(p => seenSerie.add(p.name));
+              providers.push(...found);
+            } catch(e) { console.warn(`Fallback série ${extraUrl}: ${e.message}`); }
+          }
+        }
         const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
         if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
       } catch(e) { console.warn(`[auto] Série ${serie.allocineId}: ${e.message}`); }
@@ -2514,7 +2537,22 @@ app.get('/api/series/details', async (req, res) => {
       }
     }
 
-    const providers = extractProviders(html);
+    let providers = extractProviders(html);
+    if (providers.length === 0) {
+      const extraPagesSerie = [
+        `https://www.allocine.fr/series/ficheserie-${seriesId}/streaming/`,
+        `https://www.allocine.fr/series/ficheserie-${seriesId}/vod/`,
+      ];
+      const seenSerie = new Set();
+      for (const extraUrl of extraPagesSerie) {
+        try {
+          const extraResp = await rateLimitedFetch(extraUrl);
+          const found = extractProviders(extraResp.data).filter(p => !seenSerie.has(p.name));
+          found.forEach(p => seenSerie.add(p.name));
+          providers.push(...found);
+        } catch(e) { console.warn(`Fallback série ${extraUrl}: ${e.message}`); }
+      }
+    }
     const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: seriesId, allocineUrl: url };
 
     // Met en cache uniquement si au moins une donnée utile a été trouvée

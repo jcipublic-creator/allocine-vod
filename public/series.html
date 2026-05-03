@@ -1094,6 +1094,7 @@ function startSeriesScrape() {
   document.getElementById('prog-fill').style.width = '0%';
   document.getElementById('prog-lbl').textContent  = 'Scraping des séries…';
 
+  const prevSeriesIds = new Set(_allSeries.map(s => s.allocineId).filter(Boolean));
   _allSeries = [];
   const source = new EventSource('/api/series/scrape');
 
@@ -1120,8 +1121,10 @@ function startSeriesScrape() {
     }
 
     if (d.type === 'done') {
+      const nouveaux = _allSeries.filter(s => s.allocineId && !prevSeriesIds.has(s.allocineId)).length;
+      const newTxt = nouveaux > 0 ? ` · +${nouveaux} nouvelle${nouveaux > 1 ? 's' : ''}` : '';
       document.getElementById('prog-fill').style.width = '100%';
-      document.getElementById('prog-lbl').textContent  = `✅ ${_allSeries.length} séries récupérées`;
+      document.getElementById('prog-lbl').textContent  = `✅ ${_allSeries.length} séries récupérées${newTxt}`;
       applySeriesSort(_seriesSortBy);
       saveSeriesCache();
       btn.disabled = false; btn.textContent = '▶ Scraper les séries';

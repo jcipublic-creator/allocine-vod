@@ -1126,6 +1126,9 @@ function startScrape() {
 
   UI.onScrapeStart(btn);
 
+  // Capture les IDs existants pour compter les nouveaux après
+  const prevIds = new Set(_allFilms.map(f => f.allocineId).filter(Boolean));
+
   const seen = new Set();
   const pendingFilms = [];
 
@@ -1147,6 +1150,7 @@ function startScrape() {
 
     if (d.type === 'done') {
       es.close();
+      const nouveaux = pendingFilms.filter(f => f.allocineId && !prevIds.has(f.allocineId)).length;
       _allFilms = pendingFilms;
       _allPlats = new Set(); _platsDone = 0;
       _scrapingDone = true;
@@ -1156,7 +1160,7 @@ function startScrape() {
       UI.renderFilms(_allFilms);
       applySort();
       UI.applyFilters();
-      UI.onScrapeDone(btn, d.lastScrape);
+      UI.onScrapeDone(btn, d.lastScrape, nouveaux);
       startPlatformLoading();
     }
   };

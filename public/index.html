@@ -627,9 +627,10 @@ const UI = {
     document.getElementById('prog-fill').style.width = pct + '%';
     document.getElementById('prog-lbl').textContent = `⏳ ${annee || ''} — ${pct}% — ${count} films`;
   },
-  onScrapeDone(btn, lastScrape) {
+  onScrapeDone(btn, lastScrape, nouveaux) {
     document.getElementById('prog-fill').style.width = '100%';
-    document.getElementById('prog-lbl').textContent = `✅ ${_allFilms.length} films récupérés`;
+    const newTxt = nouveaux > 0 ? ` · +${nouveaux} nouveau${nouveaux > 1 ? 'x' : ''}` : '';
+    document.getElementById('prog-lbl').textContent = `✅ ${_allFilms.length} films récupérés${newTxt}`;
     document.getElementById('server-status').textContent = '🟢';
     btn.disabled = false; btn.textContent = '▶ Scraper';
     document.getElementById('filter-bar').classList.add('show');

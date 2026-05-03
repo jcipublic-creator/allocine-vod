@@ -1528,10 +1528,6 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
   const annees = anneesParam.split(',').map(s => s.trim()).filter(s => /^\d{4}$/.test(s));
   if (annees.length === 0) return res.status(400).json({ error: 'annees invalide' });
 
-  const noteMin = parseFloat(String(req.query.noteMin || '3.5'));
-  if (Number.isNaN(noteMin) || noteMin < 0 || noteMin > 5)
-    return res.status(400).json({ error: 'noteMin invalide' });
-
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');
@@ -1559,9 +1555,10 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
           setCachedPage(url, html);
         }
         const raw   = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
-        const films = raw.filter(f => f.notePresse >= noteMin);
-        allFilms.push(...raw);
-        console.log(`[${annee}] Page ${page}/${TOTAL_PAGES} → ${films.length} films`);
+        // Filtre : notePresse + noteSpect > 7 (les deux doivent être renseignées)
+        const films = raw.filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7);
+        allFilms.push(...films);
+        console.log(`[${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} bruts, ${films.length} retenus`);
         send({ type: 'films', films, annee, page: globalPage, total: totalPages });
       } catch (error) {
         const message = error.response ? `HTTP ${error.response.status}` : error.code || error.message;
@@ -1583,7 +1580,7 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
   send({ type: 'done', totalFilms: result.length, lastScrape });
   res.end();
   isScraping = false;
-  console.log(`✅ ${result.length} films (note >= ${noteMin}) — années: ${annees.join(', ')}`);
+  console.log(`✅ ${result.length} films (notePresse + noteSpect > 7) — années: ${annees.join(', ')}`);
 });
 
 /**
@@ -1944,9 +1941,10 @@ async function autoScrapeFilmsListIfStale() {
         try {
           let html = getCachedPage(url);
           if (!html) { const r = await fetchWithRetry(url); html = r.data; setCachedPage(url, html); }
-          const raw = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
-          allFilms.push(...raw);
-          console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} films`);
+          const raw     = parseFilms(html).map(f => ({ ...f, anneeSortie: annee }));
+          const filtered = raw.filter(f => f.notePresse !== null && f.noteSpect !== null && (f.notePresse + f.noteSpect) > 7);
+          allFilms.push(...filtered);
+          console.log(`[auto][${annee}] Page ${page}/${TOTAL_PAGES} → ${raw.length} bruts, ${filtered.length} retenus`);
         } catch(e) {
           console.warn(`[auto][${annee}] Page ${page} erreur: ${e.message}`);
           lastScrapeErrors.push({ page, annee, message: e.message });

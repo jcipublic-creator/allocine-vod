@@ -1131,7 +1131,7 @@ function startScrape() {
   const seen = new Set();
   const pendingFilms = [];
 
-  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023`);
+  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023&secret=${encodeURIComponent(_appSecret)}`);
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);

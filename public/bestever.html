@@ -848,7 +848,8 @@ function applyFiltersResponsive() {
       )
     );
 
-    const ok = matchDecade && matchGenre && matchType && matchPays && matchPlat && matchListe && isBlockbuster;
+    const matchQualite = film.notePresse !== null && film.noteSpect !== null && (film.notePresse + film.noteSpect) > 7;
+    const ok = matchQualite && matchDecade && matchGenre && matchType && matchPays && matchPlat && matchListe && isBlockbuster;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

@@ -1566,7 +1566,7 @@ app.get('/api/details', async (req, res) => {
     return res.json({ pays: null, annee: null, allocineId: null, allocineUrl: null, providers: [] });
 
   const cached = getCachedDetails(cacheKey);
-  if (cached) {
+  if (cached && (cached.providers?.length > 0 || cached.error)) {
     console.log(`Cache détails: ${cacheKey} → ${cached.providers?.length || 0} plateformes`);
     return res.json(cached);
   }
@@ -1620,6 +1620,7 @@ app.get('/api/details', async (req, res) => {
     //   /streaming/       → SVOD (abonnements : Netflix, Disney+…)
     //   /telecharger-vod/ → achat / location (Pathé, Rakuten, Orange…)
     if (providers.length === 0) {
+      console.log(`[providers] Film ${resolvedId} → 0 sur page principale, tentative pages dédiées…`);
       const extraPages = [
         `https://www.allocine.fr/film/fichefilm-${resolvedId}/streaming/`,
         `https://www.allocine.fr/film/fichefilm-${resolvedId}/telecharger-vod/`,
@@ -1628,15 +1629,17 @@ app.get('/api/details', async (req, res) => {
       for (const url of extraPages) {
         try {
           const resp = await rateLimitedFetch(url);
+          const htmlSize = resp.data?.length || 0;
+          const rawTiles = (resp.data?.match(/provider-tile/g) || []).length;
           const found = extractProviders(resp.data).filter(p => !seen.has(p.name));
+          console.log(`[providers] ${url} → HTML:${htmlSize}b tiles_raw:${rawTiles} found:${found.length} [${found.map(p=>p.name).join(', ')}]`);
           found.forEach(p => seen.add(p.name));
           providers.push(...found);
         } catch(e) {
-          console.warn(`Fallback ${url} échoué pour ${resolvedId}:`, e.message);
+          console.warn(`[providers] Fallback ${url} échoué:`, e.message);
         }
       }
-      if (providers.length > 0)
-        console.log(`Providers via pages dédiées pour ${resolvedId} : ${providers.length}`);
+      console.log(`[providers] Total après fallback film ${resolvedId}: ${providers.length}`);
     }
 
     const data = { pays, annee, duree, allocineId: resolvedId, allocineUrl: filmUrl, providers };
@@ -1862,7 +1865,22 @@ async function autoScrapeFilmsDetailsIfStale() {
             if (lines[i] === 'Année de production') annee = lines[i + 1];
             if (pays && annee) break;
           }
-          const providers = extractProviders(html);
+          let providers = extractProviders(html);
+          if (providers.length === 0) {
+            const extraPagesFilm = [
+              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/streaming/`,
+              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/telecharger-vod/`,
+            ];
+            const seenFilm = new Set();
+            for (const extraUrl of extraPagesFilm) {
+              try {
+                const extraResp = await rateLimitedFetch(extraUrl);
+                const found = extractProviders(extraResp.data).filter(p => !seenFilm.has(p.name));
+                found.forEach(p => seenFilm.add(p.name));
+                providers.push(...found);
+              } catch(e) { console.warn(`Fallback film ${extraUrl}: ${e.message}`); }
+            }
+          }
           const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
           if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
         }
@@ -2495,7 +2513,7 @@ app.get('/api/series/details', async (req, res) => {
 
   const cacheKey = `sid:${seriesId}`;
   const cached   = getCachedSeriesDetails(cacheKey);
-  if (cached) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  if (cached && (cached.providers?.length > 0 || cached.error)) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -3334,7 +3352,22 @@ async function autoScrapeBesteverDetailsIfStale() {
             if (lines[i] === 'Année de production') annee = lines[i + 1];
             if (pays && annee) break;
           }
-          const providers = extractProviders(html);
+          let providers = extractProviders(html);
+          if (providers.length === 0) {
+            const extraPagesFilm = [
+              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/streaming/`,
+              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/telecharger-vod/`,
+            ];
+            const seenFilm = new Set();
+            for (const extraUrl of extraPagesFilm) {
+              try {
+                const extraResp = await rateLimitedFetch(extraUrl);
+                const found = extractProviders(extraResp.data).filter(p => !seenFilm.has(p.name));
+                found.forEach(p => seenFilm.add(p.name));
+                providers.push(...found);
+              } catch(e) { console.warn(`Fallback bestever ${extraUrl}: ${e.message}`); }
+            }
+          }
           const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
           if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
         }

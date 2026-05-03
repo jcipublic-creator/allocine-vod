@@ -1500,16 +1500,16 @@ app.get('/api/scraping-status', (_req, res) => {
 });
 
 /**
- * GET /api/scrape?annees=2026,2025&noteMin=3.5
+ * GET /api/scrape?annees=2026,2025
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Lance le scraping des pages VOD AlloCiné pour les années demandées.
  *        Répond en Server-Sent Events (SSE) pour envoyer les films au fur
  *        et à mesure de leur extraction, sans attendre la fin.
+ *        Filtre : notePresse + noteSpect > 7 (les deux notes obligatoires).
  *        À la fin, persiste la liste dédupliquée dans Redis.
  *
  * Params (query) :
  *   annees   : ex "2026,2025" (défaut "2025"). Aussi accepte l'ancien param ?annee=
- *   noteMin  : note presse minimale 0-5 (défaut 3.5)
  *
  * Événements SSE :
  *   { type: 'progress', page, total, annee }

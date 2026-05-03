@@ -858,11 +858,14 @@ function applyFiltersResponsive() {
     // Action/Aventure/SF → blockbuster si le public adore et pas un nanar
     // Fantastique seul (horreur pure) → exclu car pas dans BB_ACTION_GENRES
     // Comédie → seulement si niveau exceptionnel (Intouchables)
+    const hasDrame            = genres.some(g => /dram/i.test(g));
     const hasBlockGenre       = genres.some(g => BB_ACTION_GENRES.some(b => g.includes(b)));
     const isComedyBlockbuster = genres.some(g => g.includes('comédie')) && spect >= BB_COMEDIE_SPECT;
     const isBlockbuster = !onlyBlockbuster || (
-      (hasBlockGenre && spect >= BB_SPECT_MIN && presse >= BB_PRESSE_MIN)
-      || isComedyBlockbuster
+      !hasDrame && (
+        (hasBlockGenre && spect >= BB_SPECT_MIN && presse >= BB_PRESSE_MIN)
+        || isComedyBlockbuster
+      )
     );
 
     const ok = matchAnnee && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe && isBlockbuster;

@@ -846,11 +846,14 @@ function applyFiltersResponsive() {
                      && (!onlyVoir                 || !!ud.vouloir);
     const spect  = film.noteSpect  ?? 0;
     const presse = film.notePresse ?? 0;
+    const hasDrame            = genres.some(g => /dram/i.test(g));
     const hasBlockGenre       = genres.some(g => BB_ACTION_GENRES.some(b => g.includes(b)));
     const isComedyBlockbuster = genres.some(g => g.includes('comédie')) && spect >= BB_COMEDIE_SPECT;
     const isBlockbuster = !onlyBlockbuster || (
-      (hasBlockGenre && spect >= BB_SPECT_MIN && presse >= BB_PRESSE_MIN)
-      || isComedyBlockbuster
+      !hasDrame && (
+        (hasBlockGenre && spect >= BB_SPECT_MIN && presse >= BB_PRESSE_MIN)
+        || isComedyBlockbuster
+      )
     );
 
     const ok = matchDecade && matchGenre && matchType && matchPays && matchNote && matchPlat && matchListe && isBlockbuster;

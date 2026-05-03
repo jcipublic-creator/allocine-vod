@@ -1118,8 +1118,7 @@ function populatePaysFilter() {
 
 // ─── Scraping ─────────────────────────────────────────────────────────────────
 function startScrape() {
-  const noteMin = parseFloat(document.getElementById('inp-note').value || '3.5');
-  const btn     = document.getElementById('btn-run');
+  const btn = document.getElementById('btn-run');
 
   _scrapingDone = false;
   _loadGen++;
@@ -1132,7 +1131,7 @@ function startScrape() {
   const seen = new Set();
   const pendingFilms = [];
 
-  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023&noteMin=${noteMin}`);
+  const es = new EventSource(`/api/scrape?annees=2026,2025,2024,2023`);
 
   es.onmessage = e => {
     const d = JSON.parse(e.data);

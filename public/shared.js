@@ -1058,6 +1058,14 @@ function _setPlatDisabled(set) {
   localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify([...set]));
 }
 
+// Sync inter-onglets : si une autre page modifie vod_plat_disabled, on se met à jour
+window.addEventListener('storage', e => {
+  if (e.key !== _PLAT_DISABLED_LS) return;
+  _platDisabledCache = e.newValue ? new Set(JSON.parse(e.newValue)) : new Set(_PLAT_DEFAULTS);
+  _refreshPlatPrefs();
+  applyFilters();
+});
+
 // ─── Préférences générales ─────────────────────────────────────────────────────
 const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
 

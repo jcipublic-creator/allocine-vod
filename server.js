@@ -735,6 +735,9 @@ function filterProviders(providers) {
     const n = p.name.toLowerCase();
     if (PROVIDERS_BLACKLIST.has(n)) return false;
     if (/coffret|édition|edition|collector|blu-ray|dvd/i.test(p.name)) return false;
+    // Un nom de plateforme ne peut pas dépasser 25 caractères (filtre les titres de séries/films parasites)
+    // La plus longue vraie plateforme est "Amazon Prime Video" (18 chars)
+    if (p.name.length > 25) return false;
     return true;
   });
 }

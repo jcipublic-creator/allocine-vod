@@ -208,9 +208,7 @@ function loadCache() {
 
     _allFilms = JSON.parse(films);
     _details  = details ? JSON.parse(details) : {};
-    // On AJOUTE sans reset : fetchPlatforms() fournit la liste unifiée films+séries
-    // (reset ici casserait la cohérence inter-pages)
-    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); }));
+    // _allPlats vient exclusivement de /api/platforms (fetchPlatforms), pas des données locales
     _refreshPlatPrefs();
 
     const d = date ? new Date(date) : null;
@@ -1376,7 +1374,6 @@ async function startPlatformLoading() {
         _platsDone++;
         const el = UI.getPlatEl(film);
         if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
-        (_details[key].providers||[]).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
         UI.onPlatProgress(_platsDone, _allFilms.length);
         continue;
       }
@@ -1444,7 +1441,6 @@ async function fetchDetails(idx, gen) {
     if (data.allocineId && !film.allocineId) film.allocineId = data.allocineId;
 
     const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
-    (data.providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
     _refreshPlatPrefs();
     if (data.pays) populatePaysFilter();
 
@@ -1576,7 +1572,7 @@ async function loadFilmsFromServer() {
       d.films.forEach((film, i) => {
         if (d.details[i]) {
           _details[filmKey(film)] = d.details[i];
-          (d.details[i].providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
+          // _allPlats géré exclusivement par fetchPlatforms()
         }
       });
       _refreshPlatPrefs();

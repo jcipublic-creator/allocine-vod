@@ -749,6 +749,7 @@ function filterProviders(providers) {
  */
 // Correspondance slug AlloCiné → nom affiché
 const VOD_SLUG_TO_NAME = {
+  // Slugs officiels AlloCiné
   'orange': 'Orange', 'pathe-home': 'Pathé', 'premieremax': 'PremièreMax',
   'rakuten-tv': 'Rakuten TV', 'viva': 'VIVA', 'netflix': 'Netflix',
   'disney-plus': 'Disney+', 'amazon-prime-video': 'Amazon Prime Video',
@@ -761,6 +762,25 @@ const VOD_SLUG_TO_NAME = {
   'tf1-plus': 'TF1+', 'salto': 'Salto', 'bbox': 'Bbox',
   'fnac': 'Fnac', 'microsoft': 'Microsoft', 'youtube': 'YouTube',
   'google-play': 'Google Play', 'itunes': 'iTunes',
+  // Slugs alternatifs observés dans les données scraping
+  'amazon': 'Amazon Prime Video',
+  'appletv': 'Apple TV+',
+  'disney': 'Disney+',
+  'hbo-max': 'Max',
+  'paramountplus': 'Paramount+',
+  'canal-vod': 'Canal VOD',
+  'arte-boutique': 'Arte Boutique',
+  'arte-france': 'Arte',
+  'cineplusocs': 'Canal+/OCS',
+  'gaumont-classic': 'Gaumont Classique',
+  'lacinetek': 'La Cinetek',
+  'lovemyvod': 'LoveMyVOD',
+  'madelen': 'Madelen',
+  'crunchyroll': 'Crunchyroll',
+  'molotov': 'Molotov',
+  'tenk': 'Tënk',
+  'benshi': 'Benshi',
+  'capuseen': 'Capuseën',
 };
 
 function extractProviders(html) {
@@ -1901,6 +1921,51 @@ app.post('/api/clean-providers', requireSecret, async (_req, res) => {
 
   console.log(`🧹 clean-providers : ${cleanedFilms} films + ${cleanedSeries} séries nettoyés`);
   res.json({ ok: true, cleanedFilms, cleanedSeries, totalFilms: detailsCache.size, totalSeries: seriesDetailsCache.size });
+});
+
+/**
+ * POST /api/normalize-providers
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Remplace les slugs bruts (amazon, appletv, disney…) par leurs noms
+ *        d'affichage définis dans VOD_SLUG_TO_NAME, dans tous les caches
+ *        (films + séries). Corrige les données historiques sans tout re-scraper.
+ *
+ * Réponse: { ok, renamedFilms, renamedSeries }
+ */
+app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
+  let renamedFilms = 0, renamedSeries = 0;
+
+  const normalizeList = providers => providers.map(p => {
+    const mapped = VOD_SLUG_TO_NAME[p.name] || VOD_SLUG_TO_NAME[p.name.toLowerCase()];
+    return mapped ? { ...p, name: mapped } : p;
+  });
+
+  const hasChange = (before, after) =>
+    before.some((p, i) => p.name !== after[i].name);
+
+  for (const [key, det] of detailsCache) {
+    const val = det?.value;
+    if (!val?.providers?.length) continue;
+    const normed = normalizeList(filterProviders(val.providers));
+    if (hasChange(filterProviders(val.providers), normed)) {
+      detailsCache.set(key, { ...det, value: { ...val, providers: normed } });
+      renamedFilms++;
+    }
+  }
+  for (const [key, det] of seriesDetailsCache) {
+    const val = det?.value;
+    if (!val?.providers?.length) continue;
+    const normed = normalizeList(filterProviders(val.providers));
+    if (hasChange(filterProviders(val.providers), normed)) {
+      seriesDetailsCache.set(key, { ...det, value: { ...val, providers: normed } });
+      renamedSeries++;
+    }
+  }
+
+  await saveDetailsCache();
+  await saveSeriesDetailsCache();
+  console.log(`🔤 normalize-providers : ${renamedFilms} films + ${renamedSeries} séries renommés`);
+  res.json({ ok: true, renamedFilms, renamedSeries });
 });
 
 /**

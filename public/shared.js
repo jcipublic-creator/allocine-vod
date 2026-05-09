@@ -66,6 +66,23 @@ async function loadAppSecret() {
   } catch(e) { /* pas de secret → mode dev local */ }
   // Afficher le feedback de reset PIN après que le DOM soit prêt
   setTimeout(_showPinResetFeedback, 800);
+  // Charger la liste unifiée de plateformes dès le démarrage (toutes pages)
+  fetchPlatforms();
+}
+
+/** Charge /api/platforms et pré-remplit _allPlats / _allPlatsTypes.
+ *  Appelé une fois au chargement, indépendamment de la page visitée. */
+async function fetchPlatforms() {
+  try {
+    const r = await fetch('/api/platforms', { signal: AbortSignal.timeout(5000) });
+    if (!r.ok) return;
+    const d = await r.json();
+    (d.platforms || []).forEach(p => {
+      _allPlats.add(p.name);
+      if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type || 'vod');
+    });
+    _refreshPlatPrefs();
+  } catch(e) { /* silencieux */ }
 }
 
 /** Affiche un toast de confirmation si un PIN vient d'être réinitialisé via email. */

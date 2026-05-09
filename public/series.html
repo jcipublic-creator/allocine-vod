@@ -518,7 +518,14 @@ function loadSeriesCache() {
     if (!raw) return false;
     _allSeries = JSON.parse(raw);
     const det  = localStorage.getItem(LS_SDET);
-    if (det) _seriesDet = JSON.parse(det);
+    if (det) {
+      _seriesDet = JSON.parse(det);
+      Object.values(_seriesDet).forEach(d => (d?.providers||[]).forEach(p => {
+        _allPlats.add(p.name);
+        if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type || 'vod');
+      }));
+      _refreshPlatPrefs();
+    }
     if (_allSeries.length > 0) {
       renderSeriesCards(_allSeries);
       populateGenreFilter(); populateAnneeFilter();
@@ -555,8 +562,10 @@ async function loadSeriesFromServer() {
       d.details.forEach((det, i) => {
         if (det && _allSeries[i]?.allocineId) {
           _seriesDet[_allSeries[i].allocineId] = det;
+          (det.providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type || 'vod'); });
         }
       });
+      _refreshPlatPrefs();
     }
     applySeriesSort(_seriesSortBy);
     populateGenreFilter(); populateAnneeFilter();
@@ -611,6 +620,8 @@ async function startSeriesDetailsLoading() {
       if (r.ok) {
         const det = await r.json();
         _seriesDet[serie.allocineId] = det;
+        (det.providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type || 'vod'); });
+        _refreshPlatPrefs();
         updateSeriesCard(_allSeries.indexOf(serie), det);
       }
     } catch(e) {}

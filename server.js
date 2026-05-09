@@ -2862,6 +2862,35 @@ app.get('/api/series/providers', (_req, res) => {
 });
 
 /**
+ * GET /api/platforms
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Liste unifiée de toutes les plateformes connues (films + séries +
+ *        best-ever). Utilisée par le front pour initialiser le sélecteur de
+ *        plateformes dès le chargement, indépendamment de la page visitée.
+ *
+ * Réponse: { platforms: { name, type }[] }   (trié par nom, sans doublons)
+ */
+app.get('/api/platforms', (_req, res) => {
+  const seen = new Map(); // name → type
+  // Films + Bestever (même cache)
+  for (const [, det] of detailsCache) {
+    (det?.value?.providers || det?.providers || []).forEach(p => {
+      if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
+    });
+  }
+  // Séries
+  for (const [, det] of seriesDetailsCache) {
+    (det?.value?.providers || det?.providers || []).forEach(p => {
+      if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
+    });
+  }
+  const platforms = [...seen.entries()]
+    .map(([name, type]) => ({ name, type }))
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+  res.json({ platforms });
+});
+
+/**
  * GET /api/series/debug-posters
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Vérifie l'extraction des posters depuis le scraping de liste.

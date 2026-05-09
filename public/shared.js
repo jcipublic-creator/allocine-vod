@@ -1078,7 +1078,7 @@ function _buildPlatRows() {
     <div class="pref-row">
       <div class="pref-label">${esc(name)}</div>
       <label class="toggle">
-        <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform(${JSON.stringify(name)}, this.checked)">
+        <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform('${name.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}', this.checked)">
         <span class="toggle-slider"></span>
       </label>
     </div>`;

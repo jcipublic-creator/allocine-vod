@@ -1859,6 +1859,51 @@ app.post('/api/clear-details-cache', requireSecret, async (_req, res) => {
 });
 
 /**
+ * POST /api/clean-providers
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Rôle : Nettoie les providers invalides (dvd, coffret, blu-ray…) dans tous
+ *        les caches en mémoire (detailsCache + seriesDetailsCache) puis
+ *        re-sauvegarde dans Redis. Ne supprime aucune fiche, juste les
+ *        mauvaises entrées de providers.
+ *
+ * Réponse: { ok, cleanedFilms, cleanedSeries, totalFilms, totalSeries }
+ */
+app.post('/api/clean-providers', requireSecret, async (_req, res) => {
+  let cleanedFilms = 0, cleanedSeries = 0;
+
+  // Films + Bestever
+  for (const [key, det] of detailsCache) {
+    const val = det?.value;
+    if (!val?.providers) continue;
+    const before = val.providers.length;
+    const after  = filterProviders(val.providers);
+    if (after.length !== before) {
+      detailsCache.set(key, { ...det, value: { ...val, providers: after } });
+      cleanedFilms++;
+    }
+  }
+
+  // Séries
+  for (const [key, det] of seriesDetailsCache) {
+    const val = det?.value;
+    if (!val?.providers) continue;
+    const before = val.providers.length;
+    const after  = filterProviders(val.providers);
+    if (after.length !== before) {
+      seriesDetailsCache.set(key, { ...det, value: { ...val, providers: after } });
+      cleanedSeries++;
+    }
+  }
+
+  // Re-sauvegarde Redis
+  await saveDetailsCache();
+  await saveSeriesDetailsCache();
+
+  console.log(`🧹 clean-providers : ${cleanedFilms} films + ${cleanedSeries} séries nettoyés`);
+  res.json({ ok: true, cleanedFilms, cleanedSeries, totalFilms: detailsCache.size, totalSeries: seriesDetailsCache.size });
+});
+
+/**
  * POST /api/clear-films
  * ─────────────────────────────────────────────────────────────────────────────
  * Rôle : Vide le cache mémoire + Redis de la liste des films.

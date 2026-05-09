@@ -834,15 +834,18 @@ function applyFiltersResponsive() {
     const filmPays = (det.pays || '').split(',').map(p => p.trim()).filter(Boolean);
     const providers = provObjs.map(p => p.name.toLowerCase());
     const ud = _userdata[film.allocineId] || {};
+    // Providers actifs (hors plateformes désactivées dans les prefs)
+    const _disabledSet = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+    const activeProvs  = provObjs.filter(p => !_disabledSet.has(p.name.toLowerCase()));
 
     const matchAnnee   = !anneeFilter || parseInt(film.anneeReelle || film.anneeSortie) >= parseInt(anneeFilter);
     const matchGenre   = (!genreFilter || genres.some(g => g.includes(genreFilter)))
                       && (_prefs.showDocumentaires || !genres.some(g => g.includes('documentaire')))
                       && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
     const matchType    = !typeFilter
-                      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
-                      || (typeFilter === 'vod'  && !provObjs.some(p => p.type === 'svod')
-                                                && provObjs.some(p => p.type === 'location' || p.type === 'achat' || p.type === 'vod'));
+                      || (typeFilter === 'svod' && activeProvs.some(p => p.type === 'svod'))
+                      || (typeFilter === 'vod'  && !activeProvs.some(p => p.type === 'svod')
+                                                && activeProvs.some(p => p.type === 'location' || p.type === 'achat' || p.type === 'vod'));
     const matchPays    = !paysFilter  || filmPays.some(p => p === paysFilter);
     const matchPlat    = !platFilter  || providers.some(p => p.includes(platFilter));
     const matchListe   = (!_prefs.hideVus           || !ud.vu)

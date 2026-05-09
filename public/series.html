@@ -995,6 +995,9 @@ function applySeriesFilters() {
     const genreStr = (s.genre || '').toLowerCase();
     const genres   = genreStr.split(',').map(g => g.trim()).filter(Boolean);
     const ud       = _userdata[s.allocineId ? `s:${s.allocineId}` : ''] || {};
+    // Providers actifs (hors plateformes désactivées dans les prefs)
+    const _disabledSet = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+    const activeProvs  = provObjs.filter(p => !_disabledSet.has(p.name.toLowerCase()));
 
     // Filtre genre (recherche partielle pour gérer "Science-Fiction", "Sci-Fi"…)
     const matchGenre = !genreFilter || genres.some(g => g.includes(genreFilter));
@@ -1011,11 +1014,11 @@ function applySeriesFilters() {
     const matchStatut = !statutFilter ||
       (statutFilter === 'encours'  && statut === 'En cours') ||
       (statutFilter === 'terminee' && statut === 'Terminée');
-    // Filtre type (streaming / VOD)
+    // Filtre type (streaming / VOD) — opère sur les providers actifs uniquement
     const matchType = !typeFilter
-      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
-      || (typeFilter === 'vod'  && !provObjs.some(p => p.type === 'svod')
-                                && provObjs.some(p => p.type === 'location' || p.type === 'achat' || p.type === 'vod'));
+      || (typeFilter === 'svod' && activeProvs.some(p => p.type === 'svod'))
+      || (typeFilter === 'vod'  && !activeProvs.some(p => p.type === 'svod')
+                                && activeProvs.some(p => p.type === 'location' || p.type === 'achat' || p.type === 'vod'));
     // Filtre liste personnelle
     const matchListe = (!_prefs.hideVus                 || !ud.vu) &&
                        (!_prefs.hideNonInteresse       || !ud.nonInteresse) &&

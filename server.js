@@ -2872,15 +2872,15 @@ app.get('/api/series/providers', (_req, res) => {
  */
 app.get('/api/platforms', (_req, res) => {
   const seen = new Map(); // name → type
-  // Films + Bestever (même cache)
+  // Films + Bestever (même cache) — on passe par filterProviders pour exclure dvd/coffret/etc.
   for (const [, det] of detailsCache) {
-    (det?.value?.providers || det?.providers || []).forEach(p => {
+    filterProviders(det?.value?.providers || det?.providers || []).forEach(p => {
       if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
     });
   }
   // Séries
   for (const [, det] of seriesDetailsCache) {
-    (det?.value?.providers || det?.providers || []).forEach(p => {
+    filterProviders(det?.value?.providers || det?.providers || []).forEach(p => {
       if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
     });
   }

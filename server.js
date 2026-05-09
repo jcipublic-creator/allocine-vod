@@ -1989,13 +1989,20 @@ async function autoScrapeFilmsDetailsIfStale() {
   if (isScraping) return;
   const ageDetDays  = lastDetailsScrape ? (Date.now() - new Date(lastDetailsScrape).getTime()) / 86400000 : Infinity;
   const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  if (!detStale) {
+  // Nouveaux films (ajoutés depuis le dernier scraping liste) sans détails en cache
+  const newFilms = cachedFilms.filter(f => f.allocineId && !getCachedDetails(`id:${f.allocineId}`));
+  // Sortir uniquement si le cache est frais ET aucun nouveau film à enrichir
+  if (!detStale && newFilms.length === 0) {
     console.log(`⏭️  Films plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  if (!detStale && newFilms.length > 0) {
+    console.log(`\n🆕 Films plateformes : ${newFilms.length} nouveau(x) film(s) sans détails — enrichissement ciblé`);
   }
   isScraping    = true;
   scrapingPhase = 'films-details';
   try {
-    const toFetch = cachedFilms.filter(f => f.allocineId);
+    // Si cache périmé : refresh complet (suppression forcée). Sinon : uniquement les nouveaux.
+    const toFetch = detStale ? cachedFilms.filter(f => f.allocineId) : newFilms;
     if (toFetch.length === 0) { console.log('⏭️  Films plateformes : aucun film avec allocineId'); return; }
     const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
     console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
@@ -2003,7 +2010,7 @@ async function autoScrapeFilmsDetailsIfStale() {
     let done = 0;
     for (const film of toFetch) {
       const cacheKey = `id:${film.allocineId}`;
-      detailsCache.delete(cacheKey); // force le rafraîchissement
+      if (detStale) detailsCache.delete(cacheKey); // force le rafraîchissement uniquement si cache périmé
       try {
         const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
         const filmResp = await rateLimitedFetch(filmUrl);
@@ -2116,13 +2123,17 @@ async function autoScrapeSeriesDetailsIfStale() {
   if (isScrapingSeries) return;
   const ageDetDays  = lastSeriesDetailsScrape ? (Date.now() - new Date(lastSeriesDetailsScrape).getTime()) / 86400000 : Infinity;
   const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  if (!detStale) {
+  const newSeries = cachedSeries.filter(s => s.allocineId && !seriesDetailsCache.has(`sid:${s.allocineId}`));
+  if (!detStale && newSeries.length === 0) {
     console.log(`⏭️  Séries détails OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  if (!detStale && newSeries.length > 0) {
+    console.log(`\n🆕 Séries détails : ${newSeries.length} nouvelle(s) série(s) sans détails — enrichissement ciblé`);
   }
   isScrapingSeries    = true;
   scrapingPhase       = 'series-details';
   try {
-    const toFetch = cachedSeries.filter(s => s.allocineId);
+    const toFetch = detStale ? cachedSeries.filter(s => s.allocineId) : newSeries;
     if (toFetch.length === 0) { console.log('⏭️  Séries détails : aucune série avec allocineId'); return; }
     const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
     console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
@@ -2130,7 +2141,7 @@ async function autoScrapeSeriesDetailsIfStale() {
     let done = 0;
     for (const serie of toFetch) {
       const cacheKey = `sid:${serie.allocineId}`;
-      seriesDetailsCache.delete(cacheKey);
+      if (detStale) seriesDetailsCache.delete(cacheKey);
       try {
         const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${serie.allocineId}.html`;
         const resp = await rateLimitedFetch(url);
@@ -3524,8 +3535,12 @@ async function autoScrapeBesteverDetailsIfStale() {
   if (isBesteverScraping) return;
   const ageDetDays  = lastBesteverDetailsScrape ? (Date.now() - new Date(lastBesteverDetailsScrape).getTime()) / 86400000 : Infinity;
   const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  if (!detStale) {
+  const newBestever = cachedBestever.filter(f => f.allocineId && !getCachedDetails(`id:${f.allocineId}`));
+  if (!detStale && newBestever.length === 0) {
     console.log(`⏭️  Bestever plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
+  }
+  if (!detStale && newBestever.length > 0) {
+    console.log(`\n🆕 Bestever plateformes : ${newBestever.length} nouveau(x) film(s) sans détails — enrichissement ciblé`);
   }
   isBesteverScraping = true;
   scrapingPhase      = 'bestever-details';

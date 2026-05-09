@@ -189,6 +189,7 @@ function loadCache() {
     _details  = details ? JSON.parse(details) : {};
     _allPlats = new Set();
     Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
+    _refreshPlatPrefs();
 
     const d = date ? new Date(date) : null;
     const label = d ? `${d.toLocaleDateString('fr-FR')} à ${d.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}` : '—';
@@ -1065,6 +1066,32 @@ function filmMatchesMyPlatforms(det) {
   return providers.some(p => !disabled.has(p.name.toLowerCase()));
 }
 
+/** Construit le HTML des lignes plateformes pour la modale prefs. */
+function _buildPlatRows() {
+  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  const plats = [..._allPlats].sort();
+  if (plats.length === 0)
+    return '<p style="font-size:12px;color:var(--muted);padding:8px 0">Les plateformes apparaîtront ici après le chargement des données.</p>';
+  return plats.map(name => `
+    <div class="pref-row">
+      <div class="pref-label">${esc(name)}</div>
+      <label class="toggle">
+        <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform(${JSON.stringify(name)}, this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`).join('');
+}
+
+/** Rafraîchit la liste des plateformes dans la modale si elle est ouverte (debouncé). */
+let _refreshPlatPrefsTimer = null;
+function _refreshPlatPrefs() {
+  clearTimeout(_refreshPlatPrefsTimer);
+  _refreshPlatPrefsTimer = setTimeout(() => {
+    const el = document.getElementById('plat-prefs-rows');
+    if (el) el.innerHTML = _buildPlatRows();
+  }, 300);
+}
+
 function openPrefs() { renderPrefs(); document.getElementById('prefs-modal').classList.add('open'); }
 function closePrefs() { document.getElementById('prefs-modal').classList.remove('open'); }
 function renderPrefs() {
@@ -1076,19 +1103,6 @@ function renderPrefs() {
         <span class="toggle-slider"></span>
       </label>
     </div>`;
-
-  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
-  const plats = [..._allPlats].sort();
-  const platRows = plats.length === 0
-    ? '<p style="font-size:12px;color:var(--muted);padding:8px 0">Les plateformes s\'affichent après le chargement des données.</p>'
-    : plats.map(name => `
-    <div class="pref-row">
-      <div class="pref-label">${esc(name)}</div>
-      <label class="toggle">
-        <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform('${name.replace(/'/g,"\\'")}', this.checked)">
-        <span class="toggle-slider"></span>
-      </label>
-    </div>`).join('');
 
   document.getElementById('prefs-content').innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5">Ces réglages s'appliquent aux 3 sections : Films, Séries et Best ever.</p>
@@ -1105,7 +1119,7 @@ function renderPrefs() {
     <div class="prefs-section">
       <div class="prefs-section-title">Mes plateformes</div>
       <p style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Décochez les plateformes auxquelles vous n'êtes pas abonné. Utilisez ensuite le filtre <strong style="color:var(--text)">📺 Mes plats</strong> dans la barre de filtre.</p>
-      ${platRows}
+      <div id="plat-prefs-rows">${_buildPlatRows()}</div>
     </div>`;
 }
 
@@ -1319,6 +1333,7 @@ async function fetchDetails(idx, gen) {
 
     const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
     (data.providers || []).forEach(p => _allPlats.add(p.name));
+    _refreshPlatPrefs();
     if (data.pays) populatePaysFilter();
 
     const curIdx = _allFilms.indexOf(film);
@@ -1452,6 +1467,7 @@ async function loadFilmsFromServer() {
           (d.details[i].providers || []).forEach(p => _allPlats.add(p.name));
         }
       });
+      _refreshPlatPrefs();
     }
     UI.populateGenreFilter();
     UI.populatePlatFilter?.();

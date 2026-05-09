@@ -94,7 +94,8 @@ let _allFilms       = [];
 let _details        = {};   // filmKey → { pays, annee, providers, ... }
 let _userdata       = {};   // allocineId → { vu, vouloir, nonInteresse }  (propre à _currentUserId)
 let _currentUserId  = null; // profil actif sur ce device
-let _allPlats       = new Set();
+let _allPlats       = new Set();          // noms connus de plateformes
+let _allPlatsTypes  = new Map();          // nom → type dominant ('svod' | 'vod')
 let _platsDone      = 0;
 let _loadGen        = 0;    // compteur de génération pour annuler les workers
 let _sortBy         = 'presse';
@@ -187,8 +188,8 @@ function loadCache() {
 
     _allFilms = JSON.parse(films);
     _details  = details ? JSON.parse(details) : {};
-    _allPlats = new Set();
-    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => _allPlats.add(p.name)));
+    _allPlats = new Set(); _allPlatsTypes = new Map();
+    Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); }));
     _refreshPlatPrefs();
 
     const d = date ? new Date(date) : null;
@@ -1066,20 +1067,29 @@ function filmMatchesMyPlatforms(det) {
   return providers.some(p => !disabled.has(p.name.toLowerCase()));
 }
 
-/** Construit le HTML des lignes plateformes pour la modale prefs. */
+/** Construit le HTML des lignes plateformes, groupées par type. */
 function _buildPlatRows() {
   const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
   const plats = [..._allPlats].sort();
   if (plats.length === 0)
     return '<p style="font-size:12px;color:var(--muted);padding:8px 0">Les plateformes apparaîtront ici après le chargement des données.</p>';
-  return plats.map(name => `
+
+  const makeRow = name => `
     <div class="pref-row">
       <div class="pref-label">${esc(name)}</div>
       <label class="toggle">
         <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform(${JSON.stringify(name)}, this.checked)">
         <span class="toggle-slider"></span>
       </label>
-    </div>`).join('');
+    </div>`;
+
+  const sectionTitle = label => `<div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:1px;margin:14px 0 4px;padding-bottom:4px;border-bottom:1px solid rgba(240,192,64,.2)">${label}</div>`;
+
+  const svod = plats.filter(n => _allPlatsTypes.get(n) === 'svod');
+  const vod  = plats.filter(n => _allPlatsTypes.get(n) !== 'svod');
+
+  return (svod.length ? sectionTitle('Streaming · abonnement') + svod.map(makeRow).join('') : '')
+       + (vod.length  ? sectionTitle('VOD · location / achat')  + vod.map(makeRow).join('')  : '');
 }
 
 /** Rafraîchit la liste des plateformes dans la modale si elle est ouverte (debouncé). */
@@ -1256,7 +1266,7 @@ function startScrape() {
       const nouveaux = pendingFilms.filter(f => f.allocineId && !prevIds.has(f.allocineId)).length;
       _lastNouveaux.films = nouveaux;
       _allFilms = pendingFilms;
-      _allPlats = new Set(); _platsDone = 0;
+      _allPlats = new Set(); _allPlatsTypes = new Map(); _platsDone = 0;
       _scrapingDone = true;
       UI.populateGenreFilter();
       UI.populatePlatFilter?.();
@@ -1300,7 +1310,7 @@ async function startPlatformLoading() {
         _platsDone++;
         const el = UI.getPlatEl(film);
         if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
-        (_details[key].providers||[]).forEach(p => _allPlats.add(p.name));
+        (_details[key].providers||[]).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
         UI.onPlatProgress(_platsDone, _allFilms.length);
         continue;
       }
@@ -1368,7 +1378,7 @@ async function fetchDetails(idx, gen) {
     if (data.allocineId && !film.allocineId) film.allocineId = data.allocineId;
 
     const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
-    (data.providers || []).forEach(p => _allPlats.add(p.name));
+    (data.providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
     _refreshPlatPrefs();
     if (data.pays) populatePaysFilter();
 
@@ -1500,7 +1510,7 @@ async function loadFilmsFromServer() {
       d.films.forEach((film, i) => {
         if (d.details[i]) {
           _details[filmKey(film)] = d.details[i];
-          (d.details[i].providers || []).forEach(p => _allPlats.add(p.name));
+          (d.details[i].providers || []).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); });
         }
       });
       _refreshPlatPrefs();

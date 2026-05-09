@@ -769,7 +769,7 @@ const VOD_SLUG_TO_NAME = {
   'amazon': 'Amazon Prime Video',
   'appletv': 'Apple TV+',
   'disney': 'Disney+',
-  'hbo-max': 'Max',
+  'hbo-max': 'HBO Max',
   'paramountplus': 'Paramount+',
   'canal-vod': 'Canal VOD',
   'arte-boutique': 'Arte Boutique',

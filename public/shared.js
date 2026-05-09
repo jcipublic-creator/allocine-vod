@@ -1033,6 +1033,8 @@ async function saveServerPrefs(prefsData) {
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
 const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, disabledPlatforms: [] };
+// Plateformes désactivées par défaut (migration one-shot v1)
+const _PLAT_DEFAULTS_V1 = ['LoveMyVOD', 'Madelen', 'Canal+/OCS'];
 
 let _prefs = { ..._PREFS_DEFAULT };
 
@@ -1041,6 +1043,14 @@ function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 function loadPrefs() {
   _prefs = { ..._PREFS_DEFAULT };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
+  // Migration one-shot : désactiver LoveMyVOD, Madelen, Canal+/OCS par défaut (une seule fois)
+  if (!_prefs._platDefaultsV1) {
+    const disabled = new Set(_prefs.disabledPlatforms || []);
+    _PLAT_DEFAULTS_V1.forEach(p => disabled.add(p));
+    _prefs.disabledPlatforms = [...disabled];
+    _prefs._platDefaultsV1 = true;
+    localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+  }
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
     Object.assign(_prefs, serverPrefs);
@@ -1134,7 +1144,14 @@ function _ensurePlatformsModal() {
     @media (min-width: 700px) {
       #platforms-modal { align-items: center; }
       #platforms-modal .prefs-sheet { border-radius: 14px; max-width: 480px; padding-bottom: 24px; }
-    }`;
+    }
+    #platforms-modal .plat-close-btn {
+      display: block; width: 100%; margin-top: 20px; padding: 13px;
+      border-radius: 10px; border: none; cursor: pointer;
+      background: var(--blue3); color: var(--text);
+      font-size: 15px; font-weight: 700; letter-spacing: 0.3px;
+    }
+    #platforms-modal .plat-close-btn:hover { background: var(--blue2, #2a3a5c); }`;
   document.head.appendChild(style);
   const modal = document.createElement('div');
   modal.id = 'platforms-modal';
@@ -1147,7 +1164,7 @@ function _ensurePlatformsModal() {
         Utilisez ensuite le filtre <strong style="color:var(--text)">📺 Mes plats</strong> dans la barre de filtre.
       </p>
       <div id="plat-prefs-rows">${_buildPlatRows()}</div>
-      <button class="info-close-btn" style="margin-top:20px" onclick="closePlatforms()">Fermer</button>
+      <button class="plat-close-btn" onclick="closePlatforms()">Fermer</button>
     </div>`;
   document.body.appendChild(modal);
 }

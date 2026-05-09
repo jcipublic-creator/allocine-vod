@@ -2278,21 +2278,18 @@ async function autoScrapeSeriesDetailsIfStale() {
           if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
           if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
         }
-        let providers = extractProviders(html);
-        if (providers.length === 0) {
-          const extraPagesSerie = [
-            `https://www.allocine.fr/series/ficheserie-${serie.allocineId}/streaming/`,
-            `https://www.allocine.fr/series/ficheserie-${serie.allocineId}/vod/`,
-          ];
-          const seenSerie = new Set();
-          for (const extraUrl of extraPagesSerie) {
-            try {
-              const extraResp = await rateLimitedFetch(extraUrl);
-              const found = extractProviders(extraResp.data).filter(p => !seenSerie.has(p.name));
-              found.forEach(p => seenSerie.add(p.name));
-              providers.push(...found);
-            } catch(e) { console.warn(`Fallback série ${extraUrl}: ${e.message}`); }
-          }
+        // Providers : on utilise UNIQUEMENT les pages dédiées /streaming/ et /vod/
+        // (la fiche principale peut contenir des titres de films scrappés comme fausses plateformes)
+        let providers = [];
+        const seenSerie = new Set();
+        for (const pType of ['streaming', 'vod']) {
+          const pUrl = `https://www.allocine.fr/series/ficheserie-${serie.allocineId}/${pType}/`;
+          try {
+            const extraResp = await rateLimitedFetch(pUrl);
+            const found = extractProviders(extraResp.data).filter(p => !seenSerie.has(p.name));
+            found.forEach(p => seenSerie.add(p.name));
+            providers.push(...found);
+          } catch(e) { console.warn(`Providers série ${pUrl}: ${e.message}`); }
         }
         const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
         if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);

@@ -1092,6 +1092,46 @@ function _refreshPlatPrefs() {
   }, 300);
 }
 
+// ─── Modale Mes plateformes (injectée dynamiquement) ──────────────────────────
+function _ensurePlatformsModal() {
+  if (document.getElementById('platforms-modal')) return;
+  const style = document.createElement('style');
+  style.textContent = `
+    #platforms-modal {
+      display: none; position: fixed; inset: 0; z-index: 500;
+      background: rgba(0,0,0,.7); align-items: flex-end; justify-content: center;
+    }
+    #platforms-modal.open { display: flex; }
+    @media (min-width: 700px) {
+      #platforms-modal { align-items: center; }
+      #platforms-modal .prefs-sheet { border-radius: 14px; max-width: 480px; padding-bottom: 24px; }
+    }`;
+  document.head.appendChild(style);
+  const modal = document.createElement('div');
+  modal.id = 'platforms-modal';
+  modal.addEventListener('click', e => { if (e.target === modal) closePlatforms(); });
+  modal.innerHTML = `
+    <div class="prefs-sheet">
+      <h3>📺 Mes plateformes</h3>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:16px;line-height:1.5">
+        Décochez les plateformes auxquelles vous n'êtes pas abonné.<br>
+        Utilisez ensuite le filtre <strong style="color:var(--text)">📺 Mes plats</strong> dans la barre de filtre.
+      </p>
+      <div id="plat-prefs-rows">${_buildPlatRows()}</div>
+      <button class="info-close-btn" style="margin-top:20px" onclick="closePlatforms()">Fermer</button>
+    </div>`;
+  document.body.appendChild(modal);
+}
+
+function openPlatforms() {
+  _ensurePlatformsModal();
+  document.getElementById('plat-prefs-rows').innerHTML = _buildPlatRows();
+  document.getElementById('platforms-modal').classList.add('open');
+}
+function closePlatforms() {
+  document.getElementById('platforms-modal')?.classList.remove('open');
+}
+
 function openPrefs() { renderPrefs(); document.getElementById('prefs-modal').classList.add('open'); }
 function closePrefs() { document.getElementById('prefs-modal').classList.remove('open'); }
 function renderPrefs() {
@@ -1116,11 +1156,7 @@ function renderPrefs() {
       ${row('hideVus',          'Masquer les déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
     </div>
-    <div class="prefs-section">
-      <div class="prefs-section-title">Mes plateformes</div>
-      <p style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Décochez les plateformes auxquelles vous n'êtes pas abonné. Utilisez ensuite le filtre <strong style="color:var(--text)">📺 Mes plats</strong> dans la barre de filtre.</p>
-      <div id="plat-prefs-rows">${_buildPlatRows()}</div>
-    </div>`;
+    `;
 }
 
 // ─── Base de données utilisateur ──────────────────────────────────────────────

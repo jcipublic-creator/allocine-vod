@@ -863,6 +863,9 @@ function applyFiltersResponsive() {
     const matchMyPlats = filmMatchesMyPlatforms(_details[filmKey(film)]);
     const ok = matchQualite && matchDecade && matchGenre && matchType && matchPays && matchPlat && matchListe && isBlockbuster && matchMyPlats;
     card.style.display = ok ? '' : 'none';
+    // Re-rendre les badges à chaque filtre (pour refléter les prefs plateformes à jour)
+    const platEl = document.getElementById(`card-plat-${i}`);
+    if (platEl && det.providers) platEl.innerHTML = renderPlatBadges(det.providers);
     if (ok) visible++;
   });
 

@@ -1026,6 +1026,9 @@ function applySeriesFilters() {
     const matchMyPlats = filmMatchesMyPlatforms(_seriesDet[s.allocineId]);
     const ok = matchGenre && matchAnnee && matchDocAnim && matchStatut && matchType && matchListe && matchMyPlats;
     card.style.display = ok ? '' : 'none';
+    // Re-rendre les badges à chaque filtre (pour refléter les prefs plateformes à jour)
+    const platEl = document.getElementById(`card-plat-${i}`);
+    if (platEl && det.providers) platEl.innerHTML = renderPlatBadges(det.providers);
     if (ok) visible++;
   });
 

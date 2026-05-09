@@ -77,9 +77,11 @@ async function fetchPlatforms() {
     const r = await fetch('/api/platforms', { signal: AbortSignal.timeout(5000) });
     if (!r.ok) return;
     const d = await r.json();
+    // /api/platforms est la source autoritaire : on écrase toujours les types locaux
+    // pour garantir un affichage identique sur toutes les pages
     (d.platforms || []).forEach(p => {
       _allPlats.add(p.name);
-      if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type || 'vod');
+      _allPlatsTypes.set(p.name, p.type || 'vod');
     });
     _refreshPlatPrefs();
   } catch(e) { /* silencieux */ }

@@ -1043,25 +1043,28 @@ function _getPlatDisabled() {
   try {
     const raw = localStorage.getItem(_PLAT_DISABLED_LS);
     if (raw === null) {
-      // Première visite : appliquer les valeurs par défaut
-      _platDisabledCache = new Set(_PLAT_DEFAULTS);
-      localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify(_PLAT_DEFAULTS));
+      // Première visite : appliquer les valeurs par défaut (stockés en lowercase)
+      _platDisabledCache = new Set(_PLAT_DEFAULTS.map(p => p.toLowerCase()));
+      localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify([..._platDisabledCache]));
     } else {
-      _platDisabledCache = new Set(JSON.parse(raw));
+      // Toujours normaliser en lowercase au chargement (corrige l'ancien format casse originale)
+      _platDisabledCache = new Set(JSON.parse(raw).map(p => p.toLowerCase()));
     }
-  } catch(e) { _platDisabledCache = new Set(_PLAT_DEFAULTS); }
+  } catch(e) { _platDisabledCache = new Set(_PLAT_DEFAULTS.map(p => p.toLowerCase())); }
   return _platDisabledCache;
 }
 
 function _setPlatDisabled(set) {
-  _platDisabledCache = set;
+  _platDisabledCache = set; // déjà en lowercase
   localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify([...set]));
 }
 
 // Sync inter-onglets : si une autre page modifie vod_plat_disabled, on se met à jour
 window.addEventListener('storage', e => {
   if (e.key !== _PLAT_DISABLED_LS) return;
-  _platDisabledCache = e.newValue ? new Set(JSON.parse(e.newValue)) : new Set(_PLAT_DEFAULTS);
+  _platDisabledCache = e.newValue
+    ? new Set(JSON.parse(e.newValue).map(p => p.toLowerCase()))
+    : new Set(_PLAT_DEFAULTS.map(p => p.toLowerCase()));
   _refreshPlatPrefs();
   applyFilters();
 });
@@ -1092,7 +1095,8 @@ function setPref(key, val) { _prefs[key] = val; savePrefs(); applyFilters(); }
 /** Active/désactive une plateforme dans les prefs (toggle depuis la modale). */
 function togglePlatform(name, enabled) {
   const disabled = _getPlatDisabled();
-  if (enabled) disabled.delete(name); else disabled.add(name);
+  const key = name.toLowerCase();
+  if (enabled) disabled.delete(key); else disabled.add(key);
   _setPlatDisabled(disabled);
   // Re-rendre les badges plateformes sur toutes les cartes films
   _allFilms.forEach((film, i) => {

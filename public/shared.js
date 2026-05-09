@@ -206,7 +206,8 @@ function loadCache() {
 
     _allFilms = JSON.parse(films);
     _details  = details ? JSON.parse(details) : {};
-    _allPlats = new Set(); _allPlatsTypes = new Map();
+    // On AJOUTE sans reset : fetchPlatforms() fournit la liste unifiée films+séries
+    // (reset ici casserait la cohérence inter-pages)
     Object.values(_details).forEach(d => (d?.providers||[]).forEach(p => { _allPlats.add(p.name); if (!_allPlatsTypes.has(p.name)) _allPlatsTypes.set(p.name, p.type); }));
     _refreshPlatPrefs();
 
@@ -1304,6 +1305,7 @@ function startScrape() {
       _allFilms = pendingFilms;
       _allPlats = new Set(); _allPlatsTypes = new Map(); _platsDone = 0;
       _scrapingDone = true;
+      fetchPlatforms(); // réinjecte la liste unifiée films+séries après reset
       UI.populateGenreFilter();
       UI.populatePlatFilter?.();
       populatePaysFilter();

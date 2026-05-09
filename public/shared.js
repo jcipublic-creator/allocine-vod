@@ -1058,8 +1058,16 @@ function togglePlatform(name, enabled) {
   const disabled = new Set(_prefs.disabledPlatforms || []);
   if (enabled) disabled.delete(name); else disabled.add(name);
   _prefs.disabledPlatforms = [...disabled];
+  console.log('[plat] togglePlatform', name, enabled, 'disabled:', [..._prefs.disabledPlatforms]);
   savePrefs();
   applyFilters();
+  // Vérification : compte combien de films passent le filtre
+  const sample = _allFilms.slice(0, 5).map(f => {
+    const det = _details[filmKey(f)];
+    const match = filmMatchesMyPlatforms(det);
+    return `${f.titre?.slice(0,20)} → providers:${det?.providers?.map(p=>p.name).join(',')||'none'} → ${match?'SHOW':'HIDE'}`;
+  });
+  console.log('[plat] sample films:', sample);
 }
 
 /**

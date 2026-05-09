@@ -927,6 +927,22 @@ function parseFilms(html) {
  * Filtre : notePresse + noteSpect > 7 (les deux notes doivent être renseignées).
  * @param  {Array}  films
  */
+/**
+ * Préserve ou initialise la date d'entrée dans la liste pour chaque film/série.
+ * - Si l'item existait dans l'ancien cache → conserve son dateEntree
+ * - Sinon → dateEntree = maintenant (première apparition dans la liste)
+ * @param {Array} newItems   Films/séries issus du nouveau scrape
+ * @param {Array} prevItems  Cache précédent
+ */
+function applyDateEntree(newItems, prevItems) {
+  const now = new Date().toISOString();
+  const prevMap = new Map((prevItems || []).map(f => [f.allocineId, f.dateEntree]));
+  newItems.forEach(f => {
+    f.dateEntree = (f.allocineId && prevMap.get(f.allocineId)) || f.dateEntree || now;
+  });
+  return newItems;
+}
+
 function dedupeAndSortFilms(films) {
   const seen = new Set();
   return films
@@ -1570,7 +1586,7 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
     }
   }
 
-  const result = dedupeAndSortFilms(allFilms);
+  const result = applyDateEntree(dedupeAndSortFilms(allFilms), cachedFilms);
   cachedFilms  = result;
   await saveLastScrape();
   if (redis) {
@@ -1952,7 +1968,7 @@ async function autoScrapeFilmsListIfStale() {
         await sleep(1500 + Math.random() * 500);
       }
     }
-    const result = dedupeAndSortFilms(allFilms);
+    const result = applyDateEntree(dedupeAndSortFilms(allFilms), cachedFilms);
     cachedFilms  = result;
     await saveLastScrape();
     if (redis) { try { await redis.set('films', JSON.stringify(result)); } catch(e) { console.warn('[auto] Redis films:', e.message); } }
@@ -2076,7 +2092,7 @@ async function autoScrapeSeriesListIfStale() {
         await sleep(1500 + Math.random() * 500);
       }
     }
-    const result     = dedupeAndSortSeries(allSeries);
+    const result     = applyDateEntree(dedupeAndSortSeries(allSeries), cachedSeries);
     cachedSeries     = result;
     lastSeriesScrape = new Date().toISOString();
     if (redis) {
@@ -2605,7 +2621,7 @@ app.get('/api/series/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000)
     }
   }
 
-  const result      = dedupeAndSortSeries(allSeries);
+  const result      = applyDateEntree(dedupeAndSortSeries(allSeries), cachedSeries);
   cachedSeries      = result;
   lastSeriesScrape  = new Date().toISOString();
   if (redis) {
@@ -3388,7 +3404,7 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
     console.log(`[bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
     allFilms.push(...newBoxOffice);
 
-    const result   = dedupeAndSortBestever(allFilms);
+    const result   = applyDateEntree(dedupeAndSortBestever(allFilms), cachedBestever);
     cachedBestever = result;
     lastBesteverScrape = new Date().toISOString();
     if (redis) {
@@ -3481,7 +3497,7 @@ async function autoScrapeBesteverListIfStale() {
     console.log(`[auto][bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
     allFilms.push(...newBoxOffice);
 
-    const result       = dedupeAndSortBestever(allFilms);
+    const result       = applyDateEntree(dedupeAndSortBestever(allFilms), cachedBestever);
     cachedBestever     = result;
     lastBesteverScrape = new Date().toISOString();
     if (redis) {

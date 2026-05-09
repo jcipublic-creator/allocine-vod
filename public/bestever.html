@@ -142,6 +142,7 @@ body {
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
 .card-orig  { font-size: 10px; color: var(--muted); font-style: italic; margin-top: 1px; }
+.badge-new  { display: inline-block; font-size: 9px; font-weight: 700; letter-spacing: .4px; color: #000; background: var(--gold); border-radius: 4px; padding: 1px 5px; margin-left: 6px; vertical-align: middle; text-transform: uppercase; }
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew strong { color: var(--text); font-weight: 600; }
@@ -522,6 +523,7 @@ body {
   </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-blockbuster" onchange="applyFilters()"><span>🎬 Blockbusters</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
+  <label class="filter-toggle"><input type="checkbox" id="fil-nouveau" onchange="applyFilters()"><span>🆕 Nouveautés</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
     <option value="decade">↓ Décennie</option>
     <option value="presse">↓ Note presse</option>
@@ -734,12 +736,13 @@ function renderCards(films) {
       : `<div class="card-poster"><div class="card-poster-ph">🎬</div></div>`;
     const yearTxt = f.anneeSortie || f.anneeReelle || '';
     const yearPill = yearTxt ? `<span class="decade-pill" id="decade-pill-${i}">${esc(yearTxt)}</span>` : `<span id="decade-pill-${i}"></span>`;
+    const isNew = f.dateEntree && (Date.now() - new Date(f.dateEntree).getTime()) < 8 * 24 * 60 * 60 * 1000;
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">
-      <div class="card-title">${esc(f.titre)}${yearPill}</div>
+      <div class="card-title">${esc(f.titre)}${isNew ? '<span class="badge-new">Nouveau</span>' : ''}${yearPill}</div>
       ${f.titreOriginal ? `<div class="card-orig">${esc(f.titreOriginal)}</div>` : ''}
       <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}${f.duree ? ` <span style="opacity:.75;white-space:nowrap">· ${esc(f.duree)}</span>` : ''}</div>
       ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong><span class="card-pays" id="card-pays-${i}"></span></div>` : `<div class="card-crew"><span class="card-pays" id="card-pays-${i}"></span></div>`}
@@ -805,6 +808,7 @@ function applyFiltersResponsive() {
   const paysFilter      = document.getElementById('fil-pays').value;
   const onlyVoir        = document.getElementById('fil-only-voir')?.checked;
   const onlyBlockbuster = document.getElementById('fil-blockbuster')?.checked;
+  const onlyNouveau     = document.getElementById('fil-nouveau')?.checked;
   const platFilter   = (document.getElementById('fil-plat')?.value || '').toLowerCase();
 
   const BB_ACTION_GENRES = ['action','aventure','science-fiction'];
@@ -835,7 +839,8 @@ function applyFiltersResponsive() {
     const matchPlat   = !platFilter  || providers.some(p => p.includes(platFilter));
     const matchListe  = (!_prefs.hideVus           || !ud.vu)
                      && (!_prefs.hideNonInteresse  || !ud.nonInteresse)
-                     && (!onlyVoir                 || !!ud.vouloir);
+                     && (!onlyVoir                 || !!ud.vouloir)
+                     && (!onlyNouveau              || (film.dateEntree && (Date.now() - new Date(film.dateEntree).getTime()) < 8 * 24 * 60 * 60 * 1000));
     const spect  = film.noteSpect  ?? 0;
     const presse = film.notePresse ?? 0;
     const hasDrame            = genres.some(g => /dram/i.test(g));

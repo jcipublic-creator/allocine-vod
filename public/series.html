@@ -441,6 +441,11 @@ body {
     <option value="encours">En cours</option>
     <option value="terminee">Terminée</option>
   </select>
+  <select id="fil-type" onchange="applySeriesFilters()">
+    <option value="">Streaming &amp; VOD</option>
+    <option value="svod">Streaming</option>
+    <option value="vod">VOD seulement</option>
+  </select>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir"   onchange="applySeriesFilters()"><span>🔖 À voir</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-only-suivre" onchange="applySeriesFilters()"><span>⏳ À suivre</span></label>
   <label class="filter-toggle"><input type="checkbox" id="fil-nouveau"     onchange="applySeriesFilters()"><span>🆕 Nouveautés</span></label>
@@ -943,6 +948,7 @@ function applySeriesFilters() {
   const genreFilter  = document.getElementById('fil-genre').value;
   const anneeFilter  = document.getElementById('fil-annee').value;
   const statutFilter = document.getElementById('fil-statut').value;
+  const typeFilter   = document.getElementById('fil-type')?.value || '';
   const onlyVoir     = document.getElementById('fil-only-voir')?.checked;
   const onlySuivre   = document.getElementById('fil-only-suivre')?.checked;
   const onlyNouveau  = document.getElementById('fil-nouveau')?.checked;
@@ -953,6 +959,7 @@ function applySeriesFilters() {
     if (!card) return;
 
     const det      = _seriesDet[s.allocineId] || {};
+    const provObjs = det.providers || [];
     const genreStr = (s.genre || '').toLowerCase();
     const genres   = genreStr.split(',').map(g => g.trim()).filter(Boolean);
     const ud       = _userdata[s.allocineId ? `s:${s.allocineId}` : ''] || {};
@@ -972,6 +979,11 @@ function applySeriesFilters() {
     const matchStatut = !statutFilter ||
       (statutFilter === 'encours'  && statut === 'En cours') ||
       (statutFilter === 'terminee' && statut === 'Terminée');
+    // Filtre type (streaming / VOD)
+    const matchType = !typeFilter
+      || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
+      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat')
+                                && !provObjs.some(p => p.type === 'svod'));
     // Filtre liste personnelle
     const matchListe = (!_prefs.hideVus                 || !ud.vu) &&
                        (!_prefs.hideNonInteresse       || !ud.nonInteresse) &&
@@ -979,7 +991,7 @@ function applySeriesFilters() {
                        (!onlySuivre               || !!ud.asuivre) &&
                        (!onlyNouveau              || (s.dateEntree && (Date.now() - new Date(s.dateEntree).getTime()) < 8 * 24 * 60 * 60 * 1000));
 
-    const ok = matchGenre && matchAnnee && matchDocAnim && matchStatut && matchListe;
+    const ok = matchGenre && matchAnnee && matchDocAnim && matchStatut && matchType && matchListe;
     card.style.display = ok ? '' : 'none';
     if (ok) visible++;
   });

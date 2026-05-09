@@ -839,7 +839,8 @@ function applyFiltersResponsive() {
                       && (_prefs.showAnimations    || !genres.some(g => g.includes('animation')));
     const matchType    = !typeFilter
                       || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
-                      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat'));
+                      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat')
+                                                && !provObjs.some(p => p.type === 'svod'));
     const matchPays    = !paysFilter  || filmPays.some(p => p === paysFilter);
     const matchPlat    = !platFilter  || providers.some(p => p.includes(platFilter));
     const matchListe   = (!_prefs.hideVus           || !ud.vu)

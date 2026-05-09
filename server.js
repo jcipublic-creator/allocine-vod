@@ -816,6 +816,7 @@ function extractProviders(html) {
   $('.provider-tile').each((_, tile) => {
     const $tile = $(tile);
     if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
+    if ($tile.hasClass('meta-tile')) return; // tile promotionnel Canal (meta-mycanal) — pas un vrai provider
     const $primary = $tile.find('.provider-tile-primary');
     const nameText = $primary.text().trim();
     const nameAlt  = $primary.find('img').attr('alt') || '';

@@ -154,7 +154,9 @@ function renderPlatBadges(providers) {
   if (!providers || providers.length === 0) return '<span class="pb-none">Non disponible</span>';
   const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name));
   if (filtered.length === 0) return '<span class="pb-none">Non disponible</span>';
-  return filtered.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('');
+  const ORDER = { svod: 0, location: 1, achat: 2, vod: 3 };
+  const sorted = [...filtered].sort((a, b) => (ORDER[a.type] ?? 9) - (ORDER[b.type] ?? 9));
+  return sorted.map(p => `<span class="pb ${esc(p.type)}">${esc(p.name)}</span>`).join('');
 }
 
 // ─── Cache localStorage ───────────────────────────────────────────────────────

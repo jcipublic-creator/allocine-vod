@@ -1031,7 +1031,7 @@ async function saveServerPrefs(prefsData) {
 }
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
-const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, filterMyPlatforms: false, disabledPlatforms: [] };
+const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, disabledPlatforms: [] };
 
 let _prefs = { ..._PREFS_DEFAULT };
 
@@ -1040,12 +1040,10 @@ function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 function loadPrefs() {
   _prefs = { ..._PREFS_DEFAULT };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
-  _syncMyPlatformsCheckbox();
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
     Object.assign(_prefs, serverPrefs);
     localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
-    _syncMyPlatformsCheckbox();
     applyFilters();
   });
 }
@@ -1053,13 +1051,7 @@ function savePrefs() {
   localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
   saveServerPrefs(_prefs);
 }
-function setPref(key, val) { _prefs[key] = val; savePrefs(); _syncMyPlatformsCheckbox(); applyFilters(); }
-
-/** Synchronise le checkbox "Mes plateformes" de la barre de filtre avec _prefs. */
-function _syncMyPlatformsCheckbox() {
-  const cb = document.getElementById('fil-my-plats');
-  if (cb) cb.checked = !!_prefs.filterMyPlatforms;
-}
+function setPref(key, val) { _prefs[key] = val; savePrefs(); applyFilters(); }
 
 /** Active/désactive une plateforme dans les prefs (toggle depuis la modale). */
 function togglePlatform(name, enabled) {
@@ -1076,12 +1068,13 @@ function togglePlatform(name, enabled) {
  * @returns {boolean}
  */
 function filmMatchesMyPlatforms(det) {
-  if (!_prefs.filterMyPlatforms) return true;
+  const disabled = _prefs.disabledPlatforms || [];
+  if (disabled.length === 0) return true;           // aucune restriction → tout afficher
   if (det === undefined || det === null) return true; // détails pas encore chargés → optimiste
   const providers = det.providers || [];
-  if (providers.length === 0) return false;
-  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
-  return providers.some(p => !disabled.has(p.name.toLowerCase()));
+  if (providers.length === 0) return true;           // pas de données plateforme → ne pas masquer
+  const disabledSet = new Set(disabled.map(p => p.toLowerCase()));
+  return providers.some(p => !disabledSet.has(p.name.toLowerCase()));
 }
 
 /** Construit le HTML des lignes plateformes, groupées par type. */

@@ -342,6 +342,25 @@ body {
   .filter-bar { padding: 10px 20px; }
   .stats { padding: 6px 20px; }
 }
+/* ── Modal plateformes (partagé avec shared.js) ─────────────────────────── */
+.prefs-sheet {
+  background: #0f2540; border-radius: 18px 18px 0 0;
+  padding: 20px 20px calc(20px + var(--sb)); width: 100%;
+  max-height: 75vh; overflow-y: auto;
+}
+.prefs-sheet h3 { color: var(--gold); font-size: 15px; margin-bottom: 16px; }
+.prefs-section { margin-bottom: 20px; }
+.prefs-section-title { font-size: 11px; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; margin-bottom: 4px; }
+.pref-row { display: flex; justify-content: space-between; align-items: center; padding: 13px 0; border-bottom: 1px solid rgba(42,79,112,.3); }
+.pref-row:last-child { border-bottom: none; }
+.pref-label { font-size: 14px; color: var(--text); }
+.pref-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.toggle { position: relative; width: 44px; height: 26px; flex-shrink: 0; }
+.toggle input { opacity: 0; width: 0; height: 0; position: absolute; }
+.toggle-slider { position: absolute; inset: 0; border-radius: 26px; background: #2a4f70; cursor: pointer; transition: background .2s; }
+.toggle input:checked + .toggle-slider { background: var(--accent, #2a9d8f); }
+.toggle-slider::before { content:''; position:absolute; width:20px; height:20px; left:3px; top:3px; border-radius:50%; background:#fff; transition:transform .2s; }
+.toggle input:checked + .toggle-slider::before { transform: translateX(18px); }
 </style>
 </head>
 <body>

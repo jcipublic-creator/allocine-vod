@@ -170,7 +170,7 @@ function flagFor(pays) {
 
 function renderPlatBadges(providers) {
   if (!providers || providers.length === 0) return '<span class="pb-none">Non disponible</span>';
-  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  const disabled = _getPlatDisabled();
   const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name) && !disabled.has(p.name.toLowerCase()));
   if (filtered.length === 0) return '<span class="pb-none">Non disponible</span>';
   const ORDER = { svod: 0, location: 1, achat: 2, vod: 3 };
@@ -1032,10 +1032,34 @@ async function saveServerPrefs(prefsData) {
   } catch(e) { console.warn('Erreur sauvegarde prefs serveur:', e.message); }
 }
 
-// ─── Préférences ──────────────────────────────────────────────────────────────
-const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, disabledPlatforms: [] };
-// Plateformes désactivées par défaut (migration one-shot v1)
-const _PLAT_DEFAULTS_V1 = ['LoveMyVOD', 'Madelen', 'Canal+/OCS'];
+// ─── Préférences plateformes (clé fixe, indépendant du userId et du serveur) ──
+// Stockage séparé de _prefs pour éviter les race conditions avec le sync serveur.
+const _PLAT_DISABLED_LS  = 'vod_plat_disabled';
+const _PLAT_DEFAULTS     = ['LoveMyVOD', 'Madelen', 'Canal+/OCS'];
+let   _platDisabledCache = null; // cache mémoire, initialisé à la première lecture
+
+function _getPlatDisabled() {
+  if (_platDisabledCache !== null) return _platDisabledCache;
+  try {
+    const raw = localStorage.getItem(_PLAT_DISABLED_LS);
+    if (raw === null) {
+      // Première visite : appliquer les valeurs par défaut
+      _platDisabledCache = new Set(_PLAT_DEFAULTS);
+      localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify(_PLAT_DEFAULTS));
+    } else {
+      _platDisabledCache = new Set(JSON.parse(raw));
+    }
+  } catch(e) { _platDisabledCache = new Set(_PLAT_DEFAULTS); }
+  return _platDisabledCache;
+}
+
+function _setPlatDisabled(set) {
+  _platDisabledCache = set;
+  localStorage.setItem(_PLAT_DISABLED_LS, JSON.stringify([...set]));
+}
+
+// ─── Préférences générales ─────────────────────────────────────────────────────
+const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
 
 let _prefs = { ..._PREFS_DEFAULT };
 
@@ -1044,14 +1068,6 @@ function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 function loadPrefs() {
   _prefs = { ..._PREFS_DEFAULT };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
-  // Migration one-shot : désactiver LoveMyVOD, Madelen, Canal+/OCS par défaut (une seule fois)
-  if (!_prefs._platDefaultsV1) {
-    const disabled = new Set(_prefs.disabledPlatforms || []);
-    _PLAT_DEFAULTS_V1.forEach(p => disabled.add(p));
-    _prefs.disabledPlatforms = [...disabled];
-    _prefs._platDefaultsV1 = true;
-    localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
-  }
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
     Object.assign(_prefs, serverPrefs);
@@ -1067,10 +1083,9 @@ function setPref(key, val) { _prefs[key] = val; savePrefs(); applyFilters(); }
 
 /** Active/désactive une plateforme dans les prefs (toggle depuis la modale). */
 function togglePlatform(name, enabled) {
-  const disabled = new Set(_prefs.disabledPlatforms || []);
+  const disabled = _getPlatDisabled();
   if (enabled) disabled.delete(name); else disabled.add(name);
-  _prefs.disabledPlatforms = [...disabled];
-  savePrefs();
+  _setPlatDisabled(disabled);
   // Re-rendre les badges plateformes sur toutes les cartes films
   _allFilms.forEach((film, i) => {
     const det = _details[filmKey(film)];
@@ -1088,18 +1103,17 @@ function togglePlatform(name, enabled) {
  * @returns {boolean}
  */
 function filmMatchesMyPlatforms(det) {
-  const disabled = _prefs.disabledPlatforms || [];
-  if (disabled.length === 0) return true;           // aucune restriction → tout afficher
+  const disabled = _getPlatDisabled();
+  if (disabled.size === 0) return true;              // aucune restriction → tout afficher
   if (det === undefined || det === null) return true; // détails pas encore chargés → optimiste
   const providers = det.providers || [];
   if (providers.length === 0) return true;           // pas de données plateforme → ne pas masquer
-  const disabledSet = new Set(disabled.map(p => p.toLowerCase()));
-  return providers.some(p => !disabledSet.has(p.name.toLowerCase()));
+  return providers.some(p => !disabled.has(p.name.toLowerCase()));
 }
 
 /** Construit le HTML des lignes plateformes, groupées par type. */
 function _buildPlatRows() {
-  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  const disabled = _getPlatDisabled();
   const plats = [..._allPlats].sort();
   if (plats.length === 0)
     return '<p style="font-size:12px;color:var(--muted);padding:8px 0">Les plateformes apparaîtront ici après le chargement des données.</p>';

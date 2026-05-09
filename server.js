@@ -1702,34 +1702,22 @@ app.get('/api/details', async (req, res) => {
     const synopsis = $film('.synopsis-txt, .content-txt, [class*="synopsis"] p, .ovw-synopsis p')
       .first().text().trim().substring(0, 500) || null;
 
-    let providers = extractProviders(filmResp.data);
-
-    // Fallback : si la fiche principale n'a pas de providers (contenu JS-only),
-    // on fetche les deux pages dédiées qui ont le HTML statique :
+    // Providers : toujours depuis les pages dédiées (jamais depuis la fiche principale
+    // qui peut contenir des titres de films scrappés comme fausses plateformes)
     //   /streaming/       → SVOD (abonnements : Netflix, Disney+…)
     //   /telecharger-vod/ → achat / location (Pathé, Rakuten, Orange…)
-    if (providers.length === 0) {
-      console.log(`[providers] Film ${resolvedId} → 0 sur page principale, tentative pages dédiées…`);
-      const extraPages = [
-        `https://www.allocine.fr/film/fichefilm-${resolvedId}/streaming/`,
-        `https://www.allocine.fr/film/fichefilm-${resolvedId}/telecharger-vod/`,
-      ];
-      const seen = new Set();
-      for (const url of extraPages) {
-        try {
-          const resp = await rateLimitedFetch(url);
-          const htmlSize = resp.data?.length || 0;
-          const rawTiles = (resp.data?.match(/provider-tile/g) || []).length;
-          const found = extractProviders(resp.data).filter(p => !seen.has(p.name));
-          console.log(`[providers] ${url} → HTML:${htmlSize}b tiles_raw:${rawTiles} found:${found.length} [${found.map(p=>p.name).join(', ')}]`);
-          found.forEach(p => seen.add(p.name));
-          providers.push(...found);
-        } catch(e) {
-          console.warn(`[providers] Fallback ${url} échoué:`, e.message);
-        }
-      }
-      console.log(`[providers] Total après fallback film ${resolvedId}: ${providers.length}`);
+    let providers = [];
+    const seenProv = new Set();
+    for (const [pType, pPath] of [['streaming', 'streaming'], ['vod', 'telecharger-vod']]) {
+      const pUrl = `https://www.allocine.fr/film/fichefilm-${resolvedId}/${pPath}/`;
+      try {
+        const resp = await rateLimitedFetch(pUrl);
+        const found = extractProviders(resp.data).filter(p => !seenProv.has(p.name));
+        found.forEach(p => seenProv.add(p.name));
+        providers.push(...found);
+      } catch(e) { console.warn(`[providers] ${pUrl} échoué:`, e.message); }
     }
+    console.log(`[providers] Film ${resolvedId}: ${providers.map(p=>`${p.name}(${p.type})`).join(', ') || '—'}`);
 
     const data = { pays, annee, duree, synopsis, allocineId: resolvedId, allocineUrl: filmUrl, providers };
 
@@ -2139,21 +2127,17 @@ async function autoScrapeFilmsDetailsIfStale() {
             if (lines[i] === 'Année de production') annee = lines[i + 1];
             if (pays && annee) break;
           }
-          let providers = extractProviders(html);
-          if (providers.length === 0) {
-            const extraPagesFilm = [
-              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/streaming/`,
-              `https://www.allocine.fr/film/fichefilm-${film.allocineId}/telecharger-vod/`,
-            ];
-            const seenFilm = new Set();
-            for (const extraUrl of extraPagesFilm) {
-              try {
-                const extraResp = await rateLimitedFetch(extraUrl);
-                const found = extractProviders(extraResp.data).filter(p => !seenFilm.has(p.name));
-                found.forEach(p => seenFilm.add(p.name));
-                providers.push(...found);
-              } catch(e) { console.warn(`Fallback film ${extraUrl}: ${e.message}`); }
-            }
+          // Providers : toujours depuis les pages dédiées uniquement
+          let providers = [];
+          const seenFilm = new Set();
+          for (const pPath of ['streaming', 'telecharger-vod']) {
+            const pUrl = `https://www.allocine.fr/film/fichefilm-${film.allocineId}/${pPath}/`;
+            try {
+              const extraResp = await rateLimitedFetch(pUrl);
+              const found = extractProviders(extraResp.data).filter(p => !seenFilm.has(p.name));
+              found.forEach(p => seenFilm.add(p.name));
+              providers.push(...found);
+            } catch(e) { console.warn(`[auto] Providers film ${pUrl}: ${e.message}`); }
           }
           const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
           if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);

@@ -830,7 +830,7 @@ function applyFiltersResponsive() {
     const providers = provObjs.map(p => p.name.toLowerCase());
     const ud = _userdata[film.allocineId] || {};
     // Providers actifs (hors plateformes désactivées dans les prefs)
-    const _disabledSet = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+    const _disabledSet = _getPlatDisabled();
     const activeProvs  = provObjs.filter(p => !_disabledSet.has(p.name.toLowerCase()));
 
     const matchDecade = !decadeFilter || parseInt(film.decade) >= parseInt(decadeFilter);

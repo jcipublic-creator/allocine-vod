@@ -1012,17 +1012,21 @@ async function saveServerPrefs(prefsData) {
 }
 
 // ─── Préférences ──────────────────────────────────────────────────────────────
-let _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+const _PREFS_DEFAULT = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true, filterMyPlatforms: false, disabledPlatforms: [] };
+
+let _prefs = { ..._PREFS_DEFAULT };
 
 function getPrefsKey() { return 'vod_prefs_' + (_currentUserId || 'anon'); }
 
 function loadPrefs() {
-  _prefs = { showDocumentaires: false, showAnimations: false, hideVus: true, hideNonInteresse: true };
+  _prefs = { ..._PREFS_DEFAULT };
   try { Object.assign(_prefs, JSON.parse(localStorage.getItem(getPrefsKey()) || '{}')); } catch(e) {}
+  _syncMyPlatformsCheckbox();
   loadServerPrefs().then(serverPrefs => {
     if (!serverPrefs || Object.keys(serverPrefs).length === 0) return;
     Object.assign(_prefs, serverPrefs);
     localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
+    _syncMyPlatformsCheckbox();
     applyFilters();
   });
 }
@@ -1030,7 +1034,36 @@ function savePrefs() {
   localStorage.setItem(getPrefsKey(), JSON.stringify(_prefs));
   saveServerPrefs(_prefs);
 }
-function setPref(key, val) { _prefs[key] = val; savePrefs(); applyFilters(); }
+function setPref(key, val) { _prefs[key] = val; savePrefs(); _syncMyPlatformsCheckbox(); applyFilters(); }
+
+/** Synchronise le checkbox "Mes plateformes" de la barre de filtre avec _prefs. */
+function _syncMyPlatformsCheckbox() {
+  const cb = document.getElementById('fil-my-plats');
+  if (cb) cb.checked = !!_prefs.filterMyPlatforms;
+}
+
+/** Active/désactive une plateforme dans les prefs (toggle depuis la modale). */
+function togglePlatform(name, enabled) {
+  const disabled = new Set(_prefs.disabledPlatforms || []);
+  if (enabled) disabled.delete(name); else disabled.add(name);
+  _prefs.disabledPlatforms = [...disabled];
+  savePrefs();
+  applyFilters();
+}
+
+/**
+ * Vérifie si un film/série passe le filtre "Mes plateformes".
+ * @param {object|undefined} det — entrée _details ou _seriesDet (undefined = pas encore chargé)
+ * @returns {boolean}
+ */
+function filmMatchesMyPlatforms(det) {
+  if (!_prefs.filterMyPlatforms) return true;
+  if (det === undefined || det === null) return true; // détails pas encore chargés → optimiste
+  const providers = det.providers || [];
+  if (providers.length === 0) return false;
+  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  return providers.some(p => !disabled.has(p.name.toLowerCase()));
+}
 
 function openPrefs() { renderPrefs(); document.getElementById('prefs-modal').classList.add('open'); }
 function closePrefs() { document.getElementById('prefs-modal').classList.remove('open'); }
@@ -1043,6 +1076,20 @@ function renderPrefs() {
         <span class="toggle-slider"></span>
       </label>
     </div>`;
+
+  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  const plats = [..._allPlats].sort();
+  const platRows = plats.length === 0
+    ? '<p style="font-size:12px;color:var(--muted);padding:8px 0">Les plateformes s\'affichent après le chargement des données.</p>'
+    : plats.map(name => `
+    <div class="pref-row">
+      <div class="pref-label">${esc(name)}</div>
+      <label class="toggle">
+        <input type="checkbox" ${!disabled.has(name.toLowerCase()) ? 'checked' : ''} onchange="togglePlatform('${name.replace(/'/g,"\\'")}', this.checked)">
+        <span class="toggle-slider"></span>
+      </label>
+    </div>`).join('');
+
   document.getElementById('prefs-content').innerHTML = `
     <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.5">Ces réglages s'appliquent aux 3 sections : Films, Séries et Best ever.</p>
     <div class="prefs-section">
@@ -1054,6 +1101,11 @@ function renderPrefs() {
       <div class="prefs-section-title">Ma liste</div>
       ${row('hideVus',          'Masquer les déjà vus')}
       ${row('hideNonInteresse', 'Masquer les "Non intéressé"')}
+    </div>
+    <div class="prefs-section">
+      <div class="prefs-section-title">Mes plateformes</div>
+      <p style="font-size:11px;color:var(--muted);margin-bottom:8px;line-height:1.5">Décochez les plateformes auxquelles vous n'êtes pas abonné. Utilisez ensuite le filtre <strong style="color:var(--text)">📺 Mes plats</strong> dans la barre de filtre.</p>
+      ${platRows}
     </div>`;
 }
 

@@ -170,7 +170,8 @@ function flagFor(pays) {
 
 function renderPlatBadges(providers) {
   if (!providers || providers.length === 0) return '<span class="pb-none">Non disponible</span>';
-  const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name));
+  const disabled = new Set((_prefs.disabledPlatforms || []).map(p => p.toLowerCase()));
+  const filtered = providers.filter(p => !/dvd|blu.ray/i.test(p.name) && !disabled.has(p.name.toLowerCase()));
   if (filtered.length === 0) return '<span class="pb-none">Non disponible</span>';
   const ORDER = { svod: 0, location: 1, achat: 2, vod: 3 };
   const sorted = [...filtered].sort((a, b) => (ORDER[a.type] ?? 9) - (ORDER[b.type] ?? 9));
@@ -1058,16 +1059,16 @@ function togglePlatform(name, enabled) {
   const disabled = new Set(_prefs.disabledPlatforms || []);
   if (enabled) disabled.delete(name); else disabled.add(name);
   _prefs.disabledPlatforms = [...disabled];
-  console.log('[plat] togglePlatform', name, enabled, 'disabled:', [..._prefs.disabledPlatforms]);
   savePrefs();
-  applyFilters();
-  // Vérification : compte combien de films passent le filtre
-  const sample = _allFilms.slice(0, 5).map(f => {
-    const det = _details[filmKey(f)];
-    const match = filmMatchesMyPlatforms(det);
-    return `${f.titre?.slice(0,20)} → providers:${det?.providers?.map(p=>p.name).join(',')||'none'} → ${match?'SHOW':'HIDE'}`;
+  // Re-rendre les badges plateformes sur toutes les cartes films
+  _allFilms.forEach((film, i) => {
+    const det = _details[filmKey(film)];
+    if (!det?.providers) return;
+    const el = document.getElementById(`card-plat-${i}`);
+    if (el) el.innerHTML = renderPlatBadges(det.providers);
   });
-  console.log('[plat] sample films:', sample);
+  // Pour les séries : applyFilters() appelle applySeriesFilters() qui re-rend les badges
+  applyFilters();
 }
 
 /**

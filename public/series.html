@@ -982,8 +982,8 @@ function applySeriesFilters() {
     // Filtre type (streaming / VOD)
     const matchType = !typeFilter
       || (typeFilter === 'svod' && provObjs.some(p => p.type === 'svod'))
-      || (typeFilter === 'vod'  && provObjs.some(p => p.type === 'location' || p.type === 'achat')
-                                && !provObjs.some(p => p.type === 'svod'));
+      || (typeFilter === 'vod'  && !provObjs.some(p => p.type === 'svod')
+                                && provObjs.some(p => p.type === 'location' || p.type === 'achat' || p.type === 'vod'));
     // Filtre liste personnelle
     const matchListe = (!_prefs.hideVus                 || !ud.vu) &&
                        (!_prefs.hideNonInteresse       || !ud.nonInteresse) &&

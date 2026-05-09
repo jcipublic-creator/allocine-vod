@@ -810,31 +810,30 @@ function extractProviders(html) {
     });
   }
 
-  // ── Méthode 2 : provider-tile (fallback si dataLayer absent) ─────────────────
+  // ── Méthode 2 : provider-tile (complément du dataLayer — certains providers
+  //    comme Orange n'apparaissent pas dans vod_providers mais seulement en tile) ─
   // .provider-tile-primary peut contenir soit du texte, soit un <img alt="nom">
-  if (providers.length === 0) {
-    $('.provider-tile').each((_, tile) => {
-      const $tile = $(tile);
-      if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
-      const $primary = $tile.find('.provider-tile-primary');
-      const nameText = $primary.text().trim();
-      const nameAlt  = $primary.find('img').attr('alt') || '';
-      // L'alt peut être "Regarder X sur PROVIDER" ou "Acheter X sur PROVIDER"
-      const nameFromAlt = nameAlt.match(/\bsur\s+(.+)$/i)?.[1]?.trim() || nameAlt;
-      const name = nameText || nameFromAlt;
-      if (!name || seen.has(name)) return;
-      seen.add(name);
-      let type = 'vod';
-      if ($tile.hasClass('svod-tile')) {
-        type = 'svod';
-      } else {
-        const tileText = $tile.text().toLowerCase();
-        if (/location/i.test(tileText))   type = 'location';
-        else if (/achat/i.test(tileText)) type = 'achat';
-      }
-      providers.push({ name, type });
-    });
-  }
+  $('.provider-tile').each((_, tile) => {
+    const $tile = $(tile);
+    if (!$tile.hasClass('svod-tile') && !$tile.hasClass('vod-tile')) return;
+    const $primary = $tile.find('.provider-tile-primary');
+    const nameText = $primary.text().trim();
+    const nameAlt  = $primary.find('img').attr('alt') || '';
+    // L'alt peut être "Regarder X sur PROVIDER" ou "Acheter X sur PROVIDER"
+    const nameFromAlt = nameAlt.match(/\bsur\s+(.+)$/i)?.[1]?.trim() || nameAlt;
+    const name = nameText || nameFromAlt;
+    if (!name || seen.has(name)) return;
+    seen.add(name);
+    let type = 'vod';
+    if ($tile.hasClass('svod-tile')) {
+      type = 'svod';
+    } else {
+      const tileText = $tile.text().toLowerCase();
+      if (/location/i.test(tileText))   type = 'location';
+      else if (/achat/i.test(tileText)) type = 'achat';
+    }
+    providers.push({ name, type });
+  });
 
   // ── Méthode 3 : alt "... sur PROVIDER" dans les tiles (dernier recours) ──────
   if (providers.length === 0) {

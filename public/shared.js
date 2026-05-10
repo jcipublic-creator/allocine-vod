@@ -1797,6 +1797,7 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">Dernier enrichissement</span><span class="val">${fmt(tmdb.lastRun)}</span></div>
     <div class="info-row"><span class="lbl">Films enrichis</span><span class="val">${tmdb.enrichedFilms ?? '—'}</span></div>
     <div class="info-row"><span class="lbl">Séries enrichies</span><span class="val">${tmdb.enrichedSeries ?? '—'}</span></div>
+    <div class="info-row"><span class="lbl">Cinéma enrichis</span><span class="val">${tmdb.enrichedCinema ?? '—'}</span></div>
     <div class="info-row"><span class="lbl">Avec note (skip)</span><span class="val">${tmdb.skipped ?? '—'}</span></div>
     ${progressBar}`;
     })()}

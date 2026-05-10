@@ -2117,7 +2117,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // Initialise le suivi de progression
-  const totalItems = detailsCache.size + seriesDetailsCache.size;
+  const totalItems = detailsCache.size + seriesDetailsCache.size + cachedCinema.length;
   Object.assign(_tmdbStatus, {
     running: true,
     startedAt: new Date().toISOString(),
@@ -2125,6 +2125,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     total: totalItems,
     enrichedFilms: 0,
     enrichedSeries: 0,
+    enrichedCinema: 0,
     skipped: 0,
   });
 
@@ -2175,12 +2176,38 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     await sleep(DELAY);
   }
 
+  // Films cinéma — tmdbRating stocké directement dans l'objet cachedCinema[i]
+  let enrichedCinema = 0;
+  let cinemaDirty = false;
+  for (let i = 0; i < cachedCinema.length; i++) {
+    const f = cachedCinema[i];
+    if (!f) { _tmdbStatus.done++; continue; }
+    if (typeof f.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    const titre = f.titre || null;
+    const titreO = f.titreOriginal || null;
+    if (!titre && !titreO) { _tmdbStatus.done++; continue; }
+    const tmdb = await tmdbLookup(titre, titreO, f.anneeSortie || null, 'movie', f.realisateur || null);
+    if (tmdb) {
+      cachedCinema[i] = { ...f, ...tmdb };
+      enrichedCinema++;
+    } else {
+      cachedCinema[i] = { ...f, tmdbRating: null };
+    }
+    cinemaDirty = true;
+    _tmdbStatus.done++;
+    await sleep(DELAY);
+  }
+
   await saveDetailsCache();
   await saveSeriesDetailsCache();
+  if (cinemaDirty) {
+    try { await redis.set('cinema', JSON.stringify(cachedCinema)); } catch(e) { console.warn('[TMDB] Sauvegarde cinema Redis échouée:', e.message); }
+  }
 
+  _tmdbStatus.enrichedCinema = enrichedCinema;
   _tmdbStatus.running = false;
   _tmdbStatus.lastRun = new Date().toISOString();
-  console.log(`🎬 TMDB enrich : ${_tmdbStatus.enrichedFilms} films + ${_tmdbStatus.enrichedSeries} séries (${_tmdbStatus.skipped} skipped)`);
+  console.log(`🎬 TMDB enrich : ${_tmdbStatus.enrichedFilms} films + ${_tmdbStatus.enrichedSeries} séries + ${enrichedCinema} cinéma (${_tmdbStatus.skipped} skipped)`);
 });
 
 app.post('/api/normalize-providers', requireSecret, async (_req, res) => {

@@ -604,6 +604,7 @@ function renderCards(films) {
         ${sScore != null ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>` : `<div class="score-val muted">—</div>`}
         <div class="score-lbl">Spect.</div>
       </div>
+      <div style="display:contents">${renderTmdbScore(f)}</div>
     </div>
   </div>
   ${full ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()"><span class="card-synopsis-preview">${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSynopsis(${i})">… Lire la suite</span>` : ''}</div>` : ''}

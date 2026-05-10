@@ -1892,6 +1892,37 @@ app.post('/api/clear-details-cache', requireSecret, async (_req, res) => {
  *
  * Réponse: { ok, cleanedFilms, cleanedSeries, totalFilms, totalSeries }
  */
+/**
+ * POST /api/reset-date-entree
+ * Remet les dateEntree à J-30 pour les séries/films dont toutes les dates
+ * sont identiques (signe d'un rescrape massif qui a écrasé les dates).
+ */
+app.post('/api/reset-date-entree', requireSecret, async (_req, res) => {
+  const oldDate = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  let resetSeries = 0, resetFilms = 0;
+
+  // Séries — si toutes les dates sont identiques (signe d'un rescrape massif), on remet à J-30
+  if (cachedSeries.length > 0) {
+    const dates = new Set(cachedSeries.map(s => s.dateEntree).filter(Boolean));
+    if (dates.size <= 2) {
+      cachedSeries.forEach(s => { s.dateEntree = oldDate; resetSeries++; });
+      await redis.set('series', JSON.stringify(cachedSeries));
+    }
+  }
+
+  // Films
+  if (cachedFilms.length > 0) {
+    const dates = new Set(cachedFilms.map(f => f.dateEntree).filter(Boolean));
+    if (dates.size <= 2) {
+      cachedFilms.forEach(f => { f.dateEntree = oldDate; resetFilms++; });
+      await redis.set('films', JSON.stringify(cachedFilms));
+    }
+  }
+
+  console.log(`📅 reset-date-entree : ${resetSeries} séries + ${resetFilms} films`);
+  res.json({ ok: true, resetSeries, resetFilms, oldDate });
+});
+
 app.post('/api/clean-providers', requireSecret, async (_req, res) => {
   let cleanedFilms = 0, cleanedSeries = 0;
 

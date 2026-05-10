@@ -25,88 +25,110 @@ body {
 }
 
 /* ── Header ── */
-.header {
-  background: var(--blue2);
-  border-bottom: 1px solid var(--blue3);
-  padding: 14px 16px;
-  display: flex; align-items: center; gap: 10px;
+.hdr {
+  background: var(--blue2); border-bottom: 1px solid var(--blue3);
+  padding: 14px 16px; display: flex; align-items: center; gap: 10px;
   position: sticky; top: 0; z-index: 10;
 }
-.header-title { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
-.header-version { font-size: 11px; color: var(--muted); }
+.hdr-title   { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
+.hdr-version { font-size: 11px; color: var(--muted); }
+.hdr-refresh {
+  background: none; border: 1px solid var(--blue3); color: var(--muted);
+  border-radius: 6px; padding: 4px 10px; font-size: 12px; cursor: pointer;
+}
+.hdr-refresh:active { border-color: var(--gold); color: var(--gold); }
 
-/* ── Layout ── */
-.content { padding: 16px; max-width: 600px; margin: 0 auto; }
+/* ── Contenu ── */
+.content { padding: 14px 16px; max-width: 600px; margin: 0 auto; }
 
 /* ── Section ── */
 .section { margin-bottom: 20px; }
 .section-title {
   font-size: 10px; font-weight: 700; color: var(--gold);
   text-transform: uppercase; letter-spacing: 1px;
-  margin-bottom: 8px; padding-bottom: 5px;
+  padding-bottom: 5px; margin-bottom: 8px;
   border-bottom: 1px solid rgba(240,192,64,.2);
+  display: flex; align-items: center; gap: 6px;
+}
+.badge-running {
+  font-size: 9px; background: rgba(240,192,64,.15); color: var(--gold);
+  border: 1px solid rgba(240,192,64,.4); border-radius: 4px;
+  padding: 1px 5px; animation: pulse .8s ease-in-out infinite alternate;
 }
 
-/* ── Status card ── */
-.status-card {
+/* ── Card info ── */
+.info-card {
   background: var(--blue2); border: 1px solid var(--blue3);
-  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+  border-radius: 8px; padding: 10px 14px; margin-bottom: 8px;
 }
-.status-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
-.status-label { color: var(--muted); font-size: 12px; }
-.status-val { font-size: 12px; color: var(--text); }
-.status-val.ok   { color: var(--green); }
-.status-val.warn { color: var(--orange); }
-.status-val.err  { color: var(--red); }
-.status-val.running { color: var(--gold); animation: pulse .8s ease-in-out infinite alternate; }
+.info-row {
+  display: flex; justify-content: space-between; align-items: baseline;
+  padding: 3px 0; gap: 8px;
+}
+.info-lbl { color: var(--muted); font-size: 12px; flex-shrink: 0; }
+.info-val { font-size: 12px; color: var(--text); text-align: right; }
+.info-val.ok     { color: var(--green); }
+.info-val.warn   { color: var(--orange); }
+.info-val.err    { color: var(--red); }
+.info-val.active { color: var(--gold); animation: pulse .8s ease-in-out infinite alternate; }
+.info-sub {
+  font-size: 10px; color: var(--muted); font-style: italic;
+  padding: 2px 0 4px; border-bottom: 1px solid var(--blue3); margin-bottom: 4px;
+}
 
-.progress-wrap { margin-top: 8px; }
-.progress-track { height: 4px; background: var(--blue3); border-radius: 2px; overflow: hidden; }
-.progress-fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width .4s; }
-.progress-label { font-size: 10px; color: var(--gold); display: flex; justify-content: space-between; margin-top: 3px; }
+/* ── Barre de progression ── */
+.prog-wrap { margin: 6px 0 4px; }
+.prog-track { height: 3px; background: var(--blue3); border-radius: 2px; overflow: hidden; }
+.prog-fill  { height: 100%; background: var(--gold); border-radius: 2px; transition: width .4s; }
+.prog-label { font-size: 10px; color: var(--gold); display: flex; justify-content: space-between; margin-top: 2px; }
 
 /* ── Boutons ── */
-.btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 8px; }
 .btn-action {
   background: var(--blue2); border: 1px solid var(--blue3);
   color: var(--text); border-radius: 8px;
-  padding: 12px 10px; cursor: pointer;
-  font-size: 13px; text-align: center; line-height: 1.3;
+  padding: 11px 8px; cursor: pointer;
+  font-size: 12px; text-align: center; line-height: 1.3;
   transition: background .15s, border-color .15s;
-  display: flex; flex-direction: column; align-items: center; gap: 5px;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
 }
 .btn-action:active { background: var(--blue3); border-color: var(--gold); }
-.btn-action.danger { border-color: rgba(224,80,80,.4); }
-.btn-action.danger:active { border-color: var(--red); }
-.btn-action.primary { border-color: rgba(240,192,64,.4); }
+.btn-action.danger  { border-color: rgba(224,80,80,.35); }
+.btn-action.danger:active  { border-color: var(--red); }
+.btn-action.primary { border-color: rgba(240,192,64,.35); }
 .btn-action.primary:active { border-color: var(--gold); }
-.btn-icon  { font-size: 20px; }
-.btn-label { font-size: 11px; color: var(--muted); }
-.btn-action.full { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 10px; }
+.btn-icon  { font-size: 18px; }
+.btn-sub   { font-size: 10px; color: var(--muted); }
+.btn-full  { grid-column: 1 / -1; flex-direction: row; justify-content: center; gap: 8px; }
 
-/* ── Bouton fermer en bas ── */
+/* ── Erreurs scraping ── */
+.error-list {
+  background: rgba(224,80,80,.08); border: 1px solid rgba(224,80,80,.25);
+  border-radius: 6px; padding: 8px 10px; margin-top: 4px;
+  font-size: 11px; color: var(--orange); line-height: 1.6;
+}
+
+/* ── Footer ── */
 .footer {
   position: fixed; bottom: 0; left: 0; right: 0;
-  padding: 12px 16px calc(12px + env(safe-area-inset-bottom, 0px));
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
   background: var(--blue2); border-top: 1px solid var(--blue3);
-  display: flex; justify-content: center;
+  display: flex; justify-content: center; gap: 12px;
 }
 .btn-close {
   background: var(--blue3); border: 1px solid var(--gold);
   color: var(--gold); border-radius: 20px;
-  padding: 10px 40px; font-size: 15px; font-weight: 600;
-  cursor: pointer; letter-spacing: .3px;
+  padding: 10px 40px; font-size: 15px; font-weight: 600; cursor: pointer;
 }
-.btn-close:active { background: rgba(240,192,64,.15); }
+.btn-close:active { background: rgba(240,192,64,.12); }
 
 /* ── Toast ── */
 #toast {
-  position: fixed; bottom: 72px; left: 50%; transform: translateX(-50%);
+  position: fixed; bottom: 70px; left: 50%; transform: translateX(-50%);
   background: var(--blue3); color: var(--text);
-  padding: 10px 18px; border-radius: 20px;
-  font-size: 13px; white-space: nowrap;
-  box-shadow: 0 4px 16px rgba(0,0,0,.4);
-  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100;
+  padding: 9px 18px; border-radius: 20px; font-size: 13px;
+  white-space: nowrap; box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 200;
 }
 #toast.show { opacity: 1; }
 
@@ -115,145 +137,171 @@ body {
 #denied .icon { font-size: 48px; margin-bottom: 16px; }
 #denied p { color: var(--muted); }
 
-@keyframes pulse { from { opacity: 1; } to { opacity: .5; } }
+@keyframes pulse { from { opacity: 1; } to { opacity: .45; } }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <span class="header-title">🛠 Debug</span>
-  <span class="header-version" id="header-version"></span>
+<div class="hdr">
+  <span class="hdr-title">🛠 Debug</span>
+  <span class="hdr-version" id="hdr-ver"></span>
+  <button class="hdr-refresh" onclick="loadAll()">↺ Refresh</button>
 </div>
 
-<div id="denied">
-  <div class="icon">🔒</div>
-  <p>Accès réservé au profil JC</p>
-</div>
+<div id="denied"><div class="icon">🔒</div><p>Accès réservé au profil JC</p></div>
 
 <div class="content" id="main" style="display:none">
 
-  <!-- Statuts serveur -->
+  <!-- ══ SERVEUR ══ -->
   <div class="section">
-    <div class="section-title">Statuts serveur</div>
-    <div class="status-card">
-      <div class="status-row"><span class="status-label">Films scrapés</span><span class="status-val" id="s-films">—</span></div>
-      <div class="status-row"><span class="status-label">Séries scrapées</span><span class="status-val" id="s-series">—</span></div>
-      <div class="status-row"><span class="status-label">Best ever</span><span class="status-val" id="s-bestever">—</span></div>
-      <div class="status-row"><span class="status-label">Cinéma</span><span class="status-val" id="s-cinema">—</span></div>
-      <div class="status-row"><span class="status-label">Cache détails films</span><span class="status-val" id="s-details">—</span></div>
-      <div class="status-row"><span class="status-label">Cache détails séries</span><span class="status-val" id="s-series-det">—</span></div>
+    <div class="section-title">⚙️ Serveur</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">Démarré</span><span class="info-val" id="sv-start">—</span></div>
+      <div class="info-row"><span class="info-lbl">Version</span><span class="info-val" id="sv-ver">—</span></div>
     </div>
   </div>
 
-  <!-- TMDB -->
+  <!-- ══ FILMS VOD ══ -->
   <div class="section">
-    <div class="section-title">TMDB</div>
-    <div class="status-card">
-      <div class="status-row"><span class="status-label">Clé API</span><span class="status-val" id="t-key">—</span></div>
-      <div class="status-row"><span class="status-label">Dernier run</span><span class="status-val" id="t-lastrun">—</span></div>
-      <div class="status-row"><span class="status-label">Films enrichis</span><span class="status-val" id="t-films">—</span></div>
-      <div class="status-row"><span class="status-label">Séries enrichies</span><span class="status-val" id="t-series">—</span></div>
-      <div class="status-row"><span class="status-label">Cinéma enrichi</span><span class="status-val" id="t-cinema">—</span></div>
-      <div class="status-row"><span class="status-label">Ignorés (déjà enrichis)</span><span class="status-val" id="t-skipped">—</span></div>
-      <div id="tmdb-progress-wrap" style="display:none" class="progress-wrap">
-        <div class="progress-track"><div class="progress-fill" id="t-fill" style="width:0%"></div></div>
-        <div class="progress-label"><span id="t-done">0 / 0</span><span id="t-pct">0%</span></div>
+    <div class="section-title" id="ttl-films">🎬 Films récents</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">En base</span><span class="info-val" id="f-count">—</span></div>
+      <div class="info-row"><span class="info-lbl">Cache détails</span><span class="info-val" id="f-det">—</span></div>
+      <div class="info-row"><span class="info-lbl">Scraping liste</span><span class="info-val" id="f-scrape">—</span></div>
+      <div id="f-prog-list" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="f-prog-list-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="f-prog-list-lbl"></span><span id="f-prog-list-pct"></span></div>
+      </div>
+      <div class="info-row"><span class="info-lbl">Scraping plateformes</span><span class="info-val" id="f-plat">—</span></div>
+      <div id="f-prog-det" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="f-prog-det-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="f-prog-det-lbl"></span><span id="f-prog-det-pct"></span></div>
+      </div>
+      <div id="f-errors" style="display:none" class="error-list"></div>
+    </div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('open-films')"><span class="btn-icon">▶</span>Scraper liste<span class="btn-sub">Ouvre Films</span></button>
+      <button class="btn-action" onclick="action('open-films')"><span class="btn-icon">🔄</span>Rescraper plateformes<span class="btn-sub">Ouvre Films</span></button>
+      <button class="btn-action danger" onclick="action('clear-details')"><span class="btn-icon">🗑️</span>Vider cache plateformes<span class="btn-sub">Redis</span></button>
+      <button class="btn-action danger" onclick="action('clear-films')"><span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-sub">Redis</span></button>
+    </div>
+  </div>
+
+  <!-- ══ SÉRIES ══ -->
+  <div class="section">
+    <div class="section-title" id="ttl-series">📺 Séries</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">En base</span><span class="info-val" id="s-count">—</span></div>
+      <div class="info-row"><span class="info-lbl">Cache détails</span><span class="info-val" id="s-det">—</span></div>
+      <div class="info-row"><span class="info-lbl">Scraping liste</span><span class="info-val" id="s-scrape">—</span></div>
+      <div id="s-prog-list" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="s-prog-list-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="s-prog-list-lbl"></span><span id="s-prog-list-pct"></span></div>
+      </div>
+      <div class="info-row"><span class="info-lbl">Scraping détails</span><span class="info-val" id="s-plat">—</span></div>
+      <div id="s-prog-det" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="s-prog-det-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="s-prog-det-lbl"></span><span id="s-prog-det-pct"></span></div>
       </div>
     </div>
     <div class="btn-grid">
-      <button class="btn-action primary full" onclick="action('tmdb-enrich')">
+      <button class="btn-action primary" onclick="action('open-series')"><span class="btn-icon">▶</span>Scraper liste<span class="btn-sub">Ouvre Séries</span></button>
+      <button class="btn-action primary" onclick="action('open-series')"><span class="btn-icon">🔄</span>Rescraper détails<span class="btn-sub">Ouvre Séries</span></button>
+      <button class="btn-action danger" onclick="action('clear-series-list')"><span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-sub">Redis</span></button>
+      <button class="btn-action danger" onclick="action('clear-series-det')"><span class="btn-icon">🗑️</span>Vider cache détails<span class="btn-sub">Redis</span></button>
+    </div>
+  </div>
+
+  <!-- ══ BEST EVER ══ -->
+  <div class="section">
+    <div class="section-title" id="ttl-be">🏆 Best Ever</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">En base</span><span class="info-val" id="b-count">—</span></div>
+      <div class="info-row"><span class="info-lbl">Configuration</span><span class="info-val" id="b-cfg">—</span></div>
+      <div class="info-row"><span class="info-lbl">Scraping liste</span><span class="info-val" id="b-scrape">—</span></div>
+      <div id="b-prog-list" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="b-prog-list-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="b-prog-list-lbl"></span><span id="b-prog-list-pct"></span></div>
+      </div>
+      <div class="info-row"><span class="info-lbl">Scraping plateformes</span><span class="info-val" id="b-plat">—</span></div>
+      <div id="b-prog-det" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="b-prog-det-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="b-prog-det-lbl"></span><span id="b-prog-det-pct"></span></div>
+      </div>
+    </div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('open-bestever')"><span class="btn-icon">▶</span>Scraper liste<span class="btn-sub">Ouvre Best Ever</span></button>
+      <button class="btn-action danger" onclick="action('clear-bestever')"><span class="btn-icon">🗑️</span>Vider cache<span class="btn-sub">Redis</span></button>
+    </div>
+  </div>
+
+  <!-- ══ CINÉMA ══ -->
+  <div class="section">
+    <div class="section-title" id="ttl-ci">🎥 Cinéma</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">En base</span><span class="info-val" id="c-count">—</span></div>
+      <div class="info-row"><span class="info-lbl">Dernier scraping</span><span class="info-val" id="c-scrape">—</span></div>
+      <div id="c-prog" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="c-prog-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="c-prog-lbl"></span><span id="c-prog-pct"></span></div>
+      </div>
+    </div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('open-cinema')"><span class="btn-icon">▶</span>Scraper cinéma<span class="btn-sub">Ouvre Cinéma</span></button>
+      <button class="btn-action danger" onclick="action('clear-cinema')"><span class="btn-icon">🗑️</span>Vider cache<span class="btn-sub">Redis</span></button>
+    </div>
+  </div>
+
+  <!-- ══ TMDB ══ -->
+  <div class="section">
+    <div class="section-title" id="ttl-tmdb">🌐 TMDB</div>
+    <div class="info-card">
+      <div class="info-row"><span class="info-lbl">Clé API</span><span class="info-val" id="t-key">—</span></div>
+      <div class="info-row"><span class="info-lbl">Dernier enrichissement</span><span class="info-val" id="t-lastrun">—</span></div>
+      <div class="info-row"><span class="info-lbl">Films enrichis</span><span class="info-val" id="t-films">—</span></div>
+      <div class="info-row"><span class="info-lbl">Séries enrichies</span><span class="info-val" id="t-series">—</span></div>
+      <div class="info-row"><span class="info-lbl">Cinéma enrichi</span><span class="info-val" id="t-cinema">—</span></div>
+      <div class="info-row"><span class="info-lbl">Déjà enrichis (skip)</span><span class="info-val" id="t-skip">—</span></div>
+      <div id="t-prog" class="prog-wrap" style="display:none">
+        <div class="prog-track"><div class="prog-fill" id="t-prog-fill" style="width:0%"></div></div>
+        <div class="prog-label"><span id="t-prog-lbl"></span><span id="t-prog-pct"></span></div>
+      </div>
+    </div>
+    <div class="btn-grid">
+      <button class="btn-action primary btn-full" onclick="action('tmdb-enrich')">
         <span class="btn-icon">🎬</span><span>Lancer enrichissement TMDB (force)</span>
       </button>
     </div>
   </div>
 
-  <!-- Films VOD -->
+  <!-- ══ NOTES ══ -->
   <div class="section">
-    <div class="section-title">Films VOD</div>
-    <div class="btn-grid">
-      <button class="btn-action primary" onclick="action('open-films')">
-        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Ouvre Films</span>
-      </button>
-      <button class="btn-action" onclick="action('open-films')">
-        <span class="btn-icon">🔄</span>Rescraper plateformes<span class="btn-label">Ouvre Films</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-details')">
-        <span class="btn-icon">🗑️</span>Vider cache plateformes<span class="btn-label">Redis</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-films')">
-        <span class="btn-icon">🗑️</span>Vider cache liste films<span class="btn-label">Redis</span>
-      </button>
+    <div class="section-title">⭐ Notes AlloCiné</div>
+    <div class="info-card" id="notes-card">
+      <div class="info-sub">Profil JC uniquement — données locales</div>
+      <div class="info-row"><span class="info-lbl">Films notés</span><span class="info-val" id="n-films">—</span></div>
+      <div class="info-row"><span class="info-lbl">Séries notées</span><span class="info-val" id="n-series">—</span></div>
     </div>
-  </div>
-
-  <!-- Séries -->
-  <div class="section">
-    <div class="section-title">Séries</div>
     <div class="btn-grid">
-      <button class="btn-action primary" onclick="action('open-series')">
-        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Ouvre Séries</span>
-      </button>
-      <button class="btn-action primary" onclick="action('open-series')">
-        <span class="btn-icon">🔄</span>Rescraper détails<span class="btn-label">Ouvre Séries</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-series-list')">
-        <span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-label">Redis</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-series-det')">
-        <span class="btn-icon">🗑️</span>Vider cache détails<span class="btn-label">Redis</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Best ever -->
-  <div class="section">
-    <div class="section-title">Best Ever</div>
-    <div class="btn-grid">
-      <button class="btn-action primary" onclick="action('open-bestever')">
-        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Ouvre Best Ever</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-bestever')">
-        <span class="btn-icon">🗑️</span>Vider cache<span class="btn-label">Redis</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Cinéma -->
-  <div class="section">
-    <div class="section-title">Cinéma</div>
-    <div class="btn-grid">
-      <button class="btn-action primary" onclick="action('open-cinema')">
-        <span class="btn-icon">▶</span>Scraper cinéma<span class="btn-label">Ouvre Cinéma</span>
-      </button>
-      <button class="btn-action danger" onclick="action('clear-cinema')">
-        <span class="btn-icon">🗑️</span>Vider cache<span class="btn-label">Redis</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Navigateur -->
-  <div class="section">
-    <div class="section-title">Cache navigateur</div>
-    <div class="btn-grid">
-      <button class="btn-action danger full" onclick="action('clear-local')">
-        <span class="btn-icon">🧹</span><span>Vider cache local (navigateur)</span>
-      </button>
-    </div>
-  </div>
-
-  <!-- Notes AlloCiné -->
-  <div class="section">
-    <div class="section-title">Notes AlloCiné</div>
-    <div class="btn-grid">
-      <button class="btn-action full" onclick="action('open-films')">
+      <button class="btn-action btn-full" onclick="action('open-films')">
         <span class="btn-icon">🔄</span><span>Sync notes AlloCiné (via Films)</span>
       </button>
     </div>
   </div>
 
-</div>
+  <!-- ══ CACHE NAVIGATEUR ══ -->
+  <div class="section">
+    <div class="section-title">🗄️ Cache navigateur</div>
+    <div class="btn-grid">
+      <button class="btn-action danger btn-full" onclick="action('clear-local')">
+        <span class="btn-icon">🧹</span><span>Vider cache local (toutes les pages)</span>
+      </button>
+    </div>
+  </div>
 
-<!-- Bouton fermer en bas -->
+</div><!-- /main -->
+
+<!-- Footer fixe -->
 <div class="footer" id="footer" style="display:none">
   <button class="btn-close" onclick="window.close()">Fermer</button>
 </div>
@@ -261,182 +309,261 @@ body {
 <div id="toast"></div>
 
 <script>
+// ── Secret & fetch ──────────────────────────────────────────────────────────
 let _secret = '';
-
 async function loadSecret() {
-  try {
-    const r = await fetch('/api/config');
-    if (r.ok) { const d = await r.json(); _secret = d.secret || ''; }
-  } catch(e) {}
+  try { const r = await fetch('/api/config'); if (r.ok) { const d = await r.json(); _secret = d.secret || ''; } } catch(e) {}
 }
-
 function apiFetch(url, opts = {}) {
   if (_secret) opts = { ...opts, headers: { ...(opts.headers || {}), 'x-app-secret': _secret } };
   return fetch(url, opts);
 }
 
+// ── Auth ────────────────────────────────────────────────────────────────────
 async function initAuth() {
   await loadSecret();
-
   const userId = localStorage.getItem('vod_user_id');
   if (!userId) { showDenied(); return; }
-
   try {
     const r = await apiFetch('/api/users');
     if (!r.ok) { showDenied(); return; }
-    const users = await r.json(); // retourne un tableau direct
-    const list = Array.isArray(users) ? users : (users.users || []);
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.users || []);
     const user = list.find(u => u.id === userId);
     if (!user || user.name.toUpperCase() !== 'JC') { showDenied(); return; }
   } catch(e) { showDenied(); return; }
 
-  document.getElementById('main').style.display = 'block';
+  document.getElementById('main').style.display   = 'block';
   document.getElementById('footer').style.display = 'flex';
-  loadStatus();
-  setInterval(loadStatus, 10000);
+  loadAll();
+  startPolling();
 }
+function showDenied() { document.getElementById('denied').style.display = 'block'; }
 
-function showDenied() {
-  document.getElementById('denied').style.display = 'block';
-}
-
-// ── Statuts ──
-async function loadStatus() {
+// ── Données ─────────────────────────────────────────────────────────────────
+let _data = {};
+async function loadAll() {
   try {
-    const [health, tmdb] = await Promise.all([
-      apiFetch('/api/health').then(r => r.json()),
-      apiFetch('/api/tmdb-status').then(r => r.json()),
+    const [f, s, b, c, st, tmdb] = await Promise.all([
+      apiFetch('/api/health').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/series/health').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/bestever/health').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/cinema/health').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/scraping-status').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/tmdb-status').then(r => r.ok ? r.json() : null),
     ]);
-    renderHealth(health);
-    renderTmdb(tmdb);
-    if (health.version) document.getElementById('header-version').textContent = health.version;
-  } catch(e) {}
+    _data = { f, s, b, c, st, tmdb };
+    render();
+  } catch(e) { console.warn('loadAll error', e); }
 }
 
-function fmt(iso) {
-  if (!iso) return '—';
-  const d = new Date(iso);
-  return d.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit' }) + ' ' +
-         d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+// ── Polling ─────────────────────────────────────────────────────────────────
+let _pollTimer;
+function startPolling() {
+  clearInterval(_pollTimer);
+  _pollTimer = setInterval(async () => {
+    const scrapingActive = _data.st?.phase;
+    const tmdbRunning    = _data.tmdb?.running;
+    if (!scrapingActive && !tmdbRunning) return;
+    try {
+      const fetches = [];
+      if (scrapingActive) fetches.push(apiFetch('/api/scraping-status').then(r=>r.ok?r.json():null).then(d=>{ if(d) _data.st=d; }));
+      if (tmdbRunning)    fetches.push(apiFetch('/api/tmdb-status').then(r=>r.ok?r.json():null).then(d=>{ if(d) _data.tmdb=d; }));
+      await Promise.all(fetches);
+      render();
+    } catch(e) {}
+  }, 3000);
 }
+
+// ── Render ───────────────────────────────────────────────────────────────────
+const FMT = iso => iso
+  ? new Date(iso).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'}) + ' '
+    + new Date(iso).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})
+  : '—';
 
 function set(id, val, cls) {
-  const el = document.getElementById(id);
-  if (!el) return;
-  el.textContent = val ?? '—';
-  el.className = 'status-val' + (cls ? ' ' + cls : '');
+  const el = document.getElementById(id); if (!el) return;
+  el.textContent = (val ?? '—');
+  el.className = 'info-val' + (cls ? ' '+cls : '');
 }
 
-function renderHealth(h) {
-  set('s-films',      h.cachedFilms != null ? `${h.cachedFilms} films · ${fmt(h.lastScrape)}` : '—');
-  set('s-series',     h.cachedSeries != null ? `${h.cachedSeries} séries · ${fmt(h.lastSeriesScrape)}` : '—');
-  set('s-bestever',   h.cachedBestever != null ? `${h.cachedBestever} films · ${fmt(h.lastBesteverScrape)}` : '—');
-  set('s-cinema',     h.cachedCinema != null ? `${h.cachedCinema} films` : '—');
-  set('s-details',    h.detailsCacheSize != null ? `${h.detailsCacheSize} entrées · ${fmt(h.lastDetailsScrape)}` : '—');
-  set('s-series-det', h.seriesDetailsCacheSize != null ? `${h.seriesDetailsCacheSize} entrées` : '—');
-}
-
-function renderTmdb(t) {
-  set('t-key',     t.keyConfigured ? '✓ Configurée' : '✗ Manquante', t.keyConfigured ? 'ok' : 'err');
-  set('t-lastrun', t.lastRun ? fmt(t.lastRun) : (t.running ? null : '—'));
-  set('t-films',   t.enrichedFilms ?? '—');
-  set('t-series',  t.enrichedSeries ?? '—');
-  set('t-cinema',  t.enrichedCinema ?? '—');
-  set('t-skipped', t.skipped ?? '—');
-
-  const wrap = document.getElementById('tmdb-progress-wrap');
-  if (t.running && t.total > 0) {
+function showProg(wrapId, fillId, lblId, pctId, info) {
+  const wrap = document.getElementById(wrapId);
+  if (!wrap) return;
+  if (info?.active) {
     wrap.style.display = '';
-    document.getElementById('t-fill').style.width = (t.pct || 0) + '%';
-    document.getElementById('t-done').textContent = `${t.done} / ${t.total}`;
-    document.getElementById('t-pct').textContent = Math.round(t.pct || 0) + '%';
-    set('t-lastrun', '⏳ En cours…', 'running');
-    setTimeout(loadStatus, 3000);
+    const pct = info.pct ?? 0;
+    document.getElementById(fillId).style.width = pct + '%';
+    const extra = info.annee ? ` · ${info.annee}` : (info.total ? ` · ${info.total} entrées` : '');
+    document.getElementById(lblId).textContent = `En cours${extra}`;
+    document.getElementById(pctId).textContent = Math.round(pct) + '%';
   } else {
     wrap.style.display = 'none';
   }
 }
 
-// ── Toast ──
-let _toastTimer;
-function toast(msg) {
-  const el = document.getElementById('toast');
-  el.textContent = msg;
-  el.classList.add('show');
-  clearTimeout(_toastTimer);
-  _toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+function titleBadge(id, active) {
+  const el = document.getElementById(id); if (!el) return;
+  const existing = el.querySelector('.badge-running');
+  if (active && !existing) {
+    const b = document.createElement('span');
+    b.className = 'badge-running'; b.textContent = '⟳ en cours';
+    el.appendChild(b);
+  } else if (!active && existing) {
+    existing.remove();
+  }
 }
 
-// ── Actions ──
+function render() {
+  const { f, s, b, c, st, tmdb } = _data;
+
+  // ── Serveur ──
+  set('sv-start', f?.serverStart ? FMT(f.serverStart) : '—');
+  set('sv-ver',   f?.version || s?.version || '—');
+  document.getElementById('hdr-ver').textContent = f?.version || '';
+
+  // ── Films ──
+  const filmsListActive = !!st?.filmsList?.active;
+  const filmsDetActive  = !!st?.filmsDetails?.active;
+  titleBadge('ttl-films', filmsListActive || filmsDetActive);
+  set('f-count',  f?.cachedFilms != null ? f.cachedFilms + ' films' : '—');
+  set('f-det',    f?.detailsCacheSize != null ? f.detailsCacheSize + ' entrées' : '—');
+  set('f-scrape', FMT(f?.lastScrape),    filmsListActive ? 'active' : '');
+  set('f-plat',   FMT(f?.lastDetailsScrape), filmsDetActive ? 'active' : '');
+  showProg('f-prog-list','f-prog-list-fill','f-prog-list-lbl','f-prog-list-pct', st?.filmsList);
+  showProg('f-prog-det', 'f-prog-det-fill', 'f-prog-det-lbl', 'f-prog-det-pct', st?.filmsDetails);
+  const errEl = document.getElementById('f-errors');
+  const errs  = f?.lastScrapeErrors || [];
+  if (errs.length > 0) {
+    errEl.style.display = '';
+    errEl.innerHTML = '⚠️ ' + errs.map(e => `Page ${e.page} (${e.annee}) : ${e.message}`).join('<br>');
+  } else { errEl.style.display = 'none'; }
+
+  // ── Séries ──
+  const serListActive = !!st?.seriesList?.active;
+  const serDetActive  = !!st?.seriesDetails?.active;
+  titleBadge('ttl-series', serListActive || serDetActive);
+  set('s-count',  s?.cachedSeries != null ? s.cachedSeries + ' séries' : '—');
+  set('s-det',    s?.cachedDetails != null ? s.cachedDetails + ' entrées' : '—');
+  set('s-scrape', FMT(s?.lastScrape),       serListActive ? 'active' : '');
+  set('s-plat',   FMT(s?.lastDetailsScrape), serDetActive ? 'active' : '');
+  showProg('s-prog-list','s-prog-list-fill','s-prog-list-lbl','s-prog-list-pct', st?.seriesList);
+  showProg('s-prog-det', 's-prog-det-fill', 's-prog-det-lbl', 's-prog-det-pct', st?.seriesDetails);
+
+  // ── Best ever ──
+  const beListActive = !!st?.besteverList?.active;
+  const beDetActive  = !!st?.besteverDetails?.active;
+  titleBadge('ttl-be', beListActive || beDetActive);
+  set('b-count',  b?.cachedFilms != null ? b.cachedFilms + ' films' : '—');
+  set('b-cfg',    b ? `${b.pagesPerDecade ?? '?'} pages × ${b.decades?.length ?? '?'} décennies` : '—');
+  set('b-scrape', FMT(b?.lastScrape),       beListActive ? 'active' : '');
+  set('b-plat',   FMT(b?.lastDetailsScrape), beDetActive ? 'active' : '');
+  showProg('b-prog-list','b-prog-list-fill','b-prog-list-lbl','b-prog-list-pct', st?.besteverList);
+  showProg('b-prog-det', 'b-prog-det-fill', 'b-prog-det-lbl', 'b-prog-det-pct', st?.besteverDetails);
+
+  // ── Cinéma ──
+  const ciActive = !!c?.isScraping;
+  titleBadge('ttl-ci', ciActive);
+  set('c-count',  c?.cachedFilms != null ? c.cachedFilms + ' films' : '—');
+  set('c-scrape', FMT(c?.lastScrape), ciActive ? 'active' : '');
+  // Cinéma n'a pas de phase dans scraping-status — on l'affiche si isScraping
+  const cWrap = document.getElementById('c-prog');
+  cWrap.style.display = ciActive ? '' : 'none';
+
+  // ── TMDB ──
+  const tmdbRunning = !!tmdb?.running;
+  titleBadge('ttl-tmdb', tmdbRunning);
+  set('t-key',     tmdb?.keyConfigured ? '✓ Configurée' : '✗ Manquante', tmdb?.keyConfigured ? 'ok' : 'err');
+  set('t-lastrun', tmdb?.running ? '⏳ En cours…' : FMT(tmdb?.lastRun), tmdb?.running ? 'active' : '');
+  set('t-films',   tmdb?.enrichedFilms   ?? '—');
+  set('t-series',  tmdb?.enrichedSeries  ?? '—');
+  set('t-cinema',  tmdb?.enrichedCinema  ?? '—');
+  set('t-skip',    tmdb?.skipped         ?? '—');
+  const tWrap = document.getElementById('t-prog');
+  if (tmdbRunning && tmdb.total > 0) {
+    tWrap.style.display = '';
+    document.getElementById('t-prog-fill').style.width = (tmdb.pct ?? 0) + '%';
+    document.getElementById('t-prog-lbl').textContent  = `${tmdb.done} / ${tmdb.total}`;
+    document.getElementById('t-prog-pct').textContent  = Math.round(tmdb.pct ?? 0) + '%';
+  } else { tWrap.style.display = 'none'; }
+
+  // ── Notes AlloCiné (localStorage) ──
+  try {
+    const ud = JSON.parse(localStorage.getItem('vod_userdata_' + localStorage.getItem('vod_user_id')) || 'null')
+            || JSON.parse(localStorage.getItem('vod_userdata') || '{}');
+    const filmsN  = Object.entries(ud).filter(([k,v]) => !k.startsWith('s:') && v.noteAC).length;
+    const seriesN = Object.entries(ud).filter(([k,v]) =>  k.startsWith('s:') && v.noteAC).length;
+    set('n-films',  filmsN + ' films notés');
+    set('n-series', seriesN + ' séries notées');
+  } catch(e) {}
+}
+
+// ── Toast ────────────────────────────────────────────────────────────────────
+let _tt;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  clearTimeout(_tt); _tt = setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ── Actions ──────────────────────────────────────────────────────────────────
 async function action(type) {
   switch (type) {
-
     case 'tmdb-enrich': {
       toast('Enrichissement TMDB lancé…');
       try {
-        const r = await apiFetch('/api/tmdb-enrich?force=true', { method: 'POST' });
-        const d = await r.json();
-        toast(d.ok ? 'TMDB terminé ✓' : 'Erreur TMDB');
-        loadStatus();
+        await apiFetch('/api/tmdb-enrich?force=true', { method: 'POST' });
+        toast('TMDB : enrichissement terminé ✓');
+        await loadAll();
       } catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-details': {
-      if (!confirm('Vider le cache plateformes films (Redis) ?')) break;
-      try { await apiFetch('/api/clear-details-cache', { method: 'POST' }); toast('Cache plateformes vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache plateformes films (Redis) ?')) break;
+      try { await apiFetch('/api/clear-details-cache', { method: 'POST' }); toast('Cache plateformes vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-films': {
-      if (!confirm('Vider le cache liste films (Redis) ?')) break;
-      try { await apiFetch('/api/clear-films-cache', { method: 'POST' }); toast('Cache films vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache liste films (Redis) ?')) break;
+      try { await apiFetch('/api/clear-films-cache', { method: 'POST' }); toast('Cache liste films vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-series-list': {
-      if (!confirm('Vider le cache liste séries (Redis) ?')) break;
-      try { await apiFetch('/api/series/clear-cache?type=list', { method: 'POST' }); toast('Cache liste séries vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache liste séries (Redis) ?')) break;
+      try { await apiFetch('/api/series/clear-cache?type=list', { method: 'POST' }); toast('Cache liste séries vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-series-det': {
-      if (!confirm('Vider le cache détails séries (Redis) ?')) break;
-      try { await apiFetch('/api/series/clear-cache?type=details', { method: 'POST' }); toast('Cache détails séries vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache détails séries (Redis) ?')) break;
+      try { await apiFetch('/api/series/clear-cache?type=details', { method: 'POST' }); toast('Cache détails séries vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-bestever': {
-      if (!confirm('Vider le cache best ever (Redis) ?')) break;
-      try { await apiFetch('/api/bestever/clear-cache', { method: 'POST' }); toast('Cache best ever vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache best ever (Redis) ?')) break;
+      try { await apiFetch('/api/bestever/clear-cache', { method: 'POST' }); toast('Cache best ever vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-cinema': {
-      if (!confirm('Vider le cache cinéma (Redis) ?')) break;
-      try { await apiFetch('/api/cinema/clear-cache', { method: 'POST' }); toast('Cache cinéma vidé ✓'); loadStatus(); }
+      if (!confirm('Vider cache cinéma (Redis) ?')) break;
+      try { await apiFetch('/api/cinema/clear-cache', { method: 'POST' }); toast('Cache cinéma vidé ✓'); await loadAll(); }
       catch(e) { toast('Erreur : ' + e.message); }
       break;
     }
-
     case 'clear-local': {
-      if (!confirm('Vider tout le cache local du navigateur ?')) break;
-      const KEYS = [
-        'vod_films','vod_details','vod_updated','vod_cache_v1','vod_cache_v2','vod_cache_v3','vod_cache_version',
-        'vod_series','vod_series_details','vod_series_updated','vod_series_v1','vod_series_v2','vod_series_v3','vod_series_version','vod_series_cache',
-        'bestever_films','bestever_details','bestever_updated','bestever_cache_v1','bestever_cache_v2','bestever_cache_v3',
-        'vod_cinema_films','vod_cinema_date',
-      ];
-      KEYS.forEach(k => localStorage.removeItem(k));
+      if (!confirm('Vider tout le cache local (toutes les pages) ?')) break;
+      ['vod_films','vod_details','vod_updated','vod_cache_v1','vod_cache_v2','vod_cache_v3','vod_cache_version',
+       'vod_series','vod_series_details','vod_series_updated','vod_series_v1','vod_series_v2','vod_series_v3','vod_series_version','vod_series_cache',
+       'bestever_films','bestever_details','bestever_updated','bestever_cache_v1','bestever_cache_v2','bestever_cache_v3',
+       'vod_cinema_films','vod_cinema_date',
+      ].forEach(k => localStorage.removeItem(k));
       toast('Cache local vidé ✓');
       break;
     }
-
     case 'open-films':    window.open('/index.html',    '_blank'); break;
     case 'open-series':   window.open('/series.html',   '_blank'); break;
     case 'open-bestever': window.open('/bestever.html', '_blank'); break;

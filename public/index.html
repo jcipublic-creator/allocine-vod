@@ -742,7 +742,7 @@ function renderCards(films) {
           <div class="score-lbl">Spect.</div>
         </div>
       </div>
-      <div id="card-tmdb-${i}"></div>
+      <div id="card-tmdb-${i}">${renderTmdbScore(_details[filmKey(f)])}</div>
     </div>
   </div>
   ${full ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()"><span class="card-synopsis-preview">${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSynopsis(${i})">… Lire la suite</span>` : ''}<div class="card-synopsis-meta" id="card-meta-${i}"></div></div>` : `<div class="card-synopsis-meta" id="card-meta-${i}" style="margin-top:8px;font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap"></div>`}

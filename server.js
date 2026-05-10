@@ -1926,7 +1926,15 @@ app.post('/api/clean-providers', requireSecret, async (_req, res) => {
 app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
   let renamedFilms = 0, renamedSeries = 0;
 
+  // Renommages explicites d'anciens noms incorrects stockés en cache
+  const LEGACY_RENAMES = {
+    'MyCanal': 'Canal+',  // slug 'mycanal' était mappé 'MyCanal', AlloCiné affiche 'Canal+'
+    'Max':     'HBO Max', // slug 'hbo-max' était mappé 'Max', AlloCiné affiche 'HBO Max'
+  };
+
   const normalizeList = providers => providers.map(p => {
+    const legacy = LEGACY_RENAMES[p.name];
+    if (legacy) return { ...p, name: legacy };
     const mapped = VOD_SLUG_TO_NAME[p.name] || VOD_SLUG_TO_NAME[p.name.toLowerCase()];
     return mapped ? { ...p, name: mapped } : p;
   });

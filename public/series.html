@@ -477,6 +477,7 @@ body {
     <option value="presse">↓ Note presse</option>
     <option value="spectateurs">↓ Note spectateurs</option>
     <option value="combinee">↓ Note combinée</option>
+    <option value="tmdb">↓ Note TMDB</option>
     <option value="annee">↓ Année début</option>
   </select>
 </div>
@@ -928,6 +929,13 @@ function applySeriesSort(sortBy) {
       const na = (a.allocineId && _userdata[`s:${a.allocineId}`]?.noteAC) || 0;
       const nb = (b.allocineId && _userdata[`s:${b.allocineId}`]?.noteAC) || 0;
       return (nb - na) || (b.notePresse - a.notePresse);
+    }
+    if (_seriesSortBy === 'tmdb') {
+      const da = _seriesDet[a.allocineId];
+      const db = _seriesDet[b.allocineId];
+      const ta = (da && typeof da.tmdbRating === 'number') ? da.tmdbRating : -1;
+      const tb = (db && typeof db.tmdbRating === 'number') ? db.tmdbRating : -1;
+      return tb - ta || b.notePresse - a.notePresse;
     }
     return 0;
   });

@@ -517,8 +517,10 @@ function rateLimitedFetch(url) {
 function getCachedDetails(key) {
   const cached = detailsCache.get(key);
   if (!cached) return null;
-  if (Date.now() - cached.cachedAt > DETAILS_TTL_MS) { detailsCache.delete(key); return null; }
   const val = cached.value;
+  // Ne pas expirer les entrées qui ont un enrichissement TMDB (tmdbRating présent même si null = enrichi)
+  const hasTmdb = val && 'tmdbRating' in val;
+  if (!hasTmdb && Date.now() - cached.cachedAt > DETAILS_TTL_MS) { detailsCache.delete(key); return null; }
   if (val && val.providers) return { ...val, providers: filterProviders(val.providers) };
   return val;
 }
@@ -2213,10 +2215,11 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     const annee = film.anneeSortie || val.annee || null;
     const tmdb = await tmdbLookup(titre, titreO, annee, 'movie', film.realisateur || null);
     if (tmdb) {
-      detailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
+      // Rafraîchir cachedAt pour éviter l'expiration TTL de l'entrée enrichie
+      detailsCache.set(key, { value: { ...val, ...tmdb }, cachedAt: Date.now() });
       _tmdbStatus.enrichedFilms++;
     } else {
-      detailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
+      detailsCache.set(key, { value: { ...val, tmdbRating: null }, cachedAt: Date.now() });
     }
     _tmdbStatus.done++;
     await sleep(DELAY);
@@ -2235,10 +2238,10 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     const annee = serie.anneeSortie || null;
     const tmdb = await tmdbLookup(titre, titreO, annee, 'tv', serie.realisateur || null);
     if (tmdb) {
-      seriesDetailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
+      seriesDetailsCache.set(key, { value: { ...val, ...tmdb }, cachedAt: Date.now() });
       _tmdbStatus.enrichedSeries++;
     } else {
-      seriesDetailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
+      seriesDetailsCache.set(key, { value: { ...val, tmdbRating: null }, cachedAt: Date.now() });
     }
     _tmdbStatus.done++;
     await sleep(DELAY);

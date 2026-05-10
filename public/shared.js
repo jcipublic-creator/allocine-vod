@@ -1541,6 +1541,13 @@ function applySort(critere) {
       const nb = _userdata[b.allocineId]?.noteAC || 0;
       return (nb - na) || (b.notePresse - a.notePresse);
     }
+    if (_sortBy === 'tmdb') {
+      const da = _details[filmKey(a)];
+      const db = _details[filmKey(b)];
+      const ta = (da && typeof da.tmdbRating === 'number') ? da.tmdbRating : -1;
+      const tb = (db && typeof db.tmdbRating === 'number') ? db.tmdbRating : -1;
+      return tb - ta || b.notePresse - a.notePresse;
+    }
     return b.notePresse - a.notePresse || a.titre.localeCompare(b.titre, 'fr');
   });
 

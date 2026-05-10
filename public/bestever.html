@@ -534,6 +534,7 @@ body {
     <option value="presse">↓ Note presse</option>
     <option value="spectateurs">↓ Note spectateurs</option>
     <option value="combinee">↓ Note combinée</option>
+    <option value="tmdb">↓ Note TMDB</option>
   </select>
 </div>
 
@@ -1236,6 +1237,13 @@ function applySort(critere) {
       const na = _userdata[a.allocineId]?.noteAC || 0;
       const nb = _userdata[b.allocineId]?.noteAC || 0;
       return (nb - na) || (b.notePresse ?? 0) - (a.notePresse ?? 0);
+    }
+    if (_sortBy === 'tmdb') {
+      const da2 = _details[filmKey(a)];
+      const db2 = _details[filmKey(b)];
+      const ta = (da2 && typeof da2.tmdbRating === 'number') ? da2.tmdbRating : -1;
+      const tb = (db2 && typeof db2.tmdbRating === 'number') ? db2.tmdbRating : -1;
+      return tb - ta || (b.notePresse ?? 0) - (a.notePresse ?? 0);
     }
     // 'decade' : décennie décroissante, puis note presse décroissante
     const da = Number(a.decade) || 0, db = Number(b.decade) || 0;

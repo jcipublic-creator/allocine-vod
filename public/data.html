@@ -1,0 +1,484 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🗄️ Données — AlloCiné VOD</title>
+<style>
+:root {
+  --navy:  #0d2137;
+  --blue2: #1a3550;
+  --blue3: #2a4f70;
+  --gold:  #f0c040;
+  --text:  #d0e0f0;
+  --muted: #7090a0;
+  --green: #4caf7d;
+  --orange:#e08030;
+  --red:   #e05050;
+  --card:  #132030;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--navy); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  font-size: 13px; min-height: 100vh; padding-bottom: 70px;
+}
+
+/* ── Header ── */
+.hdr {
+  background: var(--blue2); border-bottom: 1px solid var(--blue3);
+  padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 10;
+}
+.hdr-title { font-size: 16px; font-weight: 700; color: var(--gold); flex: 1; }
+.hdr-stats { font-size: 11px; color: var(--muted); white-space: nowrap; }
+
+/* ── Tabs ── */
+.tabs {
+  display: flex; overflow-x: auto; scrollbar-width: none;
+  background: var(--blue2); border-bottom: 1px solid var(--blue3);
+  position: sticky; top: 45px; z-index: 9;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 9px 16px; font-size: 12px; font-weight: 600; white-space: nowrap;
+  color: var(--muted); cursor: pointer; border-bottom: 2px solid transparent;
+  transition: color .15s; flex-shrink: 0;
+}
+.tab.active { color: var(--gold); border-bottom-color: var(--gold); }
+.tab:active { opacity: .7; }
+
+/* ── Toolbar ── */
+.toolbar {
+  padding: 10px 12px; display: flex; gap: 8px; align-items: center;
+  position: sticky; top: 80px; z-index: 8; background: var(--navy);
+  border-bottom: 1px solid var(--blue3);
+}
+.search-input {
+  flex: 1; background: var(--blue2); border: 1px solid var(--blue3);
+  color: var(--text); padding: 7px 12px; border-radius: 20px; font-size: 13px;
+  outline: none;
+}
+.search-input::placeholder { color: var(--muted); }
+.search-input:focus { border-color: var(--gold); }
+.btn-clear {
+  background: none; border: 1px solid var(--blue3); color: var(--muted);
+  padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; white-space: nowrap;
+}
+.btn-clear:active { border-color: var(--gold); color: var(--gold); }
+
+/* ── Table ── */
+.table-wrap { overflow-x: auto; }
+table {
+  width: 100%; border-collapse: collapse; min-width: 500px;
+}
+thead th {
+  background: var(--blue2); color: var(--muted);
+  font-size: 11px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; padding: 8px 10px;
+  border-bottom: 1px solid var(--blue3);
+  cursor: pointer; user-select: none; white-space: nowrap;
+  text-align: left; position: sticky; top: 123px; z-index: 7;
+}
+thead th:hover { color: var(--gold); }
+thead th.sort-asc::after  { content: ' ▲'; color: var(--gold); }
+thead th.sort-desc::after { content: ' ▼'; color: var(--gold); }
+tbody tr {
+  border-bottom: 1px solid rgba(42,79,112,.4);
+  cursor: pointer; transition: background .1s;
+}
+tbody tr:hover { background: rgba(42,79,112,.3); }
+tbody tr.selected { background: rgba(240,192,64,.08); }
+td { padding: 7px 10px; font-size: 12px; vertical-align: top; }
+td.num { text-align: right; font-variant-numeric: tabular-nums; }
+td.green { color: var(--green); }
+td.orange { color: var(--orange); }
+td.muted { color: var(--muted); }
+td .badge {
+  display: inline-block; font-size: 10px; padding: 1px 5px;
+  border-radius: 4px; background: rgba(42,79,112,.5); color: var(--muted);
+  white-space: nowrap;
+}
+
+/* ── Empty state ── */
+.empty { padding: 40px; text-align: center; color: var(--muted); }
+
+/* ── JSON detail panel ── */
+#detail-panel {
+  display: none; position: fixed; bottom: 70px; left: 0; right: 0;
+  background: var(--card); border-top: 1px solid var(--blue3);
+  max-height: 45vh; overflow-y: auto; z-index: 20; padding: 0;
+}
+#detail-panel.show { display: block; }
+.detail-hdr {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 14px; border-bottom: 1px solid var(--blue3);
+  position: sticky; top: 0; background: var(--card); z-index: 1;
+}
+.detail-title { font-size: 12px; font-weight: 700; color: var(--gold); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.detail-close {
+  background: none; border: 1px solid var(--blue3); color: var(--muted);
+  padding: 3px 10px; border-radius: 6px; font-size: 11px; cursor: pointer; flex-shrink: 0;
+}
+.detail-close:active { border-color: var(--gold); color: var(--gold); }
+#detail-json {
+  padding: 12px 14px; font-family: 'SF Mono', Menlo, monospace;
+  font-size: 11px; line-height: 1.6; white-space: pre-wrap;
+  word-break: break-all; color: var(--text);
+}
+
+/* ── Loading ── */
+.loading { padding: 40px; text-align: center; color: var(--muted); }
+.spinner { display: inline-block; width: 20px; height: 20px; border: 2px solid var(--blue3); border-top-color: var(--gold); border-radius: 50%; animation: spin .8s linear infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ── Auth denied ── */
+#denied { display: none; padding: 60px 20px; text-align: center; }
+#denied h2 { font-size: 24px; color: var(--red); margin-bottom: 12px; }
+#denied p  { color: var(--muted); font-size: 14px; }
+
+/* ── Footer ── */
+.footer {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--blue2); border-top: 1px solid var(--blue3);
+  padding: 12px 16px; display: flex; align-items: center; justify-content: space-between;
+  z-index: 10;
+}
+.footer-info { font-size: 11px; color: var(--muted); }
+.btn-fermer {
+  background: var(--blue3); border: none; color: var(--text);
+  padding: 8px 24px; border-radius: 8px; font-size: 13px;
+  font-weight: 600; cursor: pointer;
+}
+.btn-fermer:active { opacity: .7; }
+</style>
+</head>
+<body>
+
+<div id="denied">
+  <h2>🔒 Accès refusé</h2>
+  <p>Cet écran est réservé au profil JC.</p>
+</div>
+
+<div id="app" style="display:none">
+  <div class="hdr">
+    <div class="hdr-title">🗄️ Données brutes</div>
+    <div class="hdr-stats" id="stats-lbl"></div>
+  </div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab('films')">🎬 Films</div>
+    <div class="tab" onclick="switchTab('bestever')">🏆 Best Ever</div>
+    <div class="tab" onclick="switchTab('series')">📺 Séries</div>
+    <div class="tab" onclick="switchTab('details')">🗄️ Détails cache</div>
+  </div>
+
+  <div class="toolbar">
+    <input class="search-input" id="search-input" type="search" placeholder="Rechercher…" oninput="onSearch(this.value)">
+    <button class="btn-clear" onclick="clearSearch()">✕ Effacer</button>
+  </div>
+
+  <div id="loading" class="loading"><span class="spinner"></span>Chargement…</div>
+  <div class="table-wrap" id="table-wrap" style="display:none">
+    <table>
+      <thead id="thead"></thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">Aucun résultat</div>
+  </div>
+</div>
+
+<div id="detail-panel">
+  <div class="detail-hdr">
+    <div class="detail-title" id="detail-title"></div>
+    <button class="detail-close" onclick="closeDetail()">✕ Fermer</button>
+  </div>
+  <pre id="detail-json"></pre>
+</div>
+
+<div class="footer">
+  <div class="footer-info" id="footer-info"></div>
+  <button class="btn-fermer" onclick="window.close()">Fermer</button>
+</div>
+
+<script>
+// ── Auth ─────────────────────────────────────────────────────────────────────
+const LS_USER_ID = 'vod_user_id';
+
+async function checkAuth() {
+  const userId = localStorage.getItem(LS_USER_ID);
+  if (!userId) { showDenied(); return false; }
+  try {
+    const r = await fetch('/api/users');
+    const data = await r.json();
+    const list = Array.isArray(data) ? data : (data.users || []);
+    const user = list.find(u => u.id === userId);
+    if (!user || user.name.toUpperCase() !== 'JC') { showDenied(); return false; }
+    return true;
+  } catch(e) { showDenied(); return false; }
+}
+function showDenied() {
+  document.getElementById('denied').style.display = 'block';
+}
+
+// ── Données ──────────────────────────────────────────────────────────────────
+const _data = { films: [], bestever: [], series: [], details: [] };
+let _currentTab = 'films';
+let _sortCol = null;
+let _sortDir = 1; // 1=asc, -1=desc
+let _search = '';
+let _filtered = [];
+let _selectedRow = null;
+let _searchTimer = null;
+
+// Colonnes par dataset
+const COLS = {
+  films: [
+    { key: 'titre',       label: 'Titre',      w: '25%' },
+    { key: 'notePresse',  label: 'Presse',     w: '7%',  num: true },
+    { key: 'noteSpect',   label: 'Spect.',     w: '7%',  num: true },
+    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',      w: '7%',  num: true },
+    { key: 'genre',       label: 'Genre',      w: '16%' },
+    { key: 'realisateur', label: 'Réalisateur',w: '14%' },
+    { key: 'allocineId',  label: 'ID',         w: '7%',  num: true },
+    { key: 'dateEntree',  label: 'Entrée',     w: '10%' },
+  ],
+  bestever: [
+    { key: 'titre',       label: 'Titre',      w: '28%' },
+    { key: 'notePresse',  label: 'Presse',     w: '8%',  num: true },
+    { key: 'noteSpect',   label: 'Spect.',     w: '8%',  num: true },
+    { key: 'tmdbRating',  label: 'TMDB',       w: '8%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',      w: '8%',  num: true },
+    { key: 'genre',       label: 'Genre',      w: '18%' },
+    { key: 'realisateur', label: 'Réalisateur',w: '14%' },
+    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
+  ],
+  series: [
+    { key: 'titre',       label: 'Titre',      w: '26%' },
+    { key: 'notePresse',  label: 'Presse',     w: '7%',  num: true },
+    { key: 'noteSpect',   label: 'Spect.',     w: '7%',  num: true },
+    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',      w: '7%',  num: true },
+    { key: 'genre',       label: 'Genre',      w: '16%' },
+    { key: 'nbSaisons',   label: 'Saisons',    w: '8%',  num: true },
+    { key: 'realisateur', label: 'Créateur',   w: '12%' },
+    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
+  ],
+  details: [
+    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
+    { key: '_titre',      label: 'Titre',      w: '22%' },
+    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true },
+    { key: 'tmdbVotes',   label: 'Votes',      w: '8%',  num: true },
+    { key: 'pays',        label: 'Pays',       w: '10%' },
+    { key: 'annee',       label: 'Année',      w: '7%',  num: true },
+    { key: '_providers',  label: 'Plateformes',w: '16%' },
+    { key: 'tmdbId',      label: 'TMDB ID',    w: '8%',  num: true },
+    { key: 'imdbId',      label: 'IMDB ID',    w: '8%' },
+    { key: '_type',       label: 'Type',       w: '6%' },
+  ],
+};
+
+// ── Chargement ────────────────────────────────────────────────────────────────
+async function loadAll() {
+  const [rFilms, rBE, rSeries] = await Promise.all([
+    fetch('/api/films').then(r => r.json()),
+    fetch('/api/bestever').then(r => r.json()),
+    fetch('/api/series').then(r => r.json()),
+  ]);
+
+  // Merge films + details
+  _data.films = (rFilms.films || []).map((f, i) => {
+    const d = rFilms.details?.[i] || {};
+    return { ...f, tmdbRating: d.tmdbRating, _det: d };
+  });
+
+  _data.bestever = (rBE.films || []).map((f, i) => {
+    const d = rBE.details?.[i] || {};
+    return { ...f, tmdbRating: d.tmdbRating, _det: d };
+  });
+
+  _data.series = (rSeries.series || []).map((s, i) => {
+    const d = rSeries.details?.[i] || {};
+    return { ...s, tmdbRating: d.tmdbRating, _det: d };
+  });
+
+  // Détails cache — merge from all 3 sources, deduplicate by allocineId
+  const detMap = new Map();
+
+  (rFilms.details || []).forEach((d, i) => {
+    if (!d) return;
+    const f = rFilms.films?.[i];
+    const id = d.allocineId || f?.allocineId;
+    if (id && !detMap.has('f_' + id)) {
+      detMap.set('f_' + id, { ...d, allocineId: id, _titre: f?.titre || '', _type: 'Film', _providers: (d.providers || []).map(p => p.name).join(', ') });
+    }
+  });
+  (rBE.details || []).forEach((d, i) => {
+    if (!d) return;
+    const f = rBE.films?.[i];
+    const id = d.allocineId || f?.allocineId;
+    if (id && !detMap.has('be_' + id)) {
+      detMap.set('be_' + id, { ...d, allocineId: id, _titre: f?.titre || '', _type: 'BestEver', _providers: (d.providers || []).map(p => p.name).join(', ') });
+    }
+  });
+  (rSeries.details || []).forEach((d, i) => {
+    if (!d) return;
+    const s = rSeries.series?.[i];
+    const id = d.allocineId || s?.allocineId;
+    if (id && !detMap.has('s_' + id)) {
+      detMap.set('s_' + id, { ...d, allocineId: id, _titre: s?.titre || '', _type: 'Série', _providers: (d.providers || []).map(p => p.name).join(', ') });
+    }
+  });
+
+  _data.details = [...detMap.values()];
+
+  document.getElementById('loading').style.display = 'none';
+  document.getElementById('table-wrap').style.display = '';
+  renderTable();
+}
+
+// ── Navigation ────────────────────────────────────────────────────────────────
+function switchTab(tab) {
+  _currentTab = tab;
+  _sortCol = null; _sortDir = 1; _search = '';
+  document.getElementById('search-input').value = '';
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    const tabs = ['films', 'bestever', 'series', 'details'];
+    t.classList.toggle('active', tabs[i] === tab);
+  });
+  closeDetail();
+  renderTable();
+}
+
+function onSearch(val) {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(() => { _search = val.toLowerCase(); renderTable(); }, 150);
+}
+function clearSearch() {
+  document.getElementById('search-input').value = '';
+  _search = '';
+  renderTable();
+}
+
+// ── Rendu table ──────────────────────────────────────────────────────────────
+function renderTable() {
+  const cols = COLS[_currentTab];
+  const rows = _data[_currentTab];
+
+  // Filtre recherche
+  _filtered = _search
+    ? rows.filter(r => cols.some(c => {
+        const v = r[c.key];
+        return v != null && String(v).toLowerCase().includes(_search);
+      }))
+    : [...rows];
+
+  // Tri
+  if (_sortCol !== null) {
+    const col = cols[_sortCol];
+    _filtered.sort((a, b) => {
+      let va = a[col.key], vb = b[col.key];
+      if (va == null) va = col.num ? -Infinity : '';
+      if (vb == null) vb = col.num ? -Infinity : '';
+      if (col.num) return (Number(va) - Number(vb)) * _sortDir;
+      return String(va).localeCompare(String(vb), 'fr') * _sortDir;
+    });
+  }
+
+  // Header
+  const thead = document.getElementById('thead');
+  thead.innerHTML = '<tr>' + cols.map((c, i) => {
+    const cls = _sortCol === i ? (_sortDir === 1 ? 'sort-asc' : 'sort-desc') : '';
+    return `<th class="${cls}" style="width:${c.w}" onclick="sortBy(${i})">${c.label}</th>`;
+  }).join('') + '</tr>';
+
+  // Body
+  const tbody = document.getElementById('tbody');
+  if (_filtered.length === 0) {
+    tbody.innerHTML = '';
+    document.getElementById('empty').style.display = '';
+  } else {
+    document.getElementById('empty').style.display = 'none';
+    tbody.innerHTML = _filtered.map((r, ri) => {
+      const cells = cols.map(c => {
+        let v = r[c.key];
+        let cls = c.num ? 'num' : '';
+        if (c.key === 'notePresse') cls += v >= 4 ? ' green' : ' orange';
+        if (c.key === 'noteSpect') cls += (v != null && v >= 3.5) ? ' green' : ' muted';
+        if (c.key === 'tmdbRating') cls += (v != null && v > 0) ? ' green' : ' muted';
+
+        if (v == null || v === '') return `<td class="${cls.trim()}"><span class="badge">—</span></td>`;
+        if (c.key === 'dateEntree' && v) v = new Date(v).toLocaleDateString('fr-FR');
+        if (c.key === '_providers' && v) {
+          const count = (v.split(',').length);
+          return `<td><span style="font-size:11px;color:var(--muted)">${count > 0 ? `${count} plateforme${count>1?'s':''}` : '—'}</span></td>`;
+        }
+        if (c.num && typeof v === 'number') v = v.toFixed ? (Number.isInteger(v) ? v : v.toFixed(1)) : v;
+        return `<td class="${cls.trim()}" title="${String(v).replace(/"/g,'&quot;')}">${String(v).length > 40 ? String(v).slice(0, 38) + '…' : v}</td>`;
+      }).join('');
+      return `<tr data-ri="${ri}" onclick="selectRow(${ri})">${cells}</tr>`;
+    }).join('');
+  }
+
+  // Stats
+  const total = rows.length;
+  const shown = _filtered.length;
+  document.getElementById('stats-lbl').textContent = shown < total ? `${shown} / ${total}` : `${total} entrée${total > 1 ? 's' : ''}`;
+  document.getElementById('footer-info').textContent = `${_currentTab} · ${shown} / ${total} entrée${total > 1 ? 's' : ''}`;
+
+  _selectedRow = null;
+}
+
+function sortBy(colIdx) {
+  if (_sortCol === colIdx) _sortDir *= -1;
+  else { _sortCol = colIdx; _sortDir = -1; }
+  renderTable();
+}
+
+// ── Détail JSON ───────────────────────────────────────────────────────────────
+function selectRow(ri) {
+  const row = _filtered[ri];
+  if (!row) return;
+
+  // Toggle : clic sur la même ligne = fermer
+  if (_selectedRow === ri) { closeDetail(); return; }
+  _selectedRow = ri;
+
+  // Surligner la ligne sélectionnée
+  document.querySelectorAll('tbody tr').forEach(tr => {
+    tr.classList.toggle('selected', parseInt(tr.dataset.ri) === ri);
+  });
+
+  // Construire l'objet JSON à afficher (sans les clés internes préfixées _)
+  const display = {};
+  Object.entries(row).forEach(([k, v]) => {
+    if (k === '_det' || k.startsWith('_')) return; // skip internal helpers
+    display[k] = v;
+  });
+
+  // Afficher les détails complets (avec _det si disponible)
+  const full = row._det ? { ...display, _details_cache: row._det } : display;
+
+  const titre = row.titre || row._titre || `ID ${row.allocineId}`;
+  document.getElementById('detail-title').textContent = titre;
+  document.getElementById('detail-json').textContent = JSON.stringify(full, null, 2);
+  document.getElementById('detail-panel').classList.add('show');
+}
+
+function closeDetail() {
+  _selectedRow = null;
+  document.querySelectorAll('tbody tr').forEach(tr => tr.classList.remove('selected'));
+  document.getElementById('detail-panel').classList.remove('show');
+}
+
+// ── Init ─────────────────────────────────────────────────────────────────────
+(async () => {
+  const ok = await checkAuth();
+  if (!ok) return;
+  document.getElementById('app').style.display = '';
+  await loadAll();
+})();
+</script>
+</body>
+</html>

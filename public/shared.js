@@ -1025,8 +1025,8 @@ function updateDebugVisibility(userName) {
   _currentUserName = (userName || '').trim();
   const show = _currentUserName.toUpperCase() === 'JC';
 
-  // Menu debug
-  ['btn-debug-toggle', 'submenu-debug', 'debug-separator'].forEach(id => {
+  // Menu debug + données (JC only)
+  ['btn-debug-toggle', 'submenu-debug', 'debug-separator', 'btn-data-toggle'].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.style.display = show ? '' : 'none';
   });

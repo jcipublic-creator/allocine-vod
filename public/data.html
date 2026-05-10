@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>🗄️ Données — AlloCiné VOD</title>
+<title>🗄️ Données — AlloCiné VOD v2</title>
 <style>
 :root {
   --navy:  #0d2137;
@@ -88,16 +88,6 @@ body {
 .sort-pill.none {
   border-color: var(--blue3); color: var(--muted); cursor: default;
 }
-.sort-dir-btn {
-  background: none; border: 1px solid var(--blue3); color: var(--muted);
-  padding: 3px 8px; border-radius: 20px; font-size: 11px; cursor: pointer; white-space: nowrap;
-}
-.sort-dir-btn:active { border-color: var(--gold); color: var(--gold); }
-.sort-reset {
-  background: none; border: none; color: var(--red); font-size: 11px;
-  cursor: pointer; padding: 2px 6px; border-radius: 4px;
-}
-.sort-reset:active { opacity: .7; }
 
 /* ── Table ── */
 .table-wrap { overflow-x: auto; }
@@ -130,6 +120,11 @@ td .badge {
   display: inline-block; font-size: 10px; padding: 1px 5px;
   border-radius: 4px; background: rgba(42,79,112,.5); color: var(--muted);
   white-space: nowrap;
+}
+td .tag {
+  display: inline-block; font-size: 10px; padding: 1px 5px;
+  border-radius: 4px; background: rgba(240,192,64,.15); color: var(--gold);
+  margin-right: 2px; white-space: nowrap;
 }
 
 /* ── Empty state ── */
@@ -194,15 +189,15 @@ td .badge {
 
 <div id="app" style="display:none">
   <div class="hdr">
-    <div class="hdr-title">🗄️ Données brutes</div>
+    <div class="hdr-title">🗄️ Données brutes V2</div>
     <div class="hdr-stats" id="stats-lbl"></div>
   </div>
 
   <div class="tabs">
-    <div class="tab active" onclick="switchTab('films')">🎬 Films</div>
+    <div class="tab active" onclick="switchTab('films')">🎬 Films récents</div>
     <div class="tab" onclick="switchTab('bestever')">🏆 Best Ever</div>
+    <div class="tab" onclick="switchTab('cinema')">🎭 Cinéma</div>
     <div class="tab" onclick="switchTab('series')">📺 Séries</div>
-    <div class="tab" onclick="switchTab('details')">🗄️ Détails cache</div>
   </div>
 
   <div class="toolbar">
@@ -263,7 +258,9 @@ function showDenied() {
 }
 
 // ── Données ──────────────────────────────────────────────────────────────────
-const _data = { films: [], bestever: [], series: [], details: [] };
+// V2 : toutes les données sont inline dans cachedFilms / cachedSeries
+// Pas de table "détails" séparée — tout est sur chaque objet.
+const _data = { films: [], bestever: [], cinema: [], series: [] };
 let _currentTab = 'films';
 let _sortCol = null;
 let _sortDir = 1; // 1=asc, -1=desc
@@ -273,106 +270,95 @@ let _selectedRow = null;
 let _searchTimer = null;
 
 // Colonnes par dataset
+// Note : les champs tmdbRating, pays, providers, lastDetailsFetch sont INLINE (V2)
 const COLS = {
   films: [
-    { key: 'titre',       label: 'Titre du film',       w: '24%' },
-    { key: 'notePresse',  label: 'Note presse',         w: '8%',  num: true },
-    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
-    { key: 'tmdbRating',  label: 'Note TMDB',           w: '8%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',               w: '6%',  num: true },
-    { key: 'genre',       label: 'Genre',               w: '15%' },
-    { key: 'realisateur', label: 'Réalisateur',         w: '14%' },
-    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
-    { key: 'dateEntree',  label: 'Ajouté le',           w: '9%' },
+    { key: 'titre',            label: 'Titre du film',      w: '22%' },
+    { key: 'notePresse',       label: 'Note presse',        w: '7%',  num: true },
+    { key: 'noteSpect',        label: 'Note spectateurs',   w: '8%',  num: true },
+    { key: 'tmdbRating',       label: 'Note TMDB',          w: '7%',  num: true },
+    { key: 'anneeSortie',      label: 'Année',              w: '5%',  num: true },
+    { key: 'pays',             label: 'Pays',               w: '8%' },
+    { key: 'genre',            label: 'Genre',              w: '13%' },
+    { key: 'realisateur',      label: 'Réalisateur',        w: '12%' },
+    { key: '_providers',       label: 'Plateformes',        w: '9%',  num: true },
+    { key: 'allocineId',       label: 'ID AlloCiné',        w: '7%',  num: true },
+    { key: 'dateEntree',       label: 'Ajouté le',          w: '8%' },
+    { key: '_lastFetch',       label: 'Détails fetché le',  w: '9%' },
   ],
   bestever: [
-    { key: 'titre',       label: 'Titre du film',       w: '26%' },
-    { key: 'notePresse',  label: 'Note presse',         w: '8%',  num: true },
-    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
-    { key: 'tmdbRating',  label: 'Note TMDB',           w: '8%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',               w: '7%',  num: true },
-    { key: 'genre',       label: 'Genre',               w: '18%' },
-    { key: 'realisateur', label: 'Réalisateur',         w: '15%' },
-    { key: 'allocineId',  label: 'ID AlloCiné',         w: '10%', num: true },
+    { key: 'titre',            label: 'Titre du film',      w: '22%' },
+    { key: 'notePresse',       label: 'Note presse',        w: '7%',  num: true },
+    { key: 'noteSpect',        label: 'Note spectateurs',   w: '8%',  num: true },
+    { key: 'tmdbRating',       label: 'Note TMDB',          w: '7%',  num: true },
+    { key: 'decade',           label: 'Décennie',           w: '6%',  num: true },
+    { key: 'anneeSortie',      label: 'Année',              w: '5%',  num: true },
+    { key: 'pays',             label: 'Pays',               w: '8%' },
+    { key: 'genre',            label: 'Genre',              w: '12%' },
+    { key: 'realisateur',      label: 'Réalisateur',        w: '11%' },
+    { key: '_providers',       label: 'Plateformes',        w: '8%',  num: true },
+    { key: 'allocineId',       label: 'ID AlloCiné',        w: '6%',  num: true },
+  ],
+  cinema: [
+    { key: 'titre',            label: 'Titre du film',      w: '22%' },
+    { key: 'notePresse',       label: 'Note presse',        w: '7%',  num: true },
+    { key: 'noteSpect',        label: 'Note spectateurs',   w: '8%',  num: true },
+    { key: 'tmdbRating',       label: 'Note TMDB',          w: '7%',  num: true },
+    { key: 'dateSortie',       label: 'Sortie ciné',        w: '9%' },
+    { key: 'nbSeances',        label: 'Nb séances',         w: '7%',  num: true },
+    { key: 'anneeSortie',      label: 'Année',              w: '5%',  num: true },
+    { key: 'genre',            label: 'Genre',              w: '13%' },
+    { key: 'realisateur',      label: 'Réalisateur',        w: '12%' },
+    { key: '_providers',       label: 'Plateformes VOD',    w: '9%',  num: true },
+    { key: 'allocineId',       label: 'ID AlloCiné',        w: '7%',  num: true },
   ],
   series: [
-    { key: 'titre',       label: 'Titre de la série',   w: '24%' },
-    { key: 'notePresse',  label: 'Note presse',         w: '7%',  num: true },
-    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
-    { key: 'tmdbRating',  label: 'Note TMDB',           w: '7%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',               w: '6%',  num: true },
-    { key: 'genre',       label: 'Genre',               w: '15%' },
-    { key: 'nbSaisons',   label: 'Nb saisons',          w: '7%',  num: true },
-    { key: 'realisateur', label: 'Créateur',            w: '13%' },
-    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
-  ],
-  details: [
-    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
-    { key: '_titre',      label: 'Titre',               w: '22%' },
-    { key: 'tmdbRating',  label: 'Note TMDB',           w: '7%',  num: true },
-    { key: 'tmdbVotes',   label: 'Nb votes TMDB',       w: '9%',  num: true },
-    { key: 'pays',        label: 'Pays',                w: '9%' },
-    { key: 'annee',       label: 'Année',               w: '6%',  num: true },
-    { key: '_providers',  label: 'Plateformes VOD',     w: '14%' },
-    { key: 'tmdbId',      label: 'ID TMDB',             w: '8%',  num: true },
-    { key: 'imdbId',      label: 'ID IMDB',             w: '9%' },
-    { key: '_type',       label: 'Type',                w: '8%' },
+    { key: 'titre',            label: 'Titre de la série',  w: '22%' },
+    { key: 'notePresse',       label: 'Note presse',        w: '7%',  num: true },
+    { key: 'noteSpect',        label: 'Note spectateurs',   w: '8%',  num: true },
+    { key: 'tmdbRating',       label: 'Note TMDB',          w: '7%',  num: true },
+    { key: 'anneeSortie',      label: 'Année début',        w: '5%',  num: true },
+    { key: 'pays',             label: 'Pays',               w: '8%' },
+    { key: 'nbSaisons',        label: 'Saisons',            w: '5%',  num: true },
+    { key: 'statut',           label: 'Statut',             w: '8%' },
+    { key: '_providers',       label: 'Plateformes',        w: '9%',  num: true },
+    { key: 'allocineId',       label: 'ID AlloCiné',        w: '7%',  num: true },
+    { key: 'dateEntree',       label: 'Ajouté le',          w: '8%' },
+    { key: '_lastFetch',       label: 'Détails fetché le',  w: '8%' },
   ],
 };
 
+// ── Helpers inline ────────────────────────────────────────────────────────────
+// V2 : enrichit chaque objet avec des champs calculés pour l'affichage
+function enrichFilm(f) {
+  return {
+    ...f,
+    _providers: Array.isArray(f.providers) ? f.providers.length : 0,
+    _lastFetch: f.lastDetailsFetch ? f.lastDetailsFetch.slice(0, 10) : null,
+  };
+}
+function enrichSerie(s) {
+  return {
+    ...s,
+    _providers: Array.isArray(s.providers) ? s.providers.length : 0,
+    _lastFetch: s.lastDetailsFetch ? s.lastDetailsFetch.slice(0, 10) : null,
+  };
+}
+
 // ── Chargement ────────────────────────────────────────────────────────────────
 async function loadAll() {
-  const [rFilms, rBE, rSeries] = await Promise.all([
+  const [rFilms, rBE, rCinema, rSeries] = await Promise.all([
     fetch('/api/films').then(r => r.json()),
     fetch('/api/bestever').then(r => r.json()),
+    fetch('/api/cinema').then(r => r.json()),
     fetch('/api/series').then(r => r.json()),
   ]);
 
-  // Merge films + details
-  _data.films = (rFilms.films || []).map((f, i) => {
-    const d = rFilms.details?.[i] || {};
-    return { ...f, tmdbRating: d.tmdbRating, _det: d };
-  });
-
-  _data.bestever = (rBE.films || []).map((f, i) => {
-    const d = rBE.details?.[i] || {};
-    return { ...f, tmdbRating: d.tmdbRating, _det: d };
-  });
-
-  _data.series = (rSeries.series || []).map((s, i) => {
-    const d = rSeries.details?.[i] || {};
-    return { ...s, tmdbRating: d.tmdbRating, _det: d };
-  });
-
-  // Détails cache — merge from all 3 sources, deduplicate by allocineId
-  const detMap = new Map();
-
-  (rFilms.details || []).forEach((d, i) => {
-    if (!d) return;
-    const f = rFilms.films?.[i];
-    const id = d.allocineId || f?.allocineId;
-    if (id && !detMap.has('f_' + id)) {
-      detMap.set('f_' + id, { ...d, allocineId: id, _titre: f?.titre || '', _type: 'Film', _providers: (d.providers || []).map(p => p.name).join(', ') });
-    }
-  });
-  (rBE.details || []).forEach((d, i) => {
-    if (!d) return;
-    const f = rBE.films?.[i];
-    const id = d.allocineId || f?.allocineId;
-    if (id && !detMap.has('be_' + id)) {
-      detMap.set('be_' + id, { ...d, allocineId: id, _titre: f?.titre || '', _type: 'BestEver', _providers: (d.providers || []).map(p => p.name).join(', ') });
-    }
-  });
-  (rSeries.details || []).forEach((d, i) => {
-    if (!d) return;
-    const s = rSeries.series?.[i];
-    const id = d.allocineId || s?.allocineId;
-    if (id && !detMap.has('s_' + id)) {
-      detMap.set('s_' + id, { ...d, allocineId: id, _titre: s?.titre || '', _type: 'Série', _providers: (d.providers || []).map(p => p.name).join(', ') });
-    }
-  });
-
-  _data.details = [...detMap.values()];
+  // V2 : tmdbRating, pays, providers, lastDetailsFetch sont directement dans chaque objet
+  _data.films   = (rFilms.films   || []).map(enrichFilm);
+  _data.bestever = (rBE.films     || []).map(enrichFilm);
+  _data.cinema  = (rCinema.films  || []).map(enrichFilm);
+  _data.series  = (rSeries.series || []).map(enrichSerie);
 
   document.getElementById('loading').style.display = 'none';
   document.getElementById('table-wrap').style.display = '';
@@ -380,13 +366,14 @@ async function loadAll() {
 }
 
 // ── Navigation ────────────────────────────────────────────────────────────────
+const TAB_KEYS = ['films', 'bestever', 'cinema', 'series'];
+
 function switchTab(tab) {
   _currentTab = tab;
   _sortCol = null; _sortDir = 1; _search = '';
   document.getElementById('search-input').value = '';
   document.querySelectorAll('.tab').forEach((t, i) => {
-    const tabs = ['films', 'bestever', 'series', 'details'];
-    t.classList.toggle('active', tabs[i] === tab);
+    t.classList.toggle('active', TAB_KEYS[i] === tab);
   });
   updateColSelect();
   closeDetail();
@@ -473,18 +460,35 @@ function renderTable() {
       const cells = cols.map(c => {
         let v = r[c.key];
         let cls = c.num ? 'num' : '';
-        if (c.key === 'notePresse') cls += v >= 4 ? ' green' : ' orange';
-        if (c.key === 'noteSpect') cls += (v != null && v >= 3.5) ? ' green' : ' muted';
-        if (c.key === 'tmdbRating') cls += (v != null && v > 0) ? ' green' : ' muted';
 
+        // Colorisation
+        if (c.key === 'notePresse') cls += v >= 4 ? ' green' : ' orange';
+        if (c.key === 'noteSpect')  cls += (v != null && v >= 3.5) ? ' green' : ' muted';
+        if (c.key === 'tmdbRating') cls += (v != null && v > 0) ? ' green' : ' muted';
+        if (c.key === '_providers') cls += (v > 0) ? ' green' : ' muted';
+        if (c.key === 'nbSeances')  cls += (v > 0) ? '' : ' muted';
+
+        // Valeur vide
         if (v == null || v === '') return `<td class="${cls.trim()}"><span class="badge">—</span></td>`;
-        if (c.key === 'dateEntree' && v) v = new Date(v).toLocaleDateString('fr-FR');
-        if (c.key === '_providers' && v) {
-          const count = (v.split(',').length);
-          return `<td><span style="font-size:11px;color:var(--muted)">${count > 0 ? `${count} plateforme${count>1?'s':''}` : '—'}</span></td>`;
+
+        // Formatages spéciaux
+        if ((c.key === 'dateEntree' || c.key === '_lastFetch' || c.key === 'dateSortie') && v) {
+          const d = new Date(v);
+          v = isNaN(d) ? v : d.toLocaleDateString('fr-FR');
         }
-        if (c.num && typeof v === 'number') v = v.toFixed ? (Number.isInteger(v) ? v : v.toFixed(1)) : v;
-        return `<td class="${cls.trim()}" title="${String(v).replace(/"/g,'&quot;')}">${String(v).length > 40 ? String(v).slice(0, 38) + '…' : v}</td>`;
+        if (c.key === '_providers') {
+          if (v === 0) return `<td class="${cls.trim()} muted"><span class="badge">—</span></td>`;
+          return `<td class="${cls.trim()}">${v}</td>`;
+        }
+        if (c.key === 'statut' && v) {
+          const color = v === 'Terminée' ? 'var(--muted)' : 'var(--green)';
+          return `<td><span style="color:${color};font-size:11px">${v}</span></td>`;
+        }
+        if (c.num && typeof v === 'number') {
+          v = Number.isInteger(v) ? v : v.toFixed(1);
+        }
+        const str = String(v);
+        return `<td class="${cls.trim()}" title="${str.replace(/"/g,'&quot;')}">${str.length > 40 ? str.slice(0, 38) + '…' : str}</td>`;
       }).join('');
       return `<tr data-ri="${ri}" onclick="selectRow(${ri})">${cells}</tr>`;
     }).join('');
@@ -520,19 +524,16 @@ function selectRow(ri) {
     tr.classList.toggle('selected', parseInt(tr.dataset.ri) === ri);
   });
 
-  // Construire l'objet JSON à afficher (sans les clés internes préfixées _)
+  // Afficher l'objet brut V2 (sans les clés helper préfixées _)
   const display = {};
   Object.entries(row).forEach(([k, v]) => {
-    if (k === '_det' || k.startsWith('_')) return; // skip internal helpers
+    if (k.startsWith('_')) return;
     display[k] = v;
   });
 
-  // Afficher les détails complets (avec _det si disponible)
-  const full = row._det ? { ...display, _details_cache: row._det } : display;
-
-  const titre = row.titre || row._titre || `ID ${row.allocineId}`;
+  const titre = row.titre || `ID ${row.allocineId}`;
   document.getElementById('detail-title').textContent = titre;
-  document.getElementById('detail-json').textContent = JSON.stringify(full, null, 2);
+  document.getElementById('detail-json').textContent = JSON.stringify(display, null, 2);
   document.getElementById('detail-panel').classList.add('show');
 }
 

@@ -56,7 +56,7 @@ const DATA_DIR         = process.env.DATA_DIR || __dirname; // répertoire pour 
 
 // Version du build (incrémentée par le hook pre-commit)
 const BUILD   = (() => { try { return require('./version.json').build; } catch(e) { return 0; } })();
-const VERSION = `v9.2.${BUILD}`;
+const VERSION = `v10.0.${BUILD}`;
 const SERVER_START = new Date().toISOString();
 
 // ── Sécurité — Secret partagé ─────────────────────────────────────────────
@@ -134,21 +134,21 @@ function requireRateLimit(max, windowMs) {
   };
 }
 
-// ── État global Films ──────────────────────────────────────────────────────
-let cachedFilms      = [];   // dernière liste de films scrapés (en mémoire + Redis)
-let lastScrape            = null; // ISO — dernier scraping liste films
-let lastDetailsScrape     = null; // ISO — dernier scraping plateformes films
-let isScraping            = false;
-let scrapeProgress        = { current: 0, total: 0, annee: '' };
-let filmsDetailsProgress  = { current: 0, total: 0 };
-let lastScrapeErrors      = [];
+// ── État global Films (table unifiée : recent + bestever + cinema) ─────────
+// Chaque film a un champ `lists: ['recent','bestever','cinema']` indiquant
+// dans quelles listes il figure. Les détails TMDB et providers sont inline.
+let cachedFilms      = [];   // array unifié, persisté dans Redis clé 'films'
+let lastScrape       = null; // ISO — dernier scraping liste recent
+let isScraping       = false;
+let scrapeProgress   = { current: 0, total: 0, annee: '' };
+let filmsDetailsProgress = { current: 0, total: 0 };
+let lastScrapeErrors = [];
 // Phase du scraping nocturne en cours
-let scrapingPhase         = null; // null | 'films-list' | 'films-details' | 'series-list' | 'series-details' | 'bestever-list' | 'bestever-details'
+let scrapingPhase    = null; // null | 'films-list' | 'films-details' | 'series-list' | 'series-details' | 'bestever-list' | 'cinema-list'
 
 // ── Sources Séries (fenêtre glissante 4 ans) ───────────────────────────────
-// Génère dynamiquement : Top AlloCiné + presse de l'année courante et les 3 ans précédents.
 const _currentYear   = new Date().getFullYear();
-const _historyYears  = Array.from({ length: 4 }, (_, i) => _currentYear - i); // ex: [2026,2025,2024,2023]
+const _historyYears  = Array.from({ length: 4 }, (_, i) => _currentYear - i);
 const SERIES_SOURCES = [
   { label: 'Top AlloCiné', baseUrl: 'https://www.allocine.fr/series/top/', pages: 10 },
   ..._historyYears.map(y => ({
@@ -157,35 +157,30 @@ const SERIES_SOURCES = [
     pages:   5,
   })),
 ];
-const SERIES_PAGES          = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
-const SERIES_DETAILS_TTL_MS = 1000 * 60 * 60 * 24 * 7; // 7 jours — durée de validité des fiches séries
+const SERIES_PAGES = SERIES_SOURCES.reduce((sum, s) => sum + s.pages, 0);
 
-// ── État global Séries ─────────────────────────────────────────────────────
-let cachedSeries            = [];   // dernière liste de séries scrapées
-let lastSeriesScrape        = null; // ISO — dernier scraping liste séries
-let lastSeriesDetailsScrape = null; // ISO — dernier scraping fiches séries
-let isScrapingSeries         = false;
-let seriesProgress           = { current: 0, total: 0 };
-let seriesDetailsProgress    = { current: 0, total: 0 };
-let lastSeriesScrapeErrors   = [];
-const seriesDetailsCache    = new Map(); // clé: "sid:XXXXX" → { value, cachedAt }
+// ── État global Séries (table unifiée avec détails inline) ─────────────────
+// Chaque série a les détails (pays, providers, nbSaisons…) inline + lastDetailsFetch.
+let cachedSeries           = [];
+let lastSeriesScrape       = null;
+let isScrapingSeries        = false;
+let seriesProgress          = { current: 0, total: 0 };
+let seriesDetailsProgress   = { current: 0, total: 0 };
+let lastSeriesScrapeErrors  = [];
 
 // ── État global Bestever ────────────────────────────────────────────────────
 const BESTEVER_DECADES          = [1940, 1950, 1960, 1970, 1980, 1990, 2000, 2010, 2020];
 const BESTEVER_PAGES_PER_DECADE = Number(process.env.BESTEVER_PAGES_PER_DECADE || 9);
-let cachedBestever              = [];   // meilleurs films all-time (par décennie)
-let lastBesteverScrape          = null; // ISO — dernier scraping liste bestever
-let lastBesteverDetailsScrape   = null; // ISO — dernier scraping plateformes bestever
-let isBesteverScraping          = false;
-let besteverProgress            = { current: 0, total: 0 };
-let besteverDetailsProgress     = { current: 0, total: 0 };
+let lastBesteverScrape      = null;
+let isBesteverScraping      = false;
+let besteverProgress        = { current: 0, total: 0 };
+let besteverDetailsProgress = { current: 0, total: 0 };
 
 // ── État global Cinéma ──────────────────────────────────────────────────────
 const CINEMA_PAGES          = 7;
 const CINEMA_MIN_SEANCES    = 50;
 const CINEMA_MIN_COMBINED   = 7.2;
 const CINEMA_MAX_AGE_MONTHS = 2;
-let cachedCinema     = [];
 let lastCinemaScrape = null;
 let isCinemaScraping = false;
 let cinemaProgress   = { current: 0, total: 0 };
@@ -265,59 +260,30 @@ async function loadUserdata() {
         prefsDB = typeof prefsRaw === 'string' ? JSON.parse(prefsRaw) : prefsRaw;
         console.log(`🔖 Prefs Redis chargées (${Object.keys(prefsDB).length} profils)`);
       }
-      // Horodatages scraping films
-      const ts  = await redis.get('lastScrape');       if (ts)  lastScrape        = ts;
-      const tsD = await redis.get('lastDetailsScrape');if (tsD) lastDetailsScrape = tsD;
-      // Liste de films
+      // Horodatages scraping
+      const ts = await redis.get('lastScrape');
+      if (ts) lastScrape = ts;
+      const tsBE = await redis.get('lastBesteverScrape');
+      if (tsBE) lastBesteverScrape = tsBE;
+      const tsCinema = await redis.get('lastCinemaScrape');
+      if (tsCinema) lastCinemaScrape = tsCinema;
+      const tsSeries = await redis.get('lastSeriesScrape');
+      if (tsSeries) lastSeriesScrape = tsSeries;
+      // Table films unifiée (recent + bestever + cinema, détails TMDB inline)
       const films = await redis.get('films');
       if (films) {
         cachedFilms = typeof films === 'string' ? JSON.parse(films) : films;
-        console.log(`🎬 Films Redis chargés (${cachedFilms.length} films)`);
+        // Garantir que tous les films ont bien un champ `lists`
+        cachedFilms.forEach(f => { if (!Array.isArray(f.lists)) f.lists = ['recent']; });
+        const byList = l => cachedFilms.filter(f => f.lists.includes(l)).length;
+        console.log(`🎬 Films Redis chargés (${cachedFilms.length} total — recent:${byList('recent')} bestever:${byList('bestever')} cinema:${byList('cinema')})`);
       }
-      // Cache détails films
-      const details = await redis.get('details');
-      if (details) {
-        const obj = typeof details === 'string' ? JSON.parse(details) : details;
-        Object.entries(obj).forEach(([k, v]) => detailsCache.set(k, v));
-        console.log(`📋 détailsCache Redis chargé (${detailsCache.size} entrées)`);
-      }
-      // Liste de séries
+      // Table séries unifiée (détails inline)
       const seriesRaw = await redis.get('series');
       if (seriesRaw) {
         cachedSeries = typeof seriesRaw === 'string' ? JSON.parse(seriesRaw) : seriesRaw;
         console.log(`📺 Séries Redis chargées (${cachedSeries.length} séries)`);
       }
-      // Horodatages scraping séries
-      const seriesTsRaw = await redis.get('lastSeriesScrape');
-      if (seriesTsRaw) lastSeriesScrape = seriesTsRaw;
-      const seriesDetailsTsRaw = await redis.get('lastSeriesDetailsScrape');
-      if (seriesDetailsTsRaw) lastSeriesDetailsScrape = seriesDetailsTsRaw;
-      // Cache détails séries
-      const seriesDetailsRaw = await redis.get('series_details');
-      if (seriesDetailsRaw) {
-        const sdObj = typeof seriesDetailsRaw === 'string' ? JSON.parse(seriesDetailsRaw) : seriesDetailsRaw;
-        Object.entries(sdObj).forEach(([k, v]) => seriesDetailsCache.set(k, v));
-        console.log(`📋 seriesDetailsCache Redis chargé (${seriesDetailsCache.size} entrées)`);
-      }
-      // Liste bestever
-      const besteverRaw = await redis.get('bestever');
-      if (besteverRaw) {
-        cachedBestever = typeof besteverRaw === 'string' ? JSON.parse(besteverRaw) : besteverRaw;
-        console.log(`🏆 Bestever Redis chargé (${cachedBestever.length} films)`);
-      }
-      // Horodatages bestever
-      const besteverTsRaw = await redis.get('lastBesteverScrape');
-      if (besteverTsRaw) lastBesteverScrape = besteverTsRaw;
-      const besteverDetailsTsRaw = await redis.get('lastBesteverDetailsScrape');
-      if (besteverDetailsTsRaw) lastBesteverDetailsScrape = besteverDetailsTsRaw;
-      // Liste cinéma
-      const cinemaRaw = await redis.get('cinema');
-      if (cinemaRaw) {
-        cachedCinema = typeof cinemaRaw === 'string' ? JSON.parse(cinemaRaw) : cinemaRaw;
-        console.log(`🎥 Cinéma Redis chargé (${cachedCinema.length} films)`);
-      }
-      const cinemaTsRaw = await redis.get('lastCinemaScrape');
-      if (cinemaTsRaw) lastCinemaScrape = cinemaTsRaw;
       // Réinitialisation forcée des profils côté client
       const resetRaw = await redis.get('profileResetAt');
       if (resetRaw) profileResetAt = resetRaw;
@@ -392,11 +358,8 @@ async function saveUserdataFile() {
 //                       + pause longue tous les ALLO_BURST_EVERY requêtes
 //  • pageCache : cache en mémoire des pages de liste (TTL 20 min, évite de
 //                re-télécharger si l'utilisateur relance un scraping)
-//  • detailsCache : cache en mémoire des fiches films (TTL 24h, sauvegardé
-//                   dans Redis avec un debounce de 8s)
+//  (V2) detailsCache supprimé — les détails sont inline dans cachedFilms/cachedSeries
 // ══════════════════════════════════════════════════════════════════════════════
-
-const detailsCache = new Map(); // clé: "id:XXXXX" ou "q:titre" → { value, cachedAt }
 
 /** Headers imitant Chrome 124 sur Mac — réduit le risque de soft-block AlloCiné */
 const BROWSER_HEADERS = {
@@ -513,49 +476,94 @@ function rateLimitedFetch(url) {
   return ticket;
 }
 
-// ── Cache des fiches films (24h, sauvegardé dans Redis en différé) ────────────
-function getCachedDetails(key) {
-  const cached = detailsCache.get(key);
-  if (!cached) return null;
-  const val = cached.value;
-  // Ne pas expirer les entrées qui ont un enrichissement TMDB (tmdbRating présent même si null = enrichi)
-  const hasTmdb = val && 'tmdbRating' in val;
-  if (!hasTmdb && Date.now() - cached.cachedAt > DETAILS_TTL_MS) { detailsCache.delete(key); return null; }
-  if (val && val.providers) return { ...val, providers: filterProviders(val.providers) };
-  return val;
+// ── Sauvegarde films unifiés dans Redis ───────────────────────────────────────
+let _filmsBackupTimer = null;
+function scheduleFilmsBackup() {
+  clearTimeout(_filmsBackupTimer);
+  _filmsBackupTimer = setTimeout(saveFilmsCache, 8000);
 }
-
-function setCachedDetails(key, value) {
-  // Préserver les champs TMDB si la nouvelle valeur n'en a pas (ex : re-scrape providers)
-  if (value && value.tmdbRating === undefined) {
-    const existing = detailsCache.get(key)?.value;
-    if (existing?.tmdbRating !== undefined) {
-      value = { ...value, tmdbId: existing.tmdbId, tmdbRating: existing.tmdbRating, tmdbVotes: existing.tmdbVotes, imdbId: existing.imdbId };
-    }
-  }
-  detailsCache.set(key, { value, cachedAt: Date.now() });
-  if (value && value.providers && value.providers.length > 0) {
-    lastDetailsScrape = new Date().toISOString();
-  }
-  scheduleDetailsBackup();
-}
-
-/** Debounce 8s — évite de saturer Redis en cas d'appels en rafale à /api/details */
-let _detailsBackupTimer = null;
-function scheduleDetailsBackup() {
-  clearTimeout(_detailsBackupTimer);
-  _detailsBackupTimer = setTimeout(saveDetailsCache, 8000);
-}
-
-async function saveDetailsCache() {
+async function saveFilmsCache() {
   if (!redis) return;
   try {
-    const obj = {};
-    detailsCache.forEach((v, k) => { obj[k] = v; });
-    await redis.set('details', JSON.stringify(obj));
-    if (lastDetailsScrape) await redis.set('lastDetailsScrape', lastDetailsScrape);
-    console.log(`💾 détailsCache sauvegardé (${detailsCache.size} entrées)`);
-  } catch(e) { console.warn('Erreur sauvegarde détailsCache:', e.message); }
+    await redis.set('films', JSON.stringify(cachedFilms));
+    console.log(`💾 films unifiés sauvegardés (${cachedFilms.length} entrées)`);
+  } catch(e) { console.warn('Erreur sauvegarde films:', e.message); }
+}
+
+// ── Merge de nouveaux films dans la table unifiée ────────────────────────────
+/**
+ * Merge `newFilms` (issus d'un scraper) dans `cachedFilms` avec le flag `listFlag`.
+ * - Film existant (par allocineId) : ajoute le flag si absent, met à jour notes/poster/etc.
+ * - Film nouveau : ajoute avec le flag + champs TMDB vides.
+ * - `dateEntree` : préservée si le film existe, sinon date du jour.
+ * @param {Array}  newFilms  Films issus du scraper
+ * @param {string} listFlag  'recent' | 'bestever' | 'cinema'
+ * @returns {Array} cachedFilms mis à jour
+ */
+function mergeFilmsIntoCache(newFilms, listFlag) {
+  const today = new Date().toISOString().slice(0, 10);
+  const byId  = new Map(cachedFilms.map(f => [String(f.allocineId), f]));
+  const newIds = new Set();
+
+  for (const f of newFilms) {
+    const id = String(f.allocineId);
+    newIds.add(id);
+    if (byId.has(id)) {
+      const ex = byId.get(id);
+      if (!ex.lists.includes(listFlag)) ex.lists.push(listFlag);
+      // Mise à jour des champs de base (notes, poster, genre peuvent changer)
+      ex.notePresse  = f.notePresse  ?? ex.notePresse;
+      ex.noteSpect   = f.noteSpect   ?? ex.noteSpect;
+      ex.poster      = f.poster      || ex.poster;
+      ex.genre       = f.genre       || ex.genre;
+      ex.realisateur = f.realisateur || ex.realisateur;
+      ex.synopsis    = f.synopsis    || ex.synopsis;
+      // Champs spécifiques par liste
+      if (listFlag === 'bestever') ex.decade = f.decade || ex.decade;
+      if (listFlag === 'cinema')   { ex.dateSortie = f.dateSortie || ex.dateSortie; ex.nbSeances = f.nbSeances ?? ex.nbSeances ?? 0; }
+      if (listFlag === 'recent')   ex.anneeSortie = f.anneeSortie || ex.anneeSortie;
+    } else {
+      byId.set(id, {
+        titre:          f.titre         || '',
+        titreOriginal:  f.titreOriginal || '',
+        genre:          f.genre         || '',
+        realisateur:    f.realisateur   || '',
+        acteurs:        f.acteurs       || '',
+        synopsis:       f.synopsis      || '',
+        poster:         f.poster        || null,
+        duree:          f.duree         || null,
+        allocineId:     f.allocineId,
+        notePresse:     f.notePresse    ?? null,
+        noteSpect:      f.noteSpect     ?? null,
+        anneeSortie:    f.anneeSortie   || null,
+        decade:         f.decade        || null,
+        dateEntree:     f.dateEntree    || today,
+        dateSortie:     f.dateSortie    || null,
+        nbSeances:      f.nbSeances     ?? 0,
+        lists:          [listFlag],
+        // Détails TMDB (remplis ultérieurement par l'enrichissement)
+        tmdbRating:     null,
+        tmdbVotes:      null,
+        tmdbId:         null,
+        imdbId:         null,
+        pays:           null,
+        providers:      [],
+        lastDetailsFetch: null,
+      });
+    }
+  }
+
+  // Retirer le flag `listFlag` des films qui n'apparaissent plus dans la liste
+  // (ex : film sorti du cinéma, ou film récent tombé en dessous du seuil)
+  for (const f of cachedFilms) {
+    if (!newIds.has(String(f.allocineId)) && f.lists.includes(listFlag)) {
+      f.lists = f.lists.filter(l => l !== listFlag);
+    }
+  }
+
+  // Reconstruire depuis la Map (préserve ordre insertion) + purger les films sans liste
+  cachedFilms = [...byId.values()].filter(f => f.lists.length > 0);
+  return cachedFilms;
 }
 
 
@@ -1208,11 +1216,16 @@ app.post('/api/reset-profile-choice', requireSecret, async (req, res) => {
 });
 
 app.get('/api/films', (_req, res) => {
-  const details = cachedFilms.map(film => {
-    const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
-    return getCachedDetails(key) || null;
-  });
-  res.json({ films: cachedFilms, lastScrape, count: cachedFilms.length, details });
+  // V2 : table unifiée — on retourne uniquement les films de la liste 'recent'
+  // `details` est maintenant inline dans chaque film (providers, pays, tmdbRating…)
+  const films = cachedFilms.filter(f => f.lists.includes('recent'));
+  // Compat frontend V1 : le frontend attend { films, details } où details[i] correspond à films[i]
+  const details = films.map(f => ({
+    pays: f.pays, annee: f.anneeSortie, allocineId: f.allocineId,
+    providers: f.providers || [], tmdbRating: f.tmdbRating,
+    tmdbVotes: f.tmdbVotes, tmdbId: f.tmdbId, imdbId: f.imdbId,
+  }));
+  res.json({ films, lastScrape, count: films.length, details });
 });
 
 /**
@@ -1662,13 +1675,13 @@ app.get('/api/health', (_req, res) => {
   res.json({
     ok: true, isScraping, totalPages: TOTAL_PAGES,
     cachedFilms: cachedFilms.length,
-    detailsCacheSize: detailsCache.size,
+    cachedFilmsRecent:   cachedFilms.filter(f => f.lists.includes('recent')).length,
+    cachedFilmsBestever: cachedFilms.filter(f => f.lists.includes('bestever')).length,
+    cachedFilmsCinema:   cachedFilms.filter(f => f.lists.includes('cinema')).length,
+    cachedFilmsEnriched: cachedFilms.filter(f => f.lastDetailsFetch).length,
     cachedSeries: cachedSeries.length,
-    seriesDetailsCacheSize: seriesDetailsCache.size,
-    cachedBestever: cachedBestever.length,
-    cachedCinema: cachedCinema.length,
-    lastScrape, lastDetailsScrape,
-    lastSeriesScrape, lastBesteverScrape,
+    cachedSeriesEnriched: cachedSeries.filter(s => s.lastDetailsFetch).length,
+    lastScrape, lastBesteverScrape, lastCinemaScrape, lastSeriesScrape,
     version: VERSION, serverStart: SERVER_START,
     lastScrapeErrors,
   });
@@ -1793,11 +1806,11 @@ app.get('/api/scrape', requireSecret, requireRateLimit(5, 10 * 60 * 1000), async
     }
   }
 
-  const result = applyDateEntree(dedupeAndSortFilms(allFilms), cachedFilms);
-  cachedFilms  = result;
+  const deduped = dedupeAndSortFilms(allFilms);
+  mergeFilmsIntoCache(deduped, 'recent');
   await saveLastScrape();
   if (redis) {
-    try { await redis.set('films', JSON.stringify(result)); }
+    try { await redis.set('films', JSON.stringify(cachedFilms)); }
     catch(e) { console.warn('Erreur sauvegarde films Redis:', e.message); }
   }
   send({ type: 'done', totalFilms: result.length, lastScrape });
@@ -1834,10 +1847,11 @@ app.get('/api/details', async (req, res) => {
   if (!allocineId && !query)
     return res.json({ pays: null, annee: null, allocineId: null, allocineUrl: null, providers: [] });
 
-  const cached = getCachedDetails(cacheKey);
-  if (cached && (cached.providers?.length > 0 || cached.error || cached.tmdbRating !== undefined)) {
-    console.log(`Cache détails: ${cacheKey} → ${cached.providers?.length || 0} plateformes`);
-    return res.json(cached);
+  // V2 : chercher d'abord dans cachedFilms inline
+  const cachedFilm = allocineId ? cachedFilms.find(f => String(f.allocineId) === allocineId) : null;
+  if (cachedFilm && (cachedFilm.providers?.length > 0 || cachedFilm.lastDetailsFetch)) {
+    console.log(`Cache détails film: ${allocineId} → ${cachedFilm.providers?.length || 0} plateformes`);
+    return res.json({ pays: cachedFilm.pays, annee: cachedFilm.anneeSortie, allocineId, providers: cachedFilm.providers, tmdbRating: cachedFilm.tmdbRating, tmdbVotes: cachedFilm.tmdbVotes, tmdbId: cachedFilm.tmdbId, imdbId: cachedFilm.imdbId });
   }
 
   try {
@@ -1857,9 +1871,7 @@ app.get('/api/details', async (req, res) => {
     }
 
     if (!resolvedId) {
-      const empty = { pays: null, annee: null, allocineId: null, allocineUrl: null, providers: [] };
-      setCachedDetails(cacheKey, empty);
-      return res.json(empty);
+      return res.json({ pays: null, annee: null, allocineId: null, allocineUrl: null, providers: [] });
     }
 
     const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${resolvedId}.html`;
@@ -1905,26 +1917,24 @@ app.get('/api/details', async (req, res) => {
 
     const data = { pays, annee, duree, synopsis, allocineId: resolvedId, allocineUrl: filmUrl, providers };
 
-    // Ne pas mettre en cache une page vide (fiche introuvable)
+    // Mise à jour inline dans cachedFilms
     if (pays || annee || providers.length > 0 || synopsis) {
-      setCachedDetails(cacheKey, data);
-      if (query && !allocineId) setCachedDetails(`id:${resolvedId}`, data);
-    }
-
-    // Met à jour le synopsis dans cachedFilms si le film n'en avait pas
-    if (synopsis && resolvedId) {
-      const filmInCache = cachedFilms.find(f => String(f.allocineId) === String(resolvedId));
-      if (filmInCache && !filmInCache.synopsis) {
-        filmInCache.synopsis = synopsis;
-        console.log(`[synopsis] Mis à jour pour film ${resolvedId} via fiche film`);
+      const idx = cachedFilms.findIndex(f => String(f.allocineId) === String(resolvedId));
+      if (idx !== -1) {
+        cachedFilms[idx] = {
+          ...cachedFilms[idx],
+          pays:             pays             || cachedFilms[idx].pays,
+          providers:        providers.length > 0 ? providers : cachedFilms[idx].providers,
+          synopsis:         synopsis          || cachedFilms[idx].synopsis,
+          lastDetailsFetch: new Date().toISOString(),
+        };
+        scheduleFilmsBackup();
       }
     }
 
-    // Renvoyer le cache mergé (qui inclut tmdbRating si déjà enrichi) plutôt que data brut
-    const merged = getCachedDetails(cacheKey) || data;
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Détails "${query || resolvedId}" → ${pays || '?'} (${annee || '?'}) | synopsis:${synopsis ? 'oui' : 'non'} | ${pNames}`);
-    return res.json(merged);
+    return res.json(data);
 
   } catch (error) {
     const status  = error.response?.status;
@@ -2044,14 +2054,14 @@ app.get('/api/debug/providers', requireSecret, async (req, res) => {
  * Réponse: { ok: true, cleared: number }
  */
 app.post('/api/clear-details-cache', requireSecret, async (_req, res) => {
-  const count = detailsCache.size;
-  detailsCache.clear();
-  lastDetailsScrape = null;
+  // V2 : remettre lastDetailsFetch à null sur tous les films
+  const count = cachedFilms.filter(f => f.lastDetailsFetch).length;
+  cachedFilms.forEach(f => { f.lastDetailsFetch = null; f.providers = []; f.pays = null; });
   if (redis) {
-    try { await redis.del('details'); await redis.del('lastDetailsScrape'); }
-    catch(e) { console.warn('Redis del details:', e.message); }
+    try { await redis.set('films', JSON.stringify(cachedFilms)); }
+    catch(e) { console.warn('Redis clear-details-cache:', e.message); }
   }
-  console.log(`🗑️  Cache plateformes films vidé (${count} entrées supprimées)`);
+  console.log(`🗑️  Cache détails films réinitialisé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });
 
@@ -2099,36 +2109,28 @@ app.post('/api/reset-date-entree', requireSecret, async (_req, res) => {
 app.post('/api/clean-providers', requireSecret, async (_req, res) => {
   let cleanedFilms = 0, cleanedSeries = 0;
 
-  // Films + Bestever
-  for (const [key, det] of detailsCache) {
-    const val = det?.value;
-    if (!val?.providers) continue;
-    const before = val.providers.length;
-    const after  = filterProviders(val.providers);
-    if (after.length !== before) {
-      detailsCache.set(key, { ...det, value: { ...val, providers: after } });
-      cleanedFilms++;
-    }
+  // Films (table unifiée)
+  for (const film of cachedFilms) {
+    if (!film.providers?.length) continue;
+    const before = film.providers.length;
+    const after  = filterProviders(film.providers);
+    if (after.length !== before) { film.providers = after; cleanedFilms++; }
   }
 
-  // Séries
-  for (const [key, det] of seriesDetailsCache) {
-    const val = det?.value;
-    if (!val?.providers) continue;
-    const before = val.providers.length;
-    const after  = filterProviders(val.providers);
-    if (after.length !== before) {
-      seriesDetailsCache.set(key, { ...det, value: { ...val, providers: after } });
-      cleanedSeries++;
-    }
+  // Séries (table unifiée)
+  for (const serie of cachedSeries) {
+    if (!serie.providers?.length) continue;
+    const before = serie.providers.length;
+    const after  = filterProviders(serie.providers);
+    if (after.length !== before) { serie.providers = after; cleanedSeries++; }
   }
 
   // Re-sauvegarde Redis
-  await saveDetailsCache();
-  await saveSeriesDetailsCache();
+  if (cleanedFilms)  await saveFilmsCache();
+  if (cleanedSeries) await saveSeriesCache();
 
   console.log(`🧹 clean-providers : ${cleanedFilms} films + ${cleanedSeries} séries nettoyés`);
-  res.json({ ok: true, cleanedFilms, cleanedSeries, totalFilms: detailsCache.size, totalSeries: seriesDetailsCache.size });
+  res.json({ ok: true, cleanedFilms, cleanedSeries, totalFilms: cachedFilms.length, totalSeries: cachedSeries.length });
 });
 
 /**
@@ -2184,107 +2186,73 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY non configurée' });
   if (_tmdbStatus.running) return res.status(429).json({ error: 'Enrichissement déjà en cours' });
 
-  // force=true : re-fetche tout, même les entrées déjà enrichies (utile après amélioration de l'algo)
   const force = req.query.force === 'true' || req.body?.force === true;
-
-  // Répondre immédiatement — l'enrichissement tourne en arrière-plan
   res.json({ ok: true, message: `Enrichissement TMDB démarré en arrière-plan${force ? ' (force)' : ''}` });
 
-  const DELAY = 500; // ms entre chaque item (2 appels API par item : search + details/credits/external_ids)
+  const DELAY = 500;
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
-  // Initialise le suivi de progression
-  const totalItems = detailsCache.size + seriesDetailsCache.size + cachedCinema.length;
+  // V2 : itérer directement sur cachedFilms et cachedSeries (pas de Map séparé)
+  const filmsToEnrich  = cachedFilms.filter(f => f.titre && (force || typeof f.tmdbRating !== 'number'));
+  const seriesToEnrich = cachedSeries.filter(s => s.titre && (force || typeof s.tmdbRating !== 'number'));
+  const totalItems = filmsToEnrich.length + seriesToEnrich.length;
+
   Object.assign(_tmdbStatus, {
-    running: true,
-    force,
+    running: true, force,
     startedAt: new Date().toISOString(),
-    done: 0,
-    total: totalItems,
-    enrichedFilms: 0,
-    enrichedSeries: 0,
-    enrichedCinema: 0,
-    skipped: 0,
+    done: 0, total: totalItems,
+    enrichedFilms: 0, enrichedSeries: 0, skipped: 0,
   });
 
-  // Films — val contient { pays, annee, allocineId, providers... } mais PAS titre/titreOriginal
-  // → on retrouve le film dans cachedFilms via val.allocineId
-  for (const [key, det] of detailsCache) {
-    const val = det?.value;
-    if (!val) { _tmdbStatus.done++; continue; }
-    if (!force && typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
-    const filmId = val.allocineId || key.replace(/^(id:|q:)/, '');
-    const film   = cachedFilms.find(f => String(f.allocineId) === String(filmId)) || {};
-    const titre  = film.titre || null;
-    const titreO = film.titreOriginal || null;
-    if (!titre && !titreO) { _tmdbStatus.done++; continue; } // pas de titre → inutile d'appeler l'API
-    const annee = film.anneeSortie || val.annee || null;
-    const tmdb = await tmdbLookup(titre, titreO, annee, 'movie', film.realisateur || null);
-    if (tmdb) {
-      // Rafraîchir cachedAt pour éviter l'expiration TTL de l'entrée enrichie
-      detailsCache.set(key, { value: { ...val, ...tmdb }, cachedAt: Date.now() });
-      _tmdbStatus.enrichedFilms++;
-    } else {
-      detailsCache.set(key, { value: { ...val, tmdbRating: null }, cachedAt: Date.now() });
-    }
+  // ── Films (recent + bestever + cinema — tous dans cachedFilms) ──────────────
+  let filmsDirty = false;
+  for (const film of filmsToEnrich) {
+    const idx = cachedFilms.findIndex(f => String(f.allocineId) === String(film.allocineId));
+    if (idx === -1) { _tmdbStatus.done++; continue; }
+    const tmdb = await tmdbLookup(film.titre, film.titreOriginal, film.anneeSortie, 'movie', film.realisateur || null);
+    cachedFilms[idx] = {
+      ...cachedFilms[idx],
+      tmdbRating: tmdb?.tmdbRating ?? null,
+      tmdbVotes:  tmdb?.tmdbVotes  ?? null,
+      tmdbId:     tmdb?.tmdbId     ?? null,
+      imdbId:     tmdb?.imdbId     ?? null,
+    };
+    if (tmdb) _tmdbStatus.enrichedFilms++;
+    filmsDirty = true;
     _tmdbStatus.done++;
     await sleep(DELAY);
   }
+  if (filmsDirty && redis) {
+    try { await redis.set('films', JSON.stringify(cachedFilms)); }
+    catch(e) { console.warn('[TMDB] Sauvegarde films Redis:', e.message); }
+  }
 
-  // Séries — idem : val = { allocineId, providers... }, titre dans cachedSeries
-  for (const [key, det] of seriesDetailsCache) {
-    const val = det?.value;
-    if (!val) { _tmdbStatus.done++; continue; }
-    if (!force && typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
-    const serieId = val.allocineId || key.replace(/^sid:/, '');
-    const serie   = cachedSeries.find(s => String(s.allocineId) === String(serieId)) || {};
-    const titre   = serie.titre || null;
-    const titreO  = serie.titreOriginal || null;
-    if (!titre && !titreO) { _tmdbStatus.done++; continue; }
-    const annee = serie.anneeSortie || null;
-    const tmdb = await tmdbLookup(titre, titreO, annee, 'tv', serie.realisateur || null);
-    if (tmdb) {
-      seriesDetailsCache.set(key, { value: { ...val, ...tmdb }, cachedAt: Date.now() });
-      _tmdbStatus.enrichedSeries++;
-    } else {
-      seriesDetailsCache.set(key, { value: { ...val, tmdbRating: null }, cachedAt: Date.now() });
-    }
+  // ── Séries ─────────────────────────────────────────────────────────────────
+  let seriesDirty = false;
+  for (const serie of seriesToEnrich) {
+    const idx = cachedSeries.findIndex(s => String(s.allocineId) === String(serie.allocineId));
+    if (idx === -1) { _tmdbStatus.done++; continue; }
+    const tmdb = await tmdbLookup(serie.titre, serie.titreOriginal, serie.anneeSortie, 'tv', serie.realisateur || null);
+    cachedSeries[idx] = {
+      ...cachedSeries[idx],
+      tmdbRating: tmdb?.tmdbRating ?? null,
+      tmdbVotes:  tmdb?.tmdbVotes  ?? null,
+      tmdbId:     tmdb?.tmdbId     ?? null,
+      imdbId:     tmdb?.imdbId     ?? null,
+    };
+    if (tmdb) _tmdbStatus.enrichedSeries++;
+    seriesDirty = true;
     _tmdbStatus.done++;
     await sleep(DELAY);
   }
-
-  // Films cinéma — tmdbRating stocké directement dans l'objet cachedCinema[i]
-  let enrichedCinema = 0;
-  let cinemaDirty = false;
-  for (let i = 0; i < cachedCinema.length; i++) {
-    const f = cachedCinema[i];
-    if (!f) { _tmdbStatus.done++; continue; }
-    if (!force && typeof f.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
-    const titre = f.titre || null;
-    const titreO = f.titreOriginal || null;
-    if (!titre && !titreO) { _tmdbStatus.done++; continue; }
-    const tmdb = await tmdbLookup(titre, titreO, f.anneeSortie || null, 'movie', f.realisateur || null);
-    if (tmdb) {
-      cachedCinema[i] = { ...f, ...tmdb };
-      enrichedCinema++;
-    } else {
-      cachedCinema[i] = { ...f, tmdbRating: null };
-    }
-    cinemaDirty = true;
-    _tmdbStatus.done++;
-    await sleep(DELAY);
+  if (seriesDirty && redis) {
+    try { await redis.set('series', JSON.stringify(cachedSeries)); }
+    catch(e) { console.warn('[TMDB] Sauvegarde séries Redis:', e.message); }
   }
 
-  await saveDetailsCache();
-  await saveSeriesDetailsCache();
-  if (cinemaDirty) {
-    try { await redis.set('cinema', JSON.stringify(cachedCinema)); } catch(e) { console.warn('[TMDB] Sauvegarde cinema Redis échouée:', e.message); }
-  }
-
-  _tmdbStatus.enrichedCinema = enrichedCinema;
   _tmdbStatus.running = false;
   _tmdbStatus.lastRun = new Date().toISOString();
-  console.log(`🎬 TMDB enrich : ${_tmdbStatus.enrichedFilms} films + ${_tmdbStatus.enrichedSeries} séries + ${enrichedCinema} cinéma (${_tmdbStatus.skipped} skipped)`);
+  console.log(`🎬 TMDB enrich : ${_tmdbStatus.enrichedFilms} films + ${_tmdbStatus.enrichedSeries} séries (${_tmdbStatus.skipped} skipped)`);
 });
 
 app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
@@ -2316,27 +2284,23 @@ app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
   const hasChange = (before, after) =>
     before.some((p, i) => p.name !== after[i].name);
 
-  for (const [key, det] of detailsCache) {
-    const val = det?.value;
-    if (!val?.providers?.length) continue;
-    const normed = normalizeList(filterProviders(val.providers));
-    if (hasChange(filterProviders(val.providers), normed)) {
-      detailsCache.set(key, { ...det, value: { ...val, providers: normed } });
-      renamedFilms++;
-    }
+  // Films (table unifiée)
+  for (const film of cachedFilms) {
+    if (!film.providers?.length) continue;
+    const filtered = filterProviders(film.providers);
+    const normed   = normalizeList(filtered);
+    if (hasChange(filtered, normed)) { film.providers = normed; renamedFilms++; }
   }
-  for (const [key, det] of seriesDetailsCache) {
-    const val = det?.value;
-    if (!val?.providers?.length) continue;
-    const normed = normalizeList(filterProviders(val.providers));
-    if (hasChange(filterProviders(val.providers), normed)) {
-      seriesDetailsCache.set(key, { ...det, value: { ...val, providers: normed } });
-      renamedSeries++;
-    }
+  // Séries (table unifiée)
+  for (const serie of cachedSeries) {
+    if (!serie.providers?.length) continue;
+    const filtered = filterProviders(serie.providers);
+    const normed   = normalizeList(filtered);
+    if (hasChange(filtered, normed)) { serie.providers = normed; renamedSeries++; }
   }
 
-  await saveDetailsCache();
-  await saveSeriesDetailsCache();
+  if (renamedFilms)  await saveFilmsCache();
+  if (renamedSeries) await saveSeriesCache();
   console.log(`🔤 normalize-providers : ${renamedFilms} films + ${renamedSeries} séries renommés`);
   res.json({ ok: true, renamedFilms, renamedSeries });
 });
@@ -2470,30 +2434,21 @@ async function autoScrapeFilmsListIfStale() {
  */
 async function autoScrapeFilmsDetailsIfStale() {
   if (isScraping) return;
-  const ageDetDays  = lastDetailsScrape ? (Date.now() - new Date(lastDetailsScrape).getTime()) / 86400000 : Infinity;
-  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  // Nouveaux films (ajoutés depuis le dernier scraping liste) sans détails en cache
-  const newFilms = cachedFilms.filter(f => f.allocineId && !getCachedDetails(`id:${f.allocineId}`));
-  // Sortir uniquement si le cache est frais ET aucun nouveau film à enrichir
-  if (!detStale && newFilms.length === 0) {
-    console.log(`⏭️  Films plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
-  }
-  if (!detStale && newFilms.length > 0) {
-    console.log(`\n🆕 Films plateformes : ${newFilms.length} nouveau(x) film(s) sans détails — enrichissement ciblé`);
+  // V2 : "stale" = film sans lastDetailsFetch, ou lastDetailsFetch > AUTO_SCRAPE_DAYS
+  const staleCutoff = Date.now() - AUTO_SCRAPE_DAYS * 86400000;
+  const toFetch = cachedFilms.filter(f =>
+    f.allocineId && (!f.lastDetailsFetch || new Date(f.lastDetailsFetch).getTime() < staleCutoff)
+  );
+  if (toFetch.length === 0) {
+    console.log(`⏭️  Films détails OK — tous enrichis récemment`); return;
   }
   isScraping    = true;
   scrapingPhase = 'films-details';
   try {
-    // Si cache périmé : refresh complet (suppression forcée). Sinon : uniquement les nouveaux.
-    const toFetch = detStale ? cachedFilms.filter(f => f.allocineId) : newFilms;
-    if (toFetch.length === 0) { console.log('⏭️  Films plateformes : aucun film avec allocineId'); return; }
-    const label = lastDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
-    console.log(`\n🔄 Auto-scrape films (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+    console.log(`\n🔄 Auto-scrape films (détails providers) — ${toFetch.length} films`);
     filmsDetailsProgress = { current: 0, total: toFetch.length };
     let done = 0;
     for (const film of toFetch) {
-      const cacheKey = `id:${film.allocineId}`;
-      if (detStale) detailsCache.delete(cacheKey); // force le rafraîchissement uniquement si cache périmé
       try {
         const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
         const filmResp = await rateLimitedFetch(filmUrl);
@@ -2509,7 +2464,6 @@ async function autoScrapeFilmsDetailsIfStale() {
             if (lines[i] === 'Année de production') annee = lines[i + 1];
             if (pays && annee) break;
           }
-          // Providers : toujours depuis les pages dédiées uniquement
           let providers = [];
           const seenFilm = new Set();
           for (const pPath of ['streaming', 'telecharger-vod']) {
@@ -2521,20 +2475,30 @@ async function autoScrapeFilmsDetailsIfStale() {
               providers.push(...found);
             } catch(e) { console.warn(`[auto] Providers film ${pUrl}: ${e.message}`); }
           }
-          const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
-          if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
+          // Mise à jour inline dans cachedFilms
+          const idx = cachedFilms.findIndex(f => String(f.allocineId) === String(film.allocineId));
+          if (idx !== -1) {
+            cachedFilms[idx] = {
+              ...cachedFilms[idx],
+              pays:            pays || cachedFilms[idx].pays,
+              providers:       providers.length > 0 ? providers : cachedFilms[idx].providers,
+              lastDetailsFetch: new Date().toISOString(),
+            };
+          }
         }
       } catch(e) { console.warn(`[auto] Film ${film.allocineId}: ${e.message}`); }
       done++;
       filmsDetailsProgress.current = done;
-      if (done % 50 === 0) console.log(`[auto] Plateformes films: ${done}/${toFetch.length}`);
+      if (done % 50 === 0) {
+        console.log(`[auto] Détails films: ${done}/${toFetch.length}`);
+        if (redis) redis.set('films', JSON.stringify(cachedFilms)).catch(() => {});
+      }
     }
-    lastDetailsScrape = new Date().toISOString();
     if (redis) {
-      try { await saveDetailsCache(); await redis.set('lastDetailsScrape', lastDetailsScrape); }
-      catch(e) { console.warn('[auto] Redis plateformes:', e.message); }
+      try { await redis.set('films', JSON.stringify(cachedFilms)); }
+      catch(e) { console.warn('[auto] Redis films détails:', e.message); }
     }
-    console.log(`✅ Films plateformes terminées — ${done} fiches\n`);
+    console.log(`✅ Films détails terminés — ${done} fiches\n`);
   } finally {
     isScraping           = false;
     scrapingPhase        = null;
@@ -2600,27 +2564,21 @@ async function autoScrapeSeriesListIfStale() {
  */
 async function autoScrapeSeriesDetailsIfStale() {
   if (isScrapingSeries) return;
-  const ageDetDays  = lastSeriesDetailsScrape ? (Date.now() - new Date(lastSeriesDetailsScrape).getTime()) / 86400000 : Infinity;
-  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  const newSeries = cachedSeries.filter(s => s.allocineId && !seriesDetailsCache.has(`sid:${s.allocineId}`));
-  if (!detStale && newSeries.length === 0) {
-    console.log(`⏭️  Séries détails OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
-  }
-  if (!detStale && newSeries.length > 0) {
-    console.log(`\n🆕 Séries détails : ${newSeries.length} nouvelle(s) série(s) sans détails — enrichissement ciblé`);
+  // V2 : stale = série sans lastDetailsFetch ou lastDetailsFetch > AUTO_SCRAPE_DAYS
+  const staleCutoff = Date.now() - AUTO_SCRAPE_DAYS * 86400000;
+  const toFetch = cachedSeries.filter(s =>
+    s.allocineId && (!s.lastDetailsFetch || new Date(s.lastDetailsFetch).getTime() < staleCutoff)
+  );
+  if (toFetch.length === 0) {
+    console.log(`⏭️  Séries détails OK — toutes enrichies récemment`); return;
   }
   isScrapingSeries    = true;
   scrapingPhase       = 'series-details';
   try {
-    const toFetch = detStale ? cachedSeries.filter(s => s.allocineId) : newSeries;
-    if (toFetch.length === 0) { console.log('⏭️  Séries détails : aucune série avec allocineId'); return; }
-    const label = lastSeriesDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
-    console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries — dernier il y a ${label}`);
+    console.log(`\n🔄 Auto-scrape séries (détails) — ${toFetch.length} séries`);
     seriesDetailsProgress = { current: 0, total: toFetch.length };
     let done = 0;
     for (const serie of toFetch) {
-      const cacheKey = `sid:${serie.allocineId}`;
-      if (detStale) seriesDetailsCache.delete(cacheKey);
       try {
         const url  = `https://www.allocine.fr/series/ficheserie_gen_cserie=${serie.allocineId}.html`;
         const resp = await rateLimitedFetch(url);
@@ -2644,8 +2602,6 @@ async function autoScrapeSeriesDetailsIfStale() {
           if (!derniereAnnee) { const m = l.match(/(\d{4})\s*(?:à|au|[-–—−])\s*(\d{4})/); if (m) { const y = parseInt(m[2]); if (y >= 1950 && y <= 2030) derniereAnnee = m[2]; } }
           if (!derniereAnnee && /^\d{4}$/.test(l)) { const y = parseInt(l); if (y >= 1950 && y <= 2030) derniereAnnee = l; }
         }
-        // Providers : on utilise UNIQUEMENT les pages dédiées /streaming/ et /vod/
-        // (la fiche principale peut contenir des titres de films scrappés comme fausses plateformes)
         let providers = [];
         const seenSerie = new Set();
         for (const pType of ['streaming', 'vod']) {
@@ -2657,19 +2613,30 @@ async function autoScrapeSeriesDetailsIfStale() {
             providers.push(...found);
           } catch(e) { console.warn(`Providers série ${pUrl}: ${e.message}`); }
         }
-        const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: serie.allocineId, allocineUrl: url };
-        if (nbSaisons || providers.length > 0 || pays || statut) setCachedSeriesDetails(cacheKey, data);
+        // Mise à jour inline dans cachedSeries
+        const idx = cachedSeries.findIndex(s => String(s.allocineId) === String(serie.allocineId));
+        if (idx !== -1 && (nbSaisons || providers.length > 0 || pays || statut)) {
+          cachedSeries[idx] = {
+            ...cachedSeries[idx],
+            nbSaisons:       nbSaisons       ?? cachedSeries[idx].nbSaisons,
+            statut:          statut           || cachedSeries[idx].statut,
+            derniereAnnee:   derniereAnnee    || cachedSeries[idx].derniereAnnee,
+            pays:            pays             || cachedSeries[idx].pays,
+            providers:       providers.length > 0 ? providers : (cachedSeries[idx].providers || []),
+            lastDetailsFetch: new Date().toISOString(),
+          };
+        }
       } catch(e) { console.warn(`[auto] Série ${serie.allocineId}: ${e.message}`); }
       done++;
       seriesDetailsProgress.current = done;
-      if (done % 20 === 0) console.log(`[auto] Séries détails: ${done}/${toFetch.length}`);
+      if (done % 20 === 0) {
+        console.log(`[auto] Séries détails: ${done}/${toFetch.length}`);
+        if (redis) redis.set('series', JSON.stringify(cachedSeries)).catch(() => {});
+      }
     }
-    lastSeriesDetailsScrape = new Date().toISOString();
     if (redis) {
-      try {
-        await redis.set('series_details', JSON.stringify(Object.fromEntries(seriesDetailsCache)));
-        await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
-      } catch(e) { console.warn('[auto] Redis séries détails:', e.message); }
+      try { await redis.set('series', JSON.stringify(cachedSeries)); }
+      catch(e) { console.warn('[auto] Redis séries détails:', e.message); }
     }
     console.log(`✅ Séries détails terminés — ${done} fiches\n`);
   } finally {
@@ -2722,44 +2689,18 @@ async function seedDefaultProfiles() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 // ── Cache des fiches séries (7 jours, sauvegardé en Redis en différé) ─────────
-function getCachedSeriesDetails(key) {
-  const c = seriesDetailsCache.get(key);
-  if (!c) return null;
-  if (Date.now() - c.cachedAt > SERIES_DETAILS_TTL_MS) { seriesDetailsCache.delete(key); return null; }
-  const val = c.value;
-  if (val && val.providers) return { ...val, providers: filterProviders(val.providers) };
-  return val;
+// ── Sauvegarde séries unifiées dans Redis (debounce 8s) ─────────────────────
+let _seriesBackupTimer = null;
+function scheduleSeriesBackup() {
+  clearTimeout(_seriesBackupTimer);
+  _seriesBackupTimer = setTimeout(saveSeriesCache, 8000);
 }
-
-function setCachedSeriesDetails(key, value) {
-  // Préserver les champs TMDB si la nouvelle valeur n'en a pas (ex : re-scrape providers)
-  if (value && value.tmdbRating === undefined) {
-    const existing = seriesDetailsCache.get(key)?.value;
-    if (existing?.tmdbRating !== undefined) {
-      value = { ...value, tmdbId: existing.tmdbId, tmdbRating: existing.tmdbRating, tmdbVotes: existing.tmdbVotes, imdbId: existing.imdbId };
-    }
-  }
-  seriesDetailsCache.set(key, { value, cachedAt: Date.now() });
-  lastSeriesDetailsScrape = new Date().toISOString();
-  scheduleSeriesDetailsBackup();
-}
-
-/** Debounce 8s — évite de saturer Redis en cas d'appels en rafale à /api/series/details */
-let _seriesDetailsBackupTimer = null;
-function scheduleSeriesDetailsBackup() {
-  clearTimeout(_seriesDetailsBackupTimer);
-  _seriesDetailsBackupTimer = setTimeout(saveSeriesDetailsCache, 8000);
-}
-
-async function saveSeriesDetailsCache() {
+async function saveSeriesCache() {
   if (!redis) return;
   try {
-    const obj = {};
-    seriesDetailsCache.forEach((v, k) => { obj[k] = v; });
-    await redis.set('series_details', JSON.stringify(obj));
-    if (lastSeriesDetailsScrape) await redis.set('lastSeriesDetailsScrape', lastSeriesDetailsScrape);
-    console.log(`💾 seriesDetailsCache sauvegardé (${seriesDetailsCache.size} entrées)`);
-  } catch(e) { console.warn('Erreur sauvegarde seriesDetailsCache:', e.message); }
+    await redis.set('series', JSON.stringify(cachedSeries));
+    console.log(`💾 séries unifiées sauvegardées (${cachedSeries.length} entrées)`);
+  } catch(e) { console.warn('Erreur sauvegarde séries:', e.message); }
 }
 
 /**
@@ -3015,10 +2956,13 @@ function dedupeAndSortSeries(series) {
  * }
  */
 app.get('/api/series', (_req, res) => {
-  const details = cachedSeries.map(s => {
-    const key = s.allocineId ? `sid:${s.allocineId}` : null;
-    return key ? (getCachedSeriesDetails(key) || null) : null;
-  });
+  // V2 : détails inline dans chaque série — compat frontend via champ `details`
+  const details = cachedSeries.map(s => ({
+    pays: s.pays, nbSaisons: s.nbSaisons, statut: s.statut,
+    derniereAnnee: s.derniereAnnee, allocineId: s.allocineId,
+    providers: s.providers || [], tmdbRating: s.tmdbRating,
+    tmdbVotes: s.tmdbVotes, tmdbId: s.tmdbId, imdbId: s.imdbId,
+  }));
   res.json({ series: cachedSeries, lastScrape: lastSeriesScrape, count: cachedSeries.length, details });
 });
 
@@ -3036,9 +2980,9 @@ app.get('/api/series/health', (_req, res) => {
   res.json({
     ok: true,
     cachedSeries:    cachedSeries.length,
-    cachedDetails:   seriesDetailsCache.size,
+    cachedDetails:   cachedSeries.filter(s => s.lastDetailsFetch).length,
     lastScrape:      lastSeriesScrape,
-    lastDetailsScrape: lastSeriesDetailsScrape,
+    lastDetailsScrape: cachedSeries.reduce((max, s) => s.lastDetailsFetch > max ? s.lastDetailsFetch : max, null),
     isScrapingSeries,
     version:         VERSION,
     lastScrapeErrors: lastSeriesScrapeErrors,
@@ -3159,9 +3103,12 @@ app.get('/api/series/details', async (req, res) => {
   const seriesId = String(req.query.seriesId || '').trim();
   if (!seriesId) return res.status(400).json({ error: 'seriesId requis' });
 
-  const cacheKey = `sid:${seriesId}`;
-  const cached   = getCachedSeriesDetails(cacheKey);
-  if (cached && (cached.providers?.length > 0 || cached.error || cached.tmdbRating !== undefined)) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  // V2 : chercher directement dans cachedSeries
+  const cached = cachedSeries.find(s => String(s.allocineId) === seriesId);
+  if (cached && (cached.providers?.length > 0 || cached.lastDetailsFetch)) {
+    console.log(`Cache série: ${seriesId}`);
+    return res.json(cached);
+  }
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -3219,17 +3166,25 @@ app.get('/api/series/details', async (req, res) => {
         } catch(e) { console.warn(`Fallback série ${extraUrl}: ${e.message}`); }
       }
     }
-    const data = { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: seriesId, allocineUrl: url };
-
-    // Met en cache uniquement si au moins une donnée utile a été trouvée
-    if (nbSaisons || providers.length > 0 || pays || statut)
-      setCachedSeriesDetails(cacheKey, data);
-
-    // Renvoyer le cache mergé (qui inclut tmdbRating si déjà enrichi) plutôt que data brut
-    const merged = getCachedSeriesDetails(cacheKey) || data;
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Série ${seriesId} → ${pays || '?'} statut:${statut || '?'} saisons:${nbSaisons ?? '?'} | ${pNames}`);
-    return res.json(merged);
+
+    // Mise à jour inline dans cachedSeries
+    const idx = cachedSeries.findIndex(s => String(s.allocineId) === seriesId);
+    if (idx !== -1 && (nbSaisons || providers.length > 0 || pays || statut)) {
+      cachedSeries[idx] = {
+        ...cachedSeries[idx],
+        nbSaisons:       nbSaisons       ?? cachedSeries[idx].nbSaisons,
+        statut:          statut           || cachedSeries[idx].statut,
+        derniereAnnee:   derniereAnnee    || cachedSeries[idx].derniereAnnee,
+        pays:            pays             || cachedSeries[idx].pays,
+        providers:       providers.length > 0 ? providers : (cachedSeries[idx].providers || []),
+        lastDetailsFetch: new Date().toISOString(),
+      };
+      scheduleSeriesBackup();
+    }
+    const result = idx !== -1 ? cachedSeries[idx] : { nbSaisons, statut, derniereAnnee, pays, providers, allocineId: seriesId };
+    return res.json(result);
 
   } catch(e) {
     const status = e.response?.status;
@@ -3251,13 +3206,20 @@ app.get('/api/series/details', async (req, res) => {
  * Réponse: { ok: true, cleared: number }
  */
 app.post('/api/series/clear-cache', requireSecret, async (_req, res) => {
-  const count = seriesDetailsCache.size;
-  seriesDetailsCache.clear();
+  // V2 : "vider le cache détails" = remettre lastDetailsFetch à null sur toutes les séries
+  const count = cachedSeries.filter(s => s.lastDetailsFetch).length;
+  cachedSeries.forEach(s => {
+    s.lastDetailsFetch = null;
+    s.providers = [];
+    s.pays = null;
+    s.nbSaisons = null;
+    s.statut = null;
+  });
   if (redis) {
-    try { await redis.del('series_details'); }
-    catch(e) { console.warn('Redis del series_details:', e.message); }
+    try { await redis.set('series', JSON.stringify(cachedSeries)); }
+    catch(e) { console.warn('Redis series clear-cache:', e.message); }
   }
-  console.log(`🗑️  Cache détails séries vidé (${count} entrées)`);
+  console.log(`🗑️  Cache détails séries réinitialisé (${count} entrées)`);
   res.json({ ok: true, cleared: count });
 });
 
@@ -3290,18 +3252,14 @@ app.post('/api/series/clear-list', requireSecret, async (_req, res) => {
  * Réponse: { ok: true, clearedList: number, clearedDetails: number }
  */
 app.post('/api/series/clear-all', requireSecret, async (_req, res) => {
-  const detCount  = seriesDetailsCache.size;
   const listCount = cachedSeries.length;
-  seriesDetailsCache.clear();
-  cachedSeries             = [];
-  lastSeriesScrape         = null;
-  lastSeriesDetailsScrape  = null;
+  cachedSeries     = [];
+  lastSeriesScrape = null;
   if (redis) {
-    try { await redis.del('series_details'); } catch(e) {}
     try { await redis.del('series'); await redis.del('lastSeriesScrape'); } catch(e) {}
   }
-  console.log(`🗑️  Cache complet séries vidé (liste: ${listCount}, détails: ${detCount})`);
-  res.json({ ok: true, clearedList: listCount, clearedDetails: detCount });
+  console.log(`🗑️  Cache complet séries vidé (liste: ${listCount})`);
+  res.json({ ok: true, clearedList: listCount, clearedDetails: listCount });
 });
 
 
@@ -3336,14 +3294,15 @@ app.get('/api/series/debug-genres', requireSecret, (_req, res) => {
  */
 app.get('/api/series/providers', (_req, res) => {
   const counts = {};
-  for (const [, det] of seriesDetailsCache) {
-    (det.providers || []).forEach(p => {
+  for (const serie of cachedSeries) {
+    filterProviders(serie.providers || []).forEach(p => {
       if (!counts[p.name]) counts[p.name] = { name: p.name, type: p.type, count: 0 };
       counts[p.name].count++;
     });
   }
   const list = Object.values(counts).sort((a, b) => b.count - a.count);
-  res.json({ providers: list, totalDetails: seriesDetailsCache.size });
+  const withDetails = cachedSeries.filter(s => s.lastDetailsFetch).length;
+  res.json({ providers: list, totalDetails: withDetails });
 });
 
 /**
@@ -3357,15 +3316,15 @@ app.get('/api/series/providers', (_req, res) => {
  */
 app.get('/api/platforms', (_req, res) => {
   const seen = new Map(); // name → type
-  // Films + Bestever (même cache) — on passe par filterProviders pour exclure dvd/coffret/etc.
-  for (const [, det] of detailsCache) {
-    filterProviders(det?.value?.providers || det?.providers || []).forEach(p => {
+  // Films (recent + bestever + cinema, inline providers)
+  for (const film of cachedFilms) {
+    filterProviders(film.providers || []).forEach(p => {
       if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
     });
   }
-  // Séries
-  for (const [, det] of seriesDetailsCache) {
-    filterProviders(det?.value?.providers || det?.providers || []).forEach(p => {
+  // Séries (inline providers)
+  for (const serie of cachedSeries) {
+    filterProviders(serie.providers || []).forEach(p => {
       if (p?.name && !seen.has(p.name)) seen.set(p.name, p.type || 'vod');
     });
   }
@@ -3515,14 +3474,21 @@ function isCinemaFilmValid(film) {
  * GET /api/cinema
  */
 app.get('/api/cinema', (_req, res) => {
-  res.json({ films: cachedCinema, lastScrape: lastCinemaScrape, count: cachedCinema.length });
+  const films = cachedFilms.filter(f => f.lists.includes('cinema'));
+  const details = films.map(f => ({
+    pays: f.pays, annee: f.anneeSortie, allocineId: f.allocineId,
+    providers: f.providers || [], tmdbRating: f.tmdbRating,
+    tmdbVotes: f.tmdbVotes, tmdbId: f.tmdbId, imdbId: f.imdbId,
+  }));
+  res.json({ films, lastScrape: lastCinemaScrape, count: films.length, details });
 });
 
 /**
  * GET /api/cinema/health
  */
 app.get('/api/cinema/health', (_req, res) => {
-  res.json({ ok: true, cachedFilms: cachedCinema.length, lastScrape: lastCinemaScrape, isScraping: isCinemaScraping, pages: CINEMA_PAGES });
+  const cinCount = cachedFilms.filter(f => f.lists.includes('cinema')).length;
+  res.json({ ok: true, cachedFilms: cinCount, lastScrape: lastCinemaScrape, isScraping: isCinemaScraping, pages: CINEMA_PAGES });
 });
 
 /**
@@ -3562,18 +3528,21 @@ app.get('/api/cinema/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 1000)
     }
     // Dédupliquer par allocineId
     const seen = new Set();
-    const result = allFilms.filter(f => {
+    const deduped = allFilms.filter(f => {
       const k = f.allocineId || f.titre;
       if (seen.has(k)) return false;
       seen.add(k); return true;
     }).sort((a, b) => b.nbSeances - a.nbSeances);
-    cachedCinema     = result;
+    mergeFilmsIntoCache(deduped, 'cinema');
     lastCinemaScrape = new Date().toISOString();
+    const cinCount = cachedFilms.filter(f => f.lists.includes('cinema')).length;
     if (redis) {
-      try { await redis.set('cinema', JSON.stringify(result)); await redis.set('lastCinemaScrape', lastCinemaScrape); }
-      catch(e) { console.warn('[cinema] Redis:', e.message); }
+      try {
+        await redis.set('films', JSON.stringify(cachedFilms));
+        await redis.set('lastCinemaScrape', lastCinemaScrape);
+      } catch(e) { console.warn('[cinema] Redis:', e.message); }
     }
-    send({ type: 'done', totalFilms: result.length, lastScrape: lastCinemaScrape });
+    send({ type: 'done', totalFilms: cinCount, lastScrape: lastCinemaScrape });
     res.end();
   } finally {
     isCinemaScraping = false;
@@ -3586,13 +3555,19 @@ app.get('/api/cinema/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 1000)
  * POST /api/cinema/clear
  */
 app.post('/api/cinema/clear', requireSecret, async (_req, res) => {
-  const count  = cachedCinema.length;
-  cachedCinema = [];
+  const count = cachedFilms.filter(f => f.lists.includes('cinema')).length;
+  // Retire le flag 'cinema' de tous les films ; purge ceux qui n'ont plus aucun flag
+  cachedFilms = cachedFilms
+    .map(f => ({ ...f, lists: f.lists.filter(l => l !== 'cinema') }))
+    .filter(f => f.lists.length > 0);
   lastCinemaScrape = null;
   if (redis) {
-    try { await redis.del('cinema'); await redis.del('lastCinemaScrape'); }
-    catch(e) { console.warn('Redis del cinema:', e.message); }
+    try {
+      await redis.set('films', JSON.stringify(cachedFilms));
+      await redis.del('lastCinemaScrape');
+    } catch(e) { console.warn('Redis cinema/clear:', e.message); }
   }
+  console.log(`🗑️  Cache cinéma vidé (${count} entrées retirées)`);
   res.json({ ok: true, cleared: count });
 });
 
@@ -3622,18 +3597,21 @@ async function autoScrapeCinemaIfStale() {
       await sleep(1500 + Math.random() * 500);
     }
     const seen = new Set();
-    const result = allFilms.filter(f => {
+    const deduped = allFilms.filter(f => {
       const k = f.allocineId || f.titre;
       if (seen.has(k)) return false;
       seen.add(k); return true;
     }).sort((a, b) => b.nbSeances - a.nbSeances);
-    cachedCinema     = result;
+    mergeFilmsIntoCache(deduped, 'cinema');
     lastCinemaScrape = new Date().toISOString();
+    const cinCount = cachedFilms.filter(f => f.lists.includes('cinema')).length;
     if (redis) {
-      try { await redis.set('cinema', JSON.stringify(result)); await redis.set('lastCinemaScrape', lastCinemaScrape); }
-      catch(e) { console.warn('[auto][cinema] Redis:', e.message); }
+      try {
+        await redis.set('films', JSON.stringify(cachedFilms));
+        await redis.set('lastCinemaScrape', lastCinemaScrape);
+      } catch(e) { console.warn('[auto][cinema] Redis:', e.message); }
     }
-    console.log(`✅ Cinéma : ${result.length} films retenus\n`);
+    console.log(`✅ Cinéma : ${cinCount} films dans la table unifiée\n`);
   } finally {
     isCinemaScraping = false;
     scrapingPhase    = null;
@@ -3797,11 +3775,13 @@ function dedupeAndSortBestever(films) {
  * Réponse : { films, lastScrape, count, details }
  */
 app.get('/api/bestever', (_req, res) => {
-  const details = cachedBestever.map(film => {
-    const key = film.allocineId ? `id:${film.allocineId}` : `q:${film.titre}`;
-    return getCachedDetails(key) || null;
-  });
-  res.json({ films: cachedBestever, lastScrape: lastBesteverScrape, count: cachedBestever.length, details });
+  const films = cachedFilms.filter(f => f.lists.includes('bestever'));
+  const details = films.map(f => ({
+    pays: f.pays, annee: f.anneeSortie, allocineId: f.allocineId,
+    providers: f.providers || [], tmdbRating: f.tmdbRating,
+    tmdbVotes: f.tmdbVotes, tmdbId: f.tmdbId, imdbId: f.imdbId,
+  }));
+  res.json({ films, lastScrape: lastBesteverScrape, count: films.length, details });
 });
 
 /**
@@ -3810,15 +3790,17 @@ app.get('/api/bestever', (_req, res) => {
  * Réponse : { ok, cachedFilms, lastScrape, lastDetailsScrape, isScraping, pagesPerDecade, decades }
  */
 app.get('/api/bestever/health', (_req, res) => {
+  const beCount   = cachedFilms.filter(f => f.lists.includes('bestever')).length;
+  const beEnriched = cachedFilms.filter(f => f.lists.includes('bestever') && f.lastDetailsFetch).length;
   res.json({
     ok: true,
-    cachedFilms:       cachedBestever.length,
-    lastScrape:        lastBesteverScrape,
-    lastDetailsScrape: lastBesteverDetailsScrape,
-    isScraping:        isBesteverScraping,
-    pagesPerDecade:    BESTEVER_PAGES_PER_DECADE,
-    decades:           BESTEVER_DECADES,
-    version:           VERSION,
+    cachedFilms:      beCount,
+    enrichedFilms:    beEnriched,
+    lastScrape:       lastBesteverScrape,
+    isScraping:       isBesteverScraping,
+    pagesPerDecade:   BESTEVER_PAGES_PER_DECADE,
+    decades:          BESTEVER_DECADES,
+    version:          VERSION,
   });
 });
 
@@ -3828,13 +3810,17 @@ app.get('/api/bestever/health', (_req, res) => {
  */
 app.get('/api/admin/providers', requireSecret, (_req, res) => {
   const map = new Map();
-  for (const { value } of detailsCache.values()) {
-    if (!value || !value.providers) continue;
-    for (const p of value.providers) {
-      const key = p.name;
-      if (!map.has(key)) map.set(key, { name: p.name, type: p.type, count: 0 });
-      map.get(key).count++;
-    }
+  for (const film of cachedFilms) {
+    filterProviders(film.providers || []).forEach(p => {
+      if (!map.has(p.name)) map.set(p.name, { name: p.name, type: p.type, count: 0 });
+      map.get(p.name).count++;
+    });
+  }
+  for (const serie of cachedSeries) {
+    filterProviders(serie.providers || []).forEach(p => {
+      if (!map.has(p.name)) map.set(p.name, { name: p.name, type: p.type, count: 0 });
+      map.get(p.name).count++;
+    });
   }
   const result = [...map.values()].sort((a, b) => b.count - a.count);
   res.json({ total: result.length, providers: result });
@@ -3929,16 +3915,19 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
     console.log(`[bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
     allFilms.push(...newBoxOffice);
 
-    const result   = applyDateEntree(dedupeAndSortBestever(allFilms), cachedBestever);
-    cachedBestever = result;
+    const deduped = dedupeAndSortBestever(allFilms);
+    mergeFilmsIntoCache(deduped, 'bestever');
     lastBesteverScrape = new Date().toISOString();
+    const beCount = cachedFilms.filter(f => f.lists.includes('bestever')).length;
     if (redis) {
-      try { await redis.set('bestever', JSON.stringify(result)); await redis.set('lastBesteverScrape', lastBesteverScrape); }
-      catch(e) { console.warn('[bestever] Redis scrape:', e.message); }
+      try {
+        await redis.set('films', JSON.stringify(cachedFilms));
+        await redis.set('lastBesteverScrape', lastBesteverScrape);
+      } catch(e) { console.warn('[bestever] Redis scrape:', e.message); }
     }
-    send({ type: 'done', totalFilms: result.length, lastScrape: lastBesteverScrape });
+    send({ type: 'done', totalFilms: beCount, lastScrape: lastBesteverScrape });
     res.end();
-    console.log(`✅ Bestever : ${result.length} films`);
+    console.log(`✅ Bestever : ${beCount} films dans la table unifiée`);
   } finally {
     isBesteverScraping = false;
     scrapingPhase      = null;
@@ -3951,14 +3940,19 @@ app.get('/api/bestever/scrape', requireSecret, requireRateLimit(3, 10 * 60 * 100
  * Vide le cache liste bestever (Redis + mémoire).
  */
 app.post('/api/bestever/clear', requireSecret, async (_req, res) => {
-  const count    = cachedBestever.length;
-  cachedBestever = [];
+  const count = cachedFilms.filter(f => f.lists.includes('bestever')).length;
+  // Retire le flag 'bestever' de tous les films ; purge ceux sans aucun flag
+  cachedFilms = cachedFilms
+    .map(f => ({ ...f, lists: f.lists.filter(l => l !== 'bestever') }))
+    .filter(f => f.lists.length > 0);
   lastBesteverScrape = null;
   if (redis) {
-    try { await redis.del('bestever'); await redis.del('lastBesteverScrape'); }
-    catch(e) { console.warn('Redis del bestever:', e.message); }
+    try {
+      await redis.set('films', JSON.stringify(cachedFilms));
+      await redis.del('lastBesteverScrape');
+    } catch(e) { console.warn('Redis bestever/clear:', e.message); }
   }
-  console.log(`🗑️  Cache bestever vidé (${count} entrées)`);
+  console.log(`🗑️  Cache bestever vidé (${count} entrées retirées)`);
   res.json({ ok: true, cleared: count });
 });
 
@@ -4022,16 +4016,17 @@ async function autoScrapeBesteverListIfStale() {
     console.log(`[auto][bestever][boxoffice] ${newBoxOffice.length} nouveaux films ajoutés (${boxOfficeFilms.length - newBoxOffice.length} doublons ignorés)`);
     allFilms.push(...newBoxOffice);
 
-    const result       = applyDateEntree(dedupeAndSortBestever(allFilms), cachedBestever);
-    cachedBestever     = result;
+    const deduped = dedupeAndSortBestever(allFilms);
+    mergeFilmsIntoCache(deduped, 'bestever');
     lastBesteverScrape = new Date().toISOString();
+    const beCount = cachedFilms.filter(f => f.lists.includes('bestever')).length;
     if (redis) {
       try {
-        await redis.set('bestever', JSON.stringify(result));
+        await redis.set('films', JSON.stringify(cachedFilms));
         await redis.set('lastBesteverScrape', lastBesteverScrape);
       } catch(e) { console.warn('[auto][bestever] Redis liste:', e.message); }
     }
-    console.log(`✅ Bestever liste terminée — ${result.length} films\n`);
+    console.log(`✅ Bestever liste terminée — ${beCount} films dans la table unifiée\n`);
   } finally {
     isBesteverScraping = false;
     scrapingPhase      = null;
@@ -4041,39 +4036,29 @@ async function autoScrapeBesteverListIfStale() {
 
 // ── Phase 6 : plateformes bestever ─────────────────────────────────────────
 /**
- * Scrape les plateformes des meilleurs films si lastBesteverDetailsScrape > AUTO_SCRAPE_DAYS jours.
- * Réutilise detailsCache (partagé avec VOD films) — évite les doublons.
+ * Scrape les détails (pays, providers) des films bestever qui n'ont pas encore de
+ * lastDetailsFetch (ou dont il est périmé). Stocke les détails inline dans cachedFilms.
  * Déclenché chaque nuit à 4h15 par scheduleNightlyScraping().
  */
 async function autoScrapeBesteverDetailsIfStale() {
   if (isBesteverScraping) return;
-  const ageDetDays  = lastBesteverDetailsScrape ? (Date.now() - new Date(lastBesteverDetailsScrape).getTime()) / 86400000 : Infinity;
-  const detStale = ageDetDays >= AUTO_SCRAPE_DAYS;
-  const newBestever = cachedBestever.filter(f => f.allocineId && !getCachedDetails(`id:${f.allocineId}`));
-  if (!detStale && newBestever.length === 0) {
-    console.log(`⏭️  Bestever plateformes OK (${ageDetDays.toFixed(1)}j — seuil ${AUTO_SCRAPE_DAYS}j)`); return;
-  }
-  if (!detStale && newBestever.length > 0) {
-    console.log(`\n🆕 Bestever plateformes : ${newBestever.length} nouveau(x) film(s) sans détails — enrichissement ciblé`);
+  const staleCutoff = Date.now() - AUTO_SCRAPE_DAYS * 86400000;
+  const besteverFilms = cachedFilms.filter(f => f.lists.includes('bestever') && f.allocineId);
+  const toFetch = besteverFilms.filter(f =>
+    !f.lastDetailsFetch || new Date(f.lastDetailsFetch).getTime() < staleCutoff
+  );
+  if (toFetch.length === 0) {
+    console.log(`⏭️  Bestever plateformes OK — tous les films sont frais`); return;
   }
   isBesteverScraping = true;
   scrapingPhase      = 'bestever-details';
   try {
-    const toFetch = cachedBestever.filter(f => f.allocineId);
-    if (toFetch.length === 0) { console.log('⏭️  Bestever plateformes : aucun film avec allocineId'); return; }
-    const label = lastBesteverDetailsScrape ? `${ageDetDays.toFixed(1)}j` : 'jamais';
-    console.log(`\n🔄 Auto-scrape bestever (plateformes) — ${toFetch.length} films — dernier il y a ${label}`);
+    console.log(`\n🔄 Auto-scrape bestever (plateformes) — ${toFetch.length}/${besteverFilms.length} films à rafraîchir`);
     besteverDetailsProgress = { current: 0, total: toFetch.length };
     let done = 0;
     for (const film of toFetch) {
-      const cacheKey = `id:${film.allocineId}`;
-      // Utilise le cache existant si valide (partage avec VOD films)
-      const existing = getCachedDetails(cacheKey);
-      if (existing) {
-        done++;
-        besteverDetailsProgress.current = done;
-        continue; // déjà en cache (scraping VOD ou précédent bestever)
-      }
+      const idx = cachedFilms.findIndex(f => String(f.allocineId) === String(film.allocineId));
+      if (idx === -1) { done++; besteverDetailsProgress.current = done; continue; }
       try {
         const filmUrl  = `https://www.allocine.fr/film/fichefilm_gen_cfilm=${film.allocineId}.html`;
         const filmResp = await rateLimitedFetch(filmUrl);
@@ -4091,35 +4076,32 @@ async function autoScrapeBesteverDetailsIfStale() {
           }
           let providers = extractProviders(html);
           if (providers.length === 0) {
-            const extraPagesFilm = [
+            const extraPages = [
               `https://www.allocine.fr/film/fichefilm-${film.allocineId}/streaming/`,
               `https://www.allocine.fr/film/fichefilm-${film.allocineId}/telecharger-vod/`,
             ];
-            const seenFilm = new Set();
-            for (const extraUrl of extraPagesFilm) {
+            const seen = new Set();
+            for (const extraUrl of extraPages) {
               try {
-                const extraResp = await rateLimitedFetch(extraUrl);
-                const found = extractProviders(extraResp.data).filter(p => !seenFilm.has(p.name));
-                found.forEach(p => seenFilm.add(p.name));
-                providers.push(...found);
+                const r = await rateLimitedFetch(extraUrl);
+                extractProviders(r.data).filter(p => !seen.has(p.name)).forEach(p => { seen.add(p.name); providers.push(p); });
               } catch(e) { console.warn(`Fallback bestever ${extraUrl}: ${e.message}`); }
             }
           }
-          const data = { pays, annee, allocineId: film.allocineId, allocineUrl: filmUrl, providers };
-          if (pays || annee || providers.length > 0) setCachedDetails(cacheKey, data);
+          if (pays) cachedFilms[idx].pays = pays;
+          if (annee) cachedFilms[idx].anneeSortie = annee;
+          cachedFilms[idx].providers      = providers;
+          cachedFilms[idx].lastDetailsFetch = new Date().toISOString();
         }
       } catch(e) { console.warn(`[auto][bestever] Film ${film.allocineId}: ${e.message}`); }
       done++;
       besteverDetailsProgress.current = done;
-      if (done % 50 === 0) console.log(`[auto][bestever] Plateformes: ${done}/${toFetch.length}`);
+      if (done % 50 === 0) {
+        console.log(`[auto][bestever] Plateformes: ${done}/${toFetch.length}`);
+        try { await redis.set('films', JSON.stringify(cachedFilms)); } catch(e) {}
+      }
     }
-    lastBesteverDetailsScrape = new Date().toISOString();
-    if (redis) {
-      try {
-        await saveDetailsCache(); // sauvegarde detailsCache partagé
-        await redis.set('lastBesteverDetailsScrape', lastBesteverDetailsScrape);
-      } catch(e) { console.warn('[auto][bestever] Redis détails:', e.message); }
-    }
+    scheduleFilmsBackup();
     console.log(`✅ Bestever plateformes terminées — ${done} fiches\n`);
   } finally {
     isBesteverScraping      = false;

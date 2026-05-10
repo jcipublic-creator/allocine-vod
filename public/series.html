@@ -786,6 +786,7 @@ function renderSeriesCards(series) {
           : `<div class="score-val muted">—</div>`}
         <div class="score-lbl">Spect.</div>
       </div>
+      <span id="card-tmdb-${i}">${renderTmdbScore(_seriesDet[s.allocineId])}</span>
     </div>
   </div>
   ${synHtml}
@@ -815,6 +816,9 @@ function updateSeriesCard(idx, det) {
   // Plateformes
   const platEl = document.getElementById(`card-plat-${idx}`);
   if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
+  // Score TMDB
+  const tmdbEl = document.getElementById(`card-tmdb-${idx}`);
+  if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(det);
 
   // Métadonnées (statut, saisons, pays, label année)
   const card = document.getElementById(`card-${idx}`);

@@ -417,8 +417,8 @@ body {
   <label class="filter-toggle"><input type="checkbox" id="fil-only-voir" onchange="applyFilters()"><span>🔖 À voir</span></label>
   <select id="fil-sort" onchange="applySort(this.value)">
     <option value="seances">↓ Séances</option>
-    <option value="combinee">↓ Note combinée</option>
-    <option value="date" selected>↓ Date de sortie</option>
+    <option value="combinee" selected>↓ Note combinée</option>
+    <option value="date">↓ Date de sortie</option>
   </select>
 </div>
 
@@ -458,7 +458,7 @@ const LS_FILMS_CI = 'vod_cinema_films';
 const LS_DATE_CI  = 'vod_cinema_date';
 
 // ─── Tri par défaut ───────────────────────────────────────────────────────────
-let _cinemaSortOrder = 'date';
+let _cinemaSortOrder = 'combinee';
 
 // ─── Objet UI ─────────────────────────────────────────────────────────────────
 const UI = {

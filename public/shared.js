@@ -170,6 +170,17 @@ function flagFor(pays) {
   return FLAGS[first] ? FLAGS[first] + ' ' : '';
 }
 
+/** Rendu du score TMDB — retourne le HTML à injecter dans card-tmdb-N */
+function renderTmdbScore(det) {
+  if (!det || det.tmdbRating === undefined) return '';
+  if (!det.tmdbRating) return '';
+  const r = det.tmdbRating;
+  const cls = r >= 7 ? 'green' : r >= 5 ? 'orange' : 'muted';
+  const link = det.imdbId ? `https://www.imdb.com/title/${det.imdbId}/` : '#';
+  const target = det.imdbId ? ' target="_blank" rel="noopener"' : '';
+  return `<div class="score-sep"></div><div class="score-block"><a href="${link}"${target} style="text-decoration:none"><div class="score-val ${cls}" style="font-size:14px">${r.toFixed(1)}</div><div class="score-lbl">TMDB</div></a></div>`;
+}
+
 function renderPlatBadges(providers) {
   if (!providers || providers.length === 0) return '<span class="pb-none">Non disponible</span>';
   const disabled = _getPlatDisabled();
@@ -1388,6 +1399,8 @@ async function startPlatformLoading() {
         _platsDone++;
         const el = UI.getPlatEl(film);
         if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
+        const tmdbEl = document.getElementById(`card-tmdb-${i}`);
+        if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(_details[key]);
         UI.onPlatProgress(_platsDone, _allFilms.length);
         continue;
       }
@@ -1455,6 +1468,9 @@ async function fetchDetails(idx, gen) {
     if (data.allocineId && !film.allocineId) film.allocineId = data.allocineId;
 
     const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
+    const curIdx2 = _allFilms.indexOf(film);
+    const tmdbEl = curIdx2 >= 0 ? document.getElementById(`card-tmdb-${curIdx2}`) : null;
+    if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(data);
     _refreshPlatPrefs();
     if (data.pays) populatePaysFilter();
 

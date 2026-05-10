@@ -50,6 +50,8 @@ const PORT      = Number(process.env.PORT || 3009);
 const TOTAL_PAGES      = Number(process.env.TOTAL_PAGES || 25); // pages de films VOD par année
 const DETAILS_TTL_MS   = 1000 * 60 * 60 * 24;       // 24h  — durée de validité des fiches films
 const AUTO_SCRAPE_DAYS = 2;                          // re-scraper si cache > 2 jours (films + séries)
+const TMDB_API_KEY     = process.env.TMDB_API_KEY || '';
+const TMDB_BASE        = 'https://api.themoviedb.org/3';
 const DATA_DIR         = process.env.DATA_DIR || __dirname; // répertoire pour le fallback JSON local
 
 // Version du build (incrémentée par le hook pre-commit)
@@ -753,6 +755,49 @@ function filterProviders(providers) {
     seen.add(n);
     return true;
   });
+}
+
+/**
+ * Recherche un film ou une série sur TMDB et retourne sa note + son IMDB ID.
+ * Stratégie : essaie titreOriginal en premier (plus fiable), puis titre français.
+ * @param {string} titre          Titre français AlloCiné
+ * @param {string} titreOriginal  Titre original (optionnel)
+ * @param {string|number} annee   Année de sortie (optionnel)
+ * @param {'movie'|'tv'} type
+ * @returns {Promise<{tmdbId, tmdbRating, tmdbVotes, imdbId}|null>}
+ */
+async function tmdbLookup(titre, titreOriginal, annee, type = 'movie') {
+  if (!TMDB_API_KEY) return null;
+  const endpoint = type === 'tv' ? 'search/tv' : 'search/movie';
+  const yearParam = type === 'tv' ? 'first_air_date_year' : 'year';
+
+  const queries = [];
+  if (titreOriginal && titreOriginal.trim()) queries.push(titreOriginal.trim());
+  if (titre && titre.trim() && titre !== titreOriginal) queries.push(titre.trim());
+
+  for (const query of queries) {
+    try {
+      const params = new URLSearchParams({ api_key: TMDB_API_KEY, query, language: 'fr-FR' });
+      if (annee) params.set(yearParam, String(annee));
+      const resp = await axios.get(`${TMDB_BASE}/${endpoint}?${params}`, { timeout: 8000 });
+      const results = resp.data?.results;
+      if (!results?.length) continue;
+      const hit = results[0];
+      const tmdbId   = hit.id;
+      const tmdbRating = hit.vote_average ? Math.round(hit.vote_average * 10) / 10 : null;
+      const tmdbVotes  = hit.vote_count   || 0;
+      // Récupérer l'IMDB ID via external_ids
+      let imdbId = null;
+      try {
+        const extResp = await axios.get(`${TMDB_BASE}/${type === 'tv' ? 'tv' : 'movie'}/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`, { timeout: 5000 });
+        imdbId = extResp.data?.imdb_id || null;
+      } catch(_) {}
+      return { tmdbId, tmdbRating, tmdbVotes, imdbId };
+    } catch(e) {
+      console.warn(`[TMDB] lookup "${query}" : ${e.message}`);
+    }
+  }
+  return null;
 }
 
 /**
@@ -1967,6 +2012,61 @@ app.post('/api/clean-providers', requireSecret, async (_req, res) => {
  *
  * Réponse: { ok, renamedFilms, renamedSeries }
  */
+/**
+ * POST /api/tmdb-enrich
+ * Enrichit tous les films et séries du cache avec les données TMDB (note + IMDB ID).
+ * Ne re-fetche pas si tmdbRating déjà présent. Traite par batch de 5 avec délai.
+ * Réponse: { ok, enrichedFilms, enrichedSeries, skipped }
+ */
+app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
+  if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY non configurée' });
+
+  // Répondre immédiatement — l'enrichissement tourne en arrière-plan
+  res.json({ ok: true, message: 'Enrichissement TMDB démarré en arrière-plan' });
+
+  let enrichedFilms = 0, enrichedSeries = 0, skipped = 0;
+  const DELAY = 300; // ms entre chaque requête TMDB (2 appels par item = ~600ms/item)
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Films
+  for (const [key, det] of detailsCache) {
+    const val = det?.value;
+    if (!val) continue;
+    if (val.tmdbRating !== undefined) { skipped++; continue; } // déjà enrichi
+    const film = cachedFilms.find(f => String(f.allocineId) === String(key)) || {};
+    const annee = film.anneeSortie || (val.annee) || null;
+    const tmdb = await tmdbLookup(val.titre || film.titre, val.titreOriginal || film.titreOriginal, annee, 'movie');
+    if (tmdb) {
+      detailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
+      enrichedFilms++;
+    } else {
+      detailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
+    }
+    await sleep(DELAY);
+  }
+
+  // Séries
+  for (const [key, det] of seriesDetailsCache) {
+    const val = det?.value;
+    if (!val) continue;
+    if (val.tmdbRating !== undefined) { skipped++; continue; }
+    const serie = cachedSeries.find(s => String(s.allocineId) === String(key)) || {};
+    const annee = serie.anneeSortie || null;
+    const tmdb = await tmdbLookup(val.titre || serie.titre, val.titreOriginal || serie.titreOriginal, annee, 'tv');
+    if (tmdb) {
+      seriesDetailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
+      enrichedSeries++;
+    } else {
+      seriesDetailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
+    }
+    await sleep(DELAY);
+  }
+
+  await saveDetailsCache();
+  await saveSeriesDetailsCache();
+  console.log(`🎬 TMDB enrich : ${enrichedFilms} films + ${enrichedSeries} séries (${skipped} skipped)`);
+});
+
 app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
   let renamedFilms = 0, renamedSeries = 0;
 

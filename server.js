@@ -2074,15 +2074,20 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     skipped: 0,
   });
 
-  // Films
+  // Films — val contient { pays, annee, allocineId, providers... } mais PAS titre/titreOriginal
+  // → on retrouve le film dans cachedFilms via val.allocineId
   for (const [key, det] of detailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
     // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
     if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
-    const film = cachedFilms.find(f => String(f.allocineId) === String(key)) || {};
-    const annee = film.anneeSortie || (val.annee) || null;
-    const tmdb = await tmdbLookup(val.titre || film.titre, val.titreOriginal || film.titreOriginal, annee, 'movie');
+    const filmId = val.allocineId || key.replace(/^(id:|q:)/, '');
+    const film   = cachedFilms.find(f => String(f.allocineId) === String(filmId)) || {};
+    const titre  = film.titre || null;
+    const titreO = film.titreOriginal || null;
+    if (!titre && !titreO) { _tmdbStatus.done++; continue; } // pas de titre → inutile d'appeler l'API
+    const annee = film.anneeSortie || val.annee || null;
+    const tmdb = await tmdbLookup(titre, titreO, annee, 'movie');
     if (tmdb) {
       detailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
       _tmdbStatus.enrichedFilms++;
@@ -2093,15 +2098,19 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     await sleep(DELAY);
   }
 
-  // Séries
+  // Séries — idem : val = { allocineId, providers... }, titre dans cachedSeries
   for (const [key, det] of seriesDetailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
     // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
     if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
-    const serie = cachedSeries.find(s => String(s.allocineId) === String(key)) || {};
+    const serieId = val.allocineId || key.replace(/^sid:/, '');
+    const serie   = cachedSeries.find(s => String(s.allocineId) === String(serieId)) || {};
+    const titre   = serie.titre || null;
+    const titreO  = serie.titreOriginal || null;
+    if (!titre && !titreO) { _tmdbStatus.done++; continue; }
     const annee = serie.anneeSortie || null;
-    const tmdb = await tmdbLookup(val.titre || serie.titre, val.titreOriginal || serie.titreOriginal, annee, 'tv');
+    const tmdb = await tmdbLookup(titre, titreO, annee, 'tv');
     if (tmdb) {
       seriesDetailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
       _tmdbStatus.enrichedSeries++;

@@ -2017,54 +2017,92 @@ app.post('/api/clean-providers', requireSecret, async (_req, res) => {
  * Enrichit tous les films et séries du cache avec les données TMDB (note + IMDB ID).
  * Ne re-fetche pas si tmdbRating déjà présent. Traite par batch de 5 avec délai.
  * Réponse: { ok, enrichedFilms, enrichedSeries, skipped }
+ *
+ * GET /api/tmdb-status
+ * Retourne l'état de l'enrichissement TMDB (en cours, progression, dernier run).
  */
+const _tmdbStatus = {
+  running: false,
+  startedAt: null,
+  lastRun: null,
+  done: 0,
+  total: 0,
+  enrichedFilms: 0,
+  enrichedSeries: 0,
+  skipped: 0,
+};
+
+app.get('/api/tmdb-status', (_req, res) => {
+  const pct = _tmdbStatus.total > 0
+    ? Math.round(_tmdbStatus.done / _tmdbStatus.total * 100)
+    : 0;
+  res.json({ ..._tmdbStatus, pct });
+});
+
 app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY non configurée' });
+  if (_tmdbStatus.running) return res.status(429).json({ error: 'Enrichissement déjà en cours' });
 
   // Répondre immédiatement — l'enrichissement tourne en arrière-plan
   res.json({ ok: true, message: 'Enrichissement TMDB démarré en arrière-plan' });
 
-  let enrichedFilms = 0, enrichedSeries = 0, skipped = 0;
   const DELAY = 300; // ms entre chaque requête TMDB (2 appels par item = ~600ms/item)
   const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  // Initialise le suivi de progression
+  const totalItems = detailsCache.size + seriesDetailsCache.size;
+  Object.assign(_tmdbStatus, {
+    running: true,
+    startedAt: new Date().toISOString(),
+    done: 0,
+    total: totalItems,
+    enrichedFilms: 0,
+    enrichedSeries: 0,
+    skipped: 0,
+  });
 
   // Films
   for (const [key, det] of detailsCache) {
     const val = det?.value;
-    if (!val) continue;
-    if (val.tmdbRating !== undefined) { skipped++; continue; } // déjà enrichi
+    if (!val) { _tmdbStatus.done++; continue; }
+    if (val.tmdbRating !== undefined) { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const film = cachedFilms.find(f => String(f.allocineId) === String(key)) || {};
     const annee = film.anneeSortie || (val.annee) || null;
     const tmdb = await tmdbLookup(val.titre || film.titre, val.titreOriginal || film.titreOriginal, annee, 'movie');
     if (tmdb) {
       detailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
-      enrichedFilms++;
+      _tmdbStatus.enrichedFilms++;
     } else {
       detailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
     }
+    _tmdbStatus.done++;
     await sleep(DELAY);
   }
 
   // Séries
   for (const [key, det] of seriesDetailsCache) {
     const val = det?.value;
-    if (!val) continue;
-    if (val.tmdbRating !== undefined) { skipped++; continue; }
+    if (!val) { _tmdbStatus.done++; continue; }
+    if (val.tmdbRating !== undefined) { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const serie = cachedSeries.find(s => String(s.allocineId) === String(key)) || {};
     const annee = serie.anneeSortie || null;
     const tmdb = await tmdbLookup(val.titre || serie.titre, val.titreOriginal || serie.titreOriginal, annee, 'tv');
     if (tmdb) {
       seriesDetailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
-      enrichedSeries++;
+      _tmdbStatus.enrichedSeries++;
     } else {
       seriesDetailsCache.set(key, { ...det, value: { ...val, tmdbRating: null } });
     }
+    _tmdbStatus.done++;
     await sleep(DELAY);
   }
 
   await saveDetailsCache();
   await saveSeriesDetailsCache();
-  console.log(`🎬 TMDB enrich : ${enrichedFilms} films + ${enrichedSeries} séries (${skipped} skipped)`);
+
+  _tmdbStatus.running = false;
+  _tmdbStatus.lastRun = new Date().toISOString();
+  console.log(`🎬 TMDB enrich : ${_tmdbStatus.enrichedFilms} films + ${_tmdbStatus.enrichedSeries} séries (${_tmdbStatus.skipped} skipped)`);
 });
 
 app.post('/api/normalize-providers', requireSecret, async (_req, res) => {

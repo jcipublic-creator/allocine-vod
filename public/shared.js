@@ -1643,13 +1643,14 @@ const _lastNouveaux = { films: null, series: null, bestever: null, cinema: null 
 
 async function _fetchInfoData() {
   try {
-    const [rf, rs, rb, rc, rst, rstat] = await Promise.all([
+    const [rf, rs, rb, rc, rst, rstat, rtmdb] = await Promise.all([
       fetch('/api/health',           { signal: AbortSignal.timeout(4000) }),
       fetch('/api/series/health',    { signal: AbortSignal.timeout(4000) }),
       fetch('/api/bestever/health',  { signal: AbortSignal.timeout(4000) }),
       fetch('/api/cinema/health',    { signal: AbortSignal.timeout(4000) }),
       fetch('/api/scraping-status',  { signal: AbortSignal.timeout(4000) }),
       fetch('/api/userdata/stats',   { signal: AbortSignal.timeout(4000) }),
+      fetch('/api/tmdb-status',      { signal: AbortSignal.timeout(4000) }),
     ]);
     _infoData = {
       films:    rf.ok    ? await rf.json()    : null,
@@ -1658,6 +1659,7 @@ async function _fetchInfoData() {
       cinema:   rc.ok    ? await rc.json()    : null,
       status:   rst.ok   ? await rst.json()   : null,
       udStats:  rstat.ok ? await rstat.json() : null,
+      tmdb:     rtmdb.ok ? await rtmdb.json() : null,
     };
   } catch(e) { _infoData = null; }
 }
@@ -1666,10 +1668,15 @@ function _startInfoRefresh() {
   _stopInfoRefresh();
   _infoRefreshTimer = setInterval(async () => {
     if (!document.getElementById('info-modal')?.classList.contains('open')) { _stopInfoRefresh(); return; }
-    if (!_infoData?.status?.phase) return;
+    const needScrapingRefresh = !!_infoData?.status?.phase;
+    const needTmdbRefresh     = !!_infoData?.tmdb?.running;
+    if (!needScrapingRefresh && !needTmdbRefresh) return;
     try {
-      const r = await fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) });
-      if (r.ok) { _infoData.status = await r.json(); renderInfo(); }
+      const fetches = [];
+      if (needScrapingRefresh) fetches.push(fetch('/api/scraping-status', { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? r.json() : null).then(d => { if (d) _infoData.status = d; }));
+      if (needTmdbRefresh)     fetches.push(fetch('/api/tmdb-status',     { signal: AbortSignal.timeout(3000) }).then(r => r.ok ? r.json() : null).then(d => { if (d) _infoData.tmdb = d; }));
+      await Promise.all(fetches);
+      renderInfo();
     } catch(e) {}
   }, 3000);
 }
@@ -1695,7 +1702,7 @@ function renderInfo() {
   const fmt = iso => iso
     ? new Date(iso).toLocaleDateString('fr-FR') + ' ' + new Date(iso).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})
     : '—';
-  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, c = _infoData.cinema, st = _infoData.status;
+  const f = _infoData.films, s = _infoData.series, b = _infoData.bestever, c = _infoData.cinema, st = _infoData.status, tmdb = _infoData.tmdb;
   const udStats = _infoData.udStats || {};
   const fErrors = f?.lastScrapeErrors || [];
 
@@ -1772,6 +1779,20 @@ function renderInfo() {
     <div class="info-row"><span class="lbl">En base</span><span class="val">${c?.cachedFilms ?? '—'} films</span></div>
     ${_lastNouveaux.cinema !== null ? `<div class="info-row"><span class="lbl">Nouveaux ce scraping</span><span class="val" style="color:var(--green)">+${_lastNouveaux.cinema}</span></div>` : ''}
     <div class="info-row"><span class="lbl">Dernier scraping</span><span class="val">${fmt(c?.lastScrape)}</span></div>
+    ${(() => {
+      if (!tmdb) return '';
+      const enrichTotal = (tmdb.enrichedFilms || 0) + (tmdb.enrichedSeries || 0);
+      const progressBar = tmdb.running ? `<div class="info-progress">
+        <div class="info-progress-label"><span>En cours${tmdb.total ? ` · ${tmdb.done}/${tmdb.total}` : ''}</span><span>${tmdb.pct ?? 0}%</span></div>
+        <div class="info-progress-bar-wrap"><div class="info-progress-bar" style="width:${tmdb.pct ?? 0}%"></div></div>
+      </div>` : '';
+      return `<div class="info-section-title">🎬 TMDB${tmdb.running ? ' <span class="info-scraping-badge">⟳ en cours</span>' : ''}</div>
+    <div class="info-row"><span class="lbl">Dernier enrichissement</span><span class="val">${fmt(tmdb.lastRun)}</span></div>
+    <div class="info-row"><span class="lbl">Films enrichis</span><span class="val">${tmdb.enrichedFilms ?? '—'}</span></div>
+    <div class="info-row"><span class="lbl">Séries enrichies</span><span class="val">${tmdb.enrichedSeries ?? '—'}</span></div>
+    <div class="info-row"><span class="lbl">Déjà enrichis (skip)</span><span class="val">${tmdb.skipped ?? '—'}</span></div>
+    ${progressBar}`;
+    })()}
     ${myStatsBlock}
   `;
 }

@@ -727,18 +727,27 @@ const PROVIDERS_BLACKLIST = new Set([
   'blu-ray', 'dvd',
 ]);
 
+// Variantes de noms à normaliser avant déduplication (tile vs dataLayer légèrement différents)
+const PROVIDER_DISPLAY_NORMALIZE = {
+  'apple tv':  'Apple TV+',  // tile affiche 'Apple TV', dataLayer donne 'Apple TV+'
+  'amazon':    'Amazon Prime Video',
+  'prime video': 'Amazon Prime Video',
+};
+
 /** Filtre une liste de providers selon la blacklist et les mots-clés exclus.
  *  Appliqué à la fois pendant le scraping ET au moment de servir le cache.
- *  Déduplique aussi par nom (après éventuels renommages) pour éviter Canal+/Canal+ etc. */
+ *  Normalise les variantes de noms et déduplique. */
 function filterProviders(providers) {
   if (!providers) return [];
   const seen = new Set();
-  return providers.filter(p => {
+  return providers.map(p => {
+    const norm = PROVIDER_DISPLAY_NORMALIZE[p.name.toLowerCase()];
+    return norm ? { ...p, name: norm } : p;
+  }).filter(p => {
     const n = p.name.toLowerCase();
     if (PROVIDERS_BLACKLIST.has(n)) return false;
     if (/coffret|édition|edition|collector|blu-ray|dvd/i.test(p.name)) return false;
-    // Un nom de plateforme ne peut pas dépasser 25 caractères (filtre les titres de séries/films parasites)
-    // La plus longue vraie plateforme est "Amazon Prime Video" (18 chars)
+    // Un nom de plateforme ne peut pas dépasser 25 caractères
     if (p.name.length > 25) return false;
     if (seen.has(n)) return false; // déduplique par nom (case-insensitive)
     seen.add(n);
@@ -1932,8 +1941,11 @@ app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
 
   // Renommages explicites d'anciens noms incorrects stockés en cache
   const LEGACY_RENAMES = {
-    'MyCanal': 'Canal+',  // slug 'mycanal' était mappé 'MyCanal', AlloCiné affiche 'Canal+'
-    'Max':     'HBO Max', // slug 'hbo-max' était mappé 'Max', AlloCiné affiche 'HBO Max'
+    'MyCanal':  'Canal+',           // slug 'mycanal' était mappé 'MyCanal', AlloCiné affiche 'Canal+'
+    'Max':      'HBO Max',          // slug 'hbo-max' était mappé 'Max', AlloCiné affiche 'HBO Max'
+    'Apple TV': 'Apple TV+',        // tile affiche 'Apple TV' sans le +
+    'Amazon':   'Amazon Prime Video',
+    'Prime Video': 'Amazon Prime Video',
   };
 
   const normalizeList = providers => {

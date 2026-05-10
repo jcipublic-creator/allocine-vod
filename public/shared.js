@@ -181,6 +181,20 @@ function renderPlatBadges(providers) {
 }
 
 // ─── Cache localStorage ───────────────────────────────────────────────────────
+
+/** Efface tout le cache localStorage (films, séries, bestever, prefs) et recharge la page. */
+function clearAllLocalCache() {
+  if (!confirm('Vider tout le cache local du navigateur ?\nLes données seront rechargées depuis le serveur.')) return;
+  const KEYS = [
+    'vod_films', 'vod_details', 'vod_updated', 'vod_cache_v1', 'vod_cache_version',
+    'vod_series', 'vod_series_details', 'vod_series_updated', 'vod_series_v1', 'vod_series_version', 'vod_series_cache',
+    'bestever_films', 'bestever_details', 'bestever_updated', 'bestever_cache_v1',
+    'vod_cinema_films', 'vod_cinema_date',
+  ];
+  KEYS.forEach(k => localStorage.removeItem(k));
+  location.reload();
+}
+
 function saveCache() {
   try {
     localStorage.setItem(LS_FILMS,   JSON.stringify(_allFilms));

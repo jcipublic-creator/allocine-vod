@@ -193,6 +193,16 @@ function renderPlatBadges(providers) {
 
 // ─── Cache localStorage ───────────────────────────────────────────────────────
 
+/** Lance l'enrichissement TMDB en arrière-plan (notes + liens IMDB). */
+async function launchTmdbEnrich() {
+  try {
+    const r = await fetch('/api/tmdb-enrich', { method: 'POST', headers: { 'x-app-secret': _appSecret } });
+    const d = await r.json();
+    if (d.ok) UI.showError('🎬 Enrichissement TMDB démarré (~20 min en arrière-plan)');
+    else UI.showError('Erreur TMDB : ' + (d.error || 'inconnue'));
+  } catch(e) { UI.showError('Erreur TMDB : ' + e.message); }
+}
+
 /** Efface tout le cache localStorage (films, séries, bestever, prefs) et recharge la page. */
 function clearAllLocalCache() {
   if (!confirm('Vider tout le cache local du navigateur ?\nLes données seront rechargées depuis le serveur.')) return;

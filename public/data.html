@@ -50,22 +50,54 @@ body {
 
 /* ── Toolbar ── */
 .toolbar {
-  padding: 10px 12px; display: flex; gap: 8px; align-items: center;
+  padding: 8px 12px; display: flex; flex-direction: column; gap: 6px;
   position: sticky; top: 80px; z-index: 8; background: var(--navy);
   border-bottom: 1px solid var(--blue3);
 }
+.toolbar-row { display: flex; gap: 8px; align-items: center; }
 .search-input {
   flex: 1; background: var(--blue2); border: 1px solid var(--blue3);
   color: var(--text); padding: 7px 12px; border-radius: 20px; font-size: 13px;
-  outline: none;
+  outline: none; min-width: 0;
 }
 .search-input::placeholder { color: var(--muted); }
 .search-input:focus { border-color: var(--gold); }
+.col-select {
+  background: var(--blue2); border: 1px solid var(--blue3); color: var(--text);
+  padding: 6px 10px; border-radius: 20px; font-size: 12px; outline: none;
+  cursor: pointer; flex-shrink: 0; max-width: 160px;
+}
+.col-select:focus { border-color: var(--gold); }
 .btn-clear {
   background: none; border: 1px solid var(--blue3); color: var(--muted);
   padding: 6px 12px; border-radius: 20px; font-size: 12px; cursor: pointer; white-space: nowrap;
 }
 .btn-clear:active { border-color: var(--gold); color: var(--gold); }
+/* Sort bar */
+.sort-bar {
+  display: flex; gap: 6px; align-items: center; flex-wrap: wrap;
+}
+.sort-lbl { font-size: 11px; color: var(--muted); white-space: nowrap; }
+.sort-pill {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: var(--blue2); border: 1px solid var(--gold);
+  color: var(--gold); padding: 3px 10px; border-radius: 20px;
+  font-size: 11px; font-weight: 600; cursor: pointer; white-space: nowrap;
+}
+.sort-pill:active { opacity: .7; }
+.sort-pill.none {
+  border-color: var(--blue3); color: var(--muted); cursor: default;
+}
+.sort-dir-btn {
+  background: none; border: 1px solid var(--blue3); color: var(--muted);
+  padding: 3px 8px; border-radius: 20px; font-size: 11px; cursor: pointer; white-space: nowrap;
+}
+.sort-dir-btn:active { border-color: var(--gold); color: var(--gold); }
+.sort-reset {
+  background: none; border: none; color: var(--red); font-size: 11px;
+  cursor: pointer; padding: 2px 6px; border-radius: 4px;
+}
+.sort-reset:active { opacity: .7; }
 
 /* ── Table ── */
 .table-wrap { overflow-x: auto; }
@@ -174,8 +206,17 @@ td .badge {
   </div>
 
   <div class="toolbar">
-    <input class="search-input" id="search-input" type="search" placeholder="Rechercher…" oninput="onSearch(this.value)">
-    <button class="btn-clear" onclick="clearSearch()">✕ Effacer</button>
+    <div class="toolbar-row">
+      <input class="search-input" id="search-input" type="search" placeholder="Rechercher…" oninput="onSearch(this.value)">
+      <select class="col-select" id="col-select" onchange="renderTable()">
+        <option value="">Toutes colonnes</option>
+      </select>
+      <button class="btn-clear" onclick="clearSearch()">✕</button>
+    </div>
+    <div class="sort-bar" id="sort-bar">
+      <span class="sort-lbl">Tri :</span>
+      <span class="sort-pill none" id="sort-pill">Aucun</span>
+    </div>
   </div>
 
   <div id="loading" class="loading"><span class="spinner"></span>Chargement…</div>
@@ -234,48 +275,48 @@ let _searchTimer = null;
 // Colonnes par dataset
 const COLS = {
   films: [
-    { key: 'titre',       label: 'Titre',      w: '25%' },
-    { key: 'notePresse',  label: 'Presse',     w: '7%',  num: true },
-    { key: 'noteSpect',   label: 'Spect.',     w: '7%',  num: true },
-    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',      w: '7%',  num: true },
-    { key: 'genre',       label: 'Genre',      w: '16%' },
-    { key: 'realisateur', label: 'Réalisateur',w: '14%' },
-    { key: 'allocineId',  label: 'ID',         w: '7%',  num: true },
-    { key: 'dateEntree',  label: 'Entrée',     w: '10%' },
+    { key: 'titre',       label: 'Titre du film',       w: '24%' },
+    { key: 'notePresse',  label: 'Note presse',         w: '8%',  num: true },
+    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
+    { key: 'tmdbRating',  label: 'Note TMDB',           w: '8%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',               w: '6%',  num: true },
+    { key: 'genre',       label: 'Genre',               w: '15%' },
+    { key: 'realisateur', label: 'Réalisateur',         w: '14%' },
+    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
+    { key: 'dateEntree',  label: 'Ajouté le',           w: '9%' },
   ],
   bestever: [
-    { key: 'titre',       label: 'Titre',      w: '28%' },
-    { key: 'notePresse',  label: 'Presse',     w: '8%',  num: true },
-    { key: 'noteSpect',   label: 'Spect.',     w: '8%',  num: true },
-    { key: 'tmdbRating',  label: 'TMDB',       w: '8%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',      w: '8%',  num: true },
-    { key: 'genre',       label: 'Genre',      w: '18%' },
-    { key: 'realisateur', label: 'Réalisateur',w: '14%' },
-    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
+    { key: 'titre',       label: 'Titre du film',       w: '26%' },
+    { key: 'notePresse',  label: 'Note presse',         w: '8%',  num: true },
+    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
+    { key: 'tmdbRating',  label: 'Note TMDB',           w: '8%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',               w: '7%',  num: true },
+    { key: 'genre',       label: 'Genre',               w: '18%' },
+    { key: 'realisateur', label: 'Réalisateur',         w: '15%' },
+    { key: 'allocineId',  label: 'ID AlloCiné',         w: '10%', num: true },
   ],
   series: [
-    { key: 'titre',       label: 'Titre',      w: '26%' },
-    { key: 'notePresse',  label: 'Presse',     w: '7%',  num: true },
-    { key: 'noteSpect',   label: 'Spect.',     w: '7%',  num: true },
-    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true, fromDet: true },
-    { key: 'anneeSortie', label: 'Année',      w: '7%',  num: true },
-    { key: 'genre',       label: 'Genre',      w: '16%' },
-    { key: 'nbSaisons',   label: 'Saisons',    w: '8%',  num: true },
-    { key: 'realisateur', label: 'Créateur',   w: '12%' },
-    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
+    { key: 'titre',       label: 'Titre de la série',   w: '24%' },
+    { key: 'notePresse',  label: 'Note presse',         w: '7%',  num: true },
+    { key: 'noteSpect',   label: 'Note spectateurs',    w: '8%',  num: true },
+    { key: 'tmdbRating',  label: 'Note TMDB',           w: '7%',  num: true, fromDet: true },
+    { key: 'anneeSortie', label: 'Année',               w: '6%',  num: true },
+    { key: 'genre',       label: 'Genre',               w: '15%' },
+    { key: 'nbSaisons',   label: 'Nb saisons',          w: '7%',  num: true },
+    { key: 'realisateur', label: 'Créateur',            w: '13%' },
+    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
   ],
   details: [
-    { key: 'allocineId',  label: 'ID',         w: '8%',  num: true },
-    { key: '_titre',      label: 'Titre',      w: '22%' },
-    { key: 'tmdbRating',  label: 'TMDB',       w: '7%',  num: true },
-    { key: 'tmdbVotes',   label: 'Votes',      w: '8%',  num: true },
-    { key: 'pays',        label: 'Pays',       w: '10%' },
-    { key: 'annee',       label: 'Année',      w: '7%',  num: true },
-    { key: '_providers',  label: 'Plateformes',w: '16%' },
-    { key: 'tmdbId',      label: 'TMDB ID',    w: '8%',  num: true },
-    { key: 'imdbId',      label: 'IMDB ID',    w: '8%' },
-    { key: '_type',       label: 'Type',       w: '6%' },
+    { key: 'allocineId',  label: 'ID AlloCiné',         w: '8%',  num: true },
+    { key: '_titre',      label: 'Titre',               w: '22%' },
+    { key: 'tmdbRating',  label: 'Note TMDB',           w: '7%',  num: true },
+    { key: 'tmdbVotes',   label: 'Nb votes TMDB',       w: '9%',  num: true },
+    { key: 'pays',        label: 'Pays',                w: '9%' },
+    { key: 'annee',       label: 'Année',               w: '6%',  num: true },
+    { key: '_providers',  label: 'Plateformes VOD',     w: '14%' },
+    { key: 'tmdbId',      label: 'ID TMDB',             w: '8%',  num: true },
+    { key: 'imdbId',      label: 'ID IMDB',             w: '9%' },
+    { key: '_type',       label: 'Type',                w: '8%' },
   ],
 };
 
@@ -347,8 +388,16 @@ function switchTab(tab) {
     const tabs = ['films', 'bestever', 'series', 'details'];
     t.classList.toggle('active', tabs[i] === tab);
   });
+  updateColSelect();
   closeDetail();
   renderTable();
+}
+
+function updateColSelect() {
+  const sel = document.getElementById('col-select');
+  const cols = COLS[_currentTab];
+  sel.innerHTML = '<option value="">Toutes les colonnes</option>' +
+    cols.map((c, i) => `<option value="${i}">${c.label}</option>`).join('');
 }
 
 function onSearch(val) {
@@ -361,14 +410,34 @@ function clearSearch() {
   renderTable();
 }
 
+function updateSortBar() {
+  const pill = document.getElementById('sort-pill');
+  if (_sortCol === null) {
+    pill.className = 'sort-pill none';
+    pill.innerHTML = 'Aucun';
+    pill.onclick = null;
+    return;
+  }
+  const col = COLS[_currentTab][_sortCol];
+  const dir = _sortDir === 1 ? '▲ Croissant' : '▼ Décroissant';
+  pill.className = 'sort-pill';
+  pill.innerHTML = `${col.label} <span style="opacity:.7">${dir}</span> &nbsp;<span style="color:var(--red);font-size:10px">✕</span>`;
+  pill.onclick = () => { _sortCol = null; _sortDir = 1; renderTable(); };
+}
+
 // ── Rendu table ──────────────────────────────────────────────────────────────
 function renderTable() {
   const cols = COLS[_currentTab];
   const rows = _data[_currentTab];
 
-  // Filtre recherche
+  // Filtre recherche (avec restriction de colonne si sélectionnée)
+  const colSelIdx = document.getElementById('col-select')?.value;
+  const searchCols = (colSelIdx !== '' && colSelIdx !== undefined)
+    ? [cols[Number(colSelIdx)]]
+    : cols;
+
   _filtered = _search
-    ? rows.filter(r => cols.some(c => {
+    ? rows.filter(r => searchCols.some(c => {
         const v = r[c.key];
         return v != null && String(v).toLowerCase().includes(_search);
       }))
@@ -427,6 +496,7 @@ function renderTable() {
   document.getElementById('stats-lbl').textContent = shown < total ? `${shown} / ${total}` : `${total} entrée${total > 1 ? 's' : ''}`;
   document.getElementById('footer-info').textContent = `${_currentTab} · ${shown} / ${total} entrée${total > 1 ? 's' : ''}`;
 
+  updateSortBar();
   _selectedRow = null;
 }
 
@@ -477,6 +547,7 @@ function closeDetail() {
   const ok = await checkAuth();
   if (!ok) return;
   document.getElementById('app').style.display = '';
+  updateColSelect();
   await loadAll();
 })();
 </script>

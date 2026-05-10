@@ -582,7 +582,7 @@ const UI = {
         const platEl = document.getElementById(`card-plat-${i}`);
         if (platEl) platEl.innerHTML = renderPlatBadges(det.providers || []);
         const tmdbEl = document.getElementById(`card-tmdb-${i}`);
-        if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(det);
+        if (tmdbEl) tmdbEl.innerHTML = renderTmdbScore(det);
         updateCardMeta(i, det);
       }
       this.renderUserActions(film, i);
@@ -764,7 +764,7 @@ function renderCards(films) {
         ${sScore != null ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>` : `<div class="score-val muted">—</div>`}
         <div class="score-lbl">Spect.</div>
       </div>
-      <span id="card-tmdb-${i}"></span>
+      <div id="card-tmdb-${i}" style="display:contents"></div>
     </div>
   </div>
   ${full ? `<div class="card-synopsis-wrap" onclick="event.stopPropagation()"><span class="card-synopsis-preview">${esc(short)}</span>${rest ? `<span class="card-synopsis-rest" id="syn-rest-${i}">${esc(rest)}</span><span class="card-more-btn" id="syn-btn-${i}" onclick="toggleSynopsis(${i})">… Lire la suite</span>` : ''}<div class="card-synopsis-meta" id="card-meta-${i}"></div></div>` : `<div class="card-synopsis-meta" id="card-meta-${i}" style="margin-top:8px;font-size:11px;color:var(--muted);display:flex;gap:12px;flex-wrap:wrap"></div>`}

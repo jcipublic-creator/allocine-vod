@@ -170,7 +170,10 @@ function flagFor(pays) {
   return FLAGS[first] ? FLAGS[first] + ' ' : '';
 }
 
-/** Rendu du score TMDB — retourne le HTML à injecter dans card-tmdb-N */
+/**
+ * Rendu du score TMDB — retourne le HTML à injecter via innerHTML dans div#card-tmdb-N
+ * Le wrapper div#card-tmdb-N a display:contents → ses enfants sont des flex-items directs de .card-scores
+ */
 function renderTmdbScore(det) {
   if (!det || det.tmdbRating === undefined) return '';
   if (!det.tmdbRating) return '';
@@ -1410,7 +1413,7 @@ async function startPlatformLoading() {
         const el = UI.getPlatEl(film);
         if (el) el.innerHTML = renderPlatBadges(_details[key].providers || []);
         const tmdbEl = document.getElementById(`card-tmdb-${i}`);
-        if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(_details[key]);
+        if (tmdbEl) tmdbEl.innerHTML = renderTmdbScore(_details[key]);
         UI.onPlatProgress(_platsDone, _allFilms.length);
         continue;
       }
@@ -1480,7 +1483,7 @@ async function fetchDetails(idx, gen) {
     const el = platEl(); if (el) el.innerHTML = renderPlatBadges(data.providers || []);
     const curIdx2 = _allFilms.indexOf(film);
     const tmdbEl = curIdx2 >= 0 ? document.getElementById(`card-tmdb-${curIdx2}`) : null;
-    if (tmdbEl) tmdbEl.outerHTML = renderTmdbScore(data);
+    if (tmdbEl) tmdbEl.innerHTML = renderTmdbScore(data);
     _refreshPlatPrefs();
     if (data.pays) populatePaysFilter();
 

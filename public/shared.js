@@ -172,7 +172,7 @@ function flagFor(pays) {
 
 /**
  * Rendu du score TMDB — retourne le HTML à injecter via innerHTML dans div#card-tmdb-N
- * Le wrapper div#card-tmdb-N a display:contents → ses enfants sont des flex-items directs de .card-scores
+ * Le wrapper est placé sous la ligne Presse/Spect, aligné à gauche avec Presse.
  */
 function renderTmdbScore(det) {
   if (!det || det.tmdbRating === undefined) return '';
@@ -181,7 +181,7 @@ function renderTmdbScore(det) {
   const cls = r >= 7 ? 'green' : r >= 5 ? 'orange' : 'muted';
   const link = det.imdbId ? `https://www.imdb.com/title/${det.imdbId}/` : '#';
   const target = det.imdbId ? ' target="_blank" rel="noopener"' : '';
-  return `<div class="score-sep"></div><div class="score-block"><a href="${link}"${target} style="text-decoration:none"><div class="score-val ${cls}" style="font-size:14px">${r.toFixed(1)}</div><div class="score-lbl">TMDB</div></a></div>`;
+  return `<div class="score-block"><a href="${link}"${target} style="text-decoration:none"><div class="score-val ${cls}" style="font-size:14px">${r.toFixed(1)}</div><div class="score-lbl">TMDB</div></a></div>`;
 }
 
 function renderPlatBadges(providers) {

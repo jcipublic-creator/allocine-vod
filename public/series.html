@@ -222,7 +222,8 @@ body {
 .card-genre { font-size: 11px; color: var(--muted); margin-top: 2px; }
 
 /* Bloc de notes (presse + spectateurs) */
-.card-scores { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+.card-scores { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; flex-shrink: 0; }
+.scores-top { display: flex; align-items: center; gap: 8px; }
 .score-block { text-align: center; }
 .score-val { font-size: 17px; font-weight: 700; line-height: 1; }
 .score-val.green  { color: var(--green); }
@@ -776,18 +777,20 @@ function renderSeriesCards(series) {
       ${casting}
     </div>
     <div class="card-scores">
-      <div class="score-block">
-        <div class="score-val ${pScore >= 4 ? 'green' : 'orange'}">${pScore.toFixed(1)}</div>
-        <div class="score-lbl">Presse</div>
+      <div class="scores-top">
+        <div class="score-block">
+          <div class="score-val ${pScore >= 4 ? 'green' : 'orange'}">${pScore.toFixed(1)}</div>
+          <div class="score-lbl">Presse</div>
+        </div>
+        <div class="score-sep"></div>
+        <div class="score-block">
+          ${sScore != null
+            ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>`
+            : `<div class="score-val muted">—</div>`}
+          <div class="score-lbl">Spect.</div>
+        </div>
       </div>
-      <div class="score-sep"></div>
-      <div class="score-block">
-        ${sScore != null
-          ? `<div class="score-val ${sScore >= 3.5 ? 'green' : 'muted'}">${sScore.toFixed(1)}</div>`
-          : `<div class="score-val muted">—</div>`}
-        <div class="score-lbl">Spect.</div>
-      </div>
-      <div id="card-tmdb-${i}" style="display:contents">${renderTmdbScore(_seriesDet[s.allocineId])}</div>
+      <div id="card-tmdb-${i}">${renderTmdbScore(_seriesDet[s.allocineId])}</div>
     </div>
   </div>
   ${synHtml}

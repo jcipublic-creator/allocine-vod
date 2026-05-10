@@ -728,9 +728,11 @@ const PROVIDERS_BLACKLIST = new Set([
 ]);
 
 /** Filtre une liste de providers selon la blacklist et les mots-clés exclus.
- *  Appliqué à la fois pendant le scraping ET au moment de servir le cache. */
+ *  Appliqué à la fois pendant le scraping ET au moment de servir le cache.
+ *  Déduplique aussi par nom (après éventuels renommages) pour éviter Canal+/Canal+ etc. */
 function filterProviders(providers) {
   if (!providers) return [];
+  const seen = new Set();
   return providers.filter(p => {
     const n = p.name.toLowerCase();
     if (PROVIDERS_BLACKLIST.has(n)) return false;
@@ -738,6 +740,8 @@ function filterProviders(providers) {
     // Un nom de plateforme ne peut pas dépasser 25 caractères (filtre les titres de séries/films parasites)
     // La plus longue vraie plateforme est "Amazon Prime Video" (18 chars)
     if (p.name.length > 25) return false;
+    if (seen.has(n)) return false; // déduplique par nom (case-insensitive)
+    seen.add(n);
     return true;
   });
 }

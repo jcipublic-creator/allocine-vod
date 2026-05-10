@@ -764,37 +764,91 @@ function filterProviders(providers) {
  * @param {string} titreOriginal  Titre original (optionnel)
  * @param {string|number} annee   Année de sortie (optionnel)
  * @param {'movie'|'tv'} type
+ * @param {string} realisateur    Réalisateur(s) AlloCiné, ex: "Christopher Nolan" (optionnel)
  * @returns {Promise<{tmdbId, tmdbRating, tmdbVotes, imdbId}|null>}
  */
-async function tmdbLookup(titre, titreOriginal, annee, type = 'movie') {
+async function tmdbLookup(titre, titreOriginal, annee, type = 'movie', realisateur = null) {
   if (!TMDB_API_KEY) return null;
-  const endpoint = type === 'tv' ? 'search/tv' : 'search/movie';
-  const yearParam = type === 'tv' ? 'first_air_date_year' : 'year';
+  const endpoint   = type === 'tv' ? 'search/tv'   : 'search/movie';
+  const yearParam  = type === 'tv' ? 'first_air_date_year' : 'year';
+  const mediaType  = type === 'tv' ? 'tv'           : 'movie';
 
-  const queries = [];
-  if (titreOriginal && titreOriginal.trim()) queries.push(titreOriginal.trim());
-  if (titre && titre.trim() && titre !== titreOriginal) queries.push(titre.trim());
+  // Normalisation pour comparaison insensible aux accents/casse
+  const normStr = s => s
+    ? s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
+    : '';
+  // Réalisateurs AlloCiné → liste de noms normalisés
+  const acDirs = realisateur
+    ? realisateur.split(',').map(d => normStr(d)).filter(Boolean)
+    : [];
 
-  for (const query of queries) {
+  // Vérifie la cohérence du réalisateur sur un candidat TMDB (via credits dans append_to_response)
+  function checkDirectors(crew) {
+    if (!acDirs.length || !crew?.length) return true; // pas de contrainte ou pas d'info
+    const tmdbDirs = crew
+      .filter(c => c.job === 'Director' || c.job === 'Series Director')
+      .map(c => normStr(c.name));
+    if (!tmdbDirs.length) return true; // TMDB n'a pas de director listé → on accepte
+    // Match si le nom de famille d'un réal AlloCiné apparaît dans un nom TMDB ou vice-versa
+    return acDirs.some(acD => {
+      const acLast = acD.split(' ').pop();
+      return tmdbDirs.some(tmD => {
+        const tmLast = tmD.split(' ').pop();
+        return acLast.length > 2 && (tmD.includes(acLast) || acD.includes(tmLast));
+      });
+    });
+  }
+
+  // Récupère imdbId + credits en un seul appel via append_to_response
+  async function fetchDetails(tmdbId) {
     try {
-      const params = new URLSearchParams({ api_key: TMDB_API_KEY, query, language: 'fr-FR' });
-      if (annee) params.set(yearParam, String(annee));
-      const resp = await axios.get(`${TMDB_BASE}/${endpoint}?${params}`, { timeout: 8000 });
+      const r = await axios.get(
+        `${TMDB_BASE}/${mediaType}/${tmdbId}?api_key=${TMDB_API_KEY}&append_to_response=external_ids,credits`,
+        { timeout: 8000 }
+      );
+      const d = r.data;
+      return {
+        imdbId: d.external_ids?.imdb_id || null,
+        crew:   d.credits?.crew         || [],
+      };
+    } catch(_) { return { imdbId: null, crew: [] }; }
+  }
+
+  // Tentatives : titre original et titre français, chacun avec et sans année
+  const titleCandidates = [];
+  if (titreOriginal?.trim()) titleCandidates.push(titreOriginal.trim());
+  if (titre?.trim() && titre.trim() !== titreOriginal?.trim()) titleCandidates.push(titre.trim());
+
+  const attempts = [];
+  for (const q of titleCandidates) {
+    if (annee) attempts.push({ q, year: String(annee) }); // avec année en priorité
+    attempts.push({ q, year: null });                       // sans année en fallback
+  }
+
+  for (const { q, year } of attempts) {
+    try {
+      const params = new URLSearchParams({ api_key: TMDB_API_KEY, query: q, language: 'fr-FR' });
+      if (year) params.set(yearParam, year);
+      const resp    = await axios.get(`${TMDB_BASE}/${endpoint}?${params}`, { timeout: 8000 });
       const results = resp.data?.results;
       if (!results?.length) continue;
-      const hit = results[0];
-      const tmdbId   = hit.id;
-      const tmdbRating = hit.vote_average ? Math.round(hit.vote_average * 10) / 10 : null;
-      const tmdbVotes  = hit.vote_count   || 0;
-      // Récupérer l'IMDB ID via external_ids
-      let imdbId = null;
-      try {
-        const extResp = await axios.get(`${TMDB_BASE}/${type === 'tv' ? 'tv' : 'movie'}/${tmdbId}/external_ids?api_key=${TMDB_API_KEY}`, { timeout: 5000 });
-        imdbId = extResp.data?.imdb_id || null;
-      } catch(_) {}
-      return { tmdbId, tmdbRating, tmdbVotes, imdbId };
+
+      // Teste jusqu'à 3 candidats et valide le réalisateur
+      for (const hit of results.slice(0, 3)) {
+        const { imdbId, crew } = await fetchDetails(hit.id);
+        if (!checkDirectors(crew)) {
+          console.log(`[TMDB] "${q}" → candidat ${hit.id} rejeté (réal. ne correspond pas)`);
+          continue;
+        }
+        return {
+          tmdbId:      hit.id,
+          tmdbRating:  hit.vote_average ? Math.round(hit.vote_average * 10) / 10 : null,
+          tmdbVotes:   hit.vote_count   || 0,
+          imdbId,
+        };
+      }
     } catch(e) {
-      console.warn(`[TMDB] lookup "${query}" : ${e.message}`);
+      console.warn(`[TMDB] lookup "${q}" (year=${year || '—'}) : ${e.message}`);
     }
   }
   return null;
@@ -2059,7 +2113,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   // Répondre immédiatement — l'enrichissement tourne en arrière-plan
   res.json({ ok: true, message: 'Enrichissement TMDB démarré en arrière-plan' });
 
-  const DELAY = 300; // ms entre chaque requête TMDB (2 appels par item = ~600ms/item)
+  const DELAY = 500; // ms entre chaque item (2 appels API par item : search + details/credits/external_ids)
   const sleep = ms => new Promise(r => setTimeout(r, ms));
 
   // Initialise le suivi de progression
@@ -2087,7 +2141,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     const titreO = film.titreOriginal || null;
     if (!titre && !titreO) { _tmdbStatus.done++; continue; } // pas de titre → inutile d'appeler l'API
     const annee = film.anneeSortie || val.annee || null;
-    const tmdb = await tmdbLookup(titre, titreO, annee, 'movie');
+    const tmdb = await tmdbLookup(titre, titreO, annee, 'movie', film.realisateur || null);
     if (tmdb) {
       detailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
       _tmdbStatus.enrichedFilms++;
@@ -2110,7 +2164,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
     const titreO  = serie.titreOriginal || null;
     if (!titre && !titreO) { _tmdbStatus.done++; continue; }
     const annee = serie.anneeSortie || null;
-    const tmdb = await tmdbLookup(titre, titreO, annee, 'tv');
+    const tmdb = await tmdbLookup(titre, titreO, annee, 'tv', serie.realisateur || null);
     if (tmdb) {
       seriesDetailsCache.set(key, { ...det, value: { ...val, ...tmdb } });
       _tmdbStatus.enrichedSeries++;

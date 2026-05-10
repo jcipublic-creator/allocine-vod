@@ -2036,7 +2036,20 @@ app.get('/api/tmdb-status', (_req, res) => {
   const pct = _tmdbStatus.total > 0
     ? Math.round(_tmdbStatus.done / _tmdbStatus.total * 100)
     : 0;
-  res.json({ ..._tmdbStatus, pct });
+  res.json({ ..._tmdbStatus, pct, keyConfigured: !!TMDB_API_KEY });
+});
+
+// Test rapide : vérifie que la clé TMDB est valide en cherchant un film connu
+app.get('/api/tmdb-test', requireSecret, async (_req, res) => {
+  if (!TMDB_API_KEY) return res.json({ ok: false, error: 'TMDB_API_KEY non configurée' });
+  try {
+    const r = await axios.get(`${TMDB_BASE}/search/movie?api_key=${TMDB_API_KEY}&query=Inception&language=fr-FR`, { timeout: 8000 });
+    const hit = r.data?.results?.[0];
+    if (!hit) return res.json({ ok: false, error: 'Aucun résultat (clé OK mais API vide ?)' });
+    res.json({ ok: true, test: { titre: hit.title, note: hit.vote_average, id: hit.id } });
+  } catch(e) {
+    res.json({ ok: false, error: e.message });
+  }
 });
 
 app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
@@ -2065,7 +2078,8 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   for (const [key, det] of detailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
-    if (val.tmdbRating !== undefined) { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
+    if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const film = cachedFilms.find(f => String(f.allocineId) === String(key)) || {};
     const annee = film.anneeSortie || (val.annee) || null;
     const tmdb = await tmdbLookup(val.titre || film.titre, val.titreOriginal || film.titreOriginal, annee, 'movie');
@@ -2083,7 +2097,8 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   for (const [key, det] of seriesDetailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
-    if (val.tmdbRating !== undefined) { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
+    if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const serie = cachedSeries.find(s => String(s.allocineId) === String(key)) || {};
     const annee = serie.anneeSortie || null;
     const tmdb = await tmdbLookup(val.titre || serie.titre, val.titreOriginal || serie.titreOriginal, annee, 'tv');

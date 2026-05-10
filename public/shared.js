@@ -1786,11 +1786,15 @@ function renderInfo() {
         <div class="info-progress-label"><span>En cours${tmdb.total ? ` · ${tmdb.done}/${tmdb.total}` : ''}</span><span>${tmdb.pct ?? 0}%</span></div>
         <div class="info-progress-bar-wrap"><div class="info-progress-bar" style="width:${tmdb.pct ?? 0}%"></div></div>
       </div>` : '';
+      const keyStatus = tmdb.keyConfigured === false
+        ? '<span style="color:var(--orange)">⚠️ clé absente</span>'
+        : '<span style="color:var(--green)">✓</span>';
       return `<div class="info-section-title">🎬 TMDB${tmdb.running ? ' <span class="info-scraping-badge">⟳ en cours</span>' : ''}</div>
+    <div class="info-row"><span class="lbl">Clé API</span><span class="val">${keyStatus}</span></div>
     <div class="info-row"><span class="lbl">Dernier enrichissement</span><span class="val">${fmt(tmdb.lastRun)}</span></div>
     <div class="info-row"><span class="lbl">Films enrichis</span><span class="val">${tmdb.enrichedFilms ?? '—'}</span></div>
     <div class="info-row"><span class="lbl">Séries enrichies</span><span class="val">${tmdb.enrichedSeries ?? '—'}</span></div>
-    <div class="info-row"><span class="lbl">Déjà enrichis (skip)</span><span class="val">${tmdb.skipped ?? '—'}</span></div>
+    <div class="info-row"><span class="lbl">Avec note (skip)</span><span class="val">${tmdb.skipped ?? '—'}</span></div>
     ${progressBar}`;
     })()}
     ${myStatsBlock}

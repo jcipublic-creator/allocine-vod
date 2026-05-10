@@ -772,24 +772,38 @@ async function tmdbLookup(titre, titreOriginal, annee, type = 'movie', realisate
   const endpoint   = type === 'tv' ? 'search/tv'   : 'search/movie';
   const yearParam  = type === 'tv' ? 'first_air_date_year' : 'year';
   const mediaType  = type === 'tv' ? 'tv'           : 'movie';
+  const anneeNum   = annee ? Number(annee) : null;
 
-  // Normalisation pour comparaison insensible aux accents/casse
+  // ── Normalisation ──────────────────────────────────────────────────────────
   const normStr = s => s
     ? s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9 ]/g, '').trim()
     : '';
-  // Réalisateurs AlloCiné → liste de noms normalisés
+
+  // Mots significatifs (sans articles/prépositions courants) pour comparaison de titres
+  const STOP = new Set(['the','a','an','le','la','les','un','une','des','de','du','et','and','in','of','l','d']);
+  const titleWords = s => new Set(normStr(s).split(/\s+/).filter(w => w.length > 1 && !STOP.has(w)));
+
+  // Score de similarité Jaccard sur les mots du titre (0..1)
+  function titleSimilarity(query, tmdbTitle) {
+    const wq = titleWords(query);
+    const wt = titleWords(tmdbTitle);
+    if (!wq.size || !wt.size) return 0;
+    const inter = [...wq].filter(w => wt.has(w)).length;
+    const union = new Set([...wq, ...wt]).size;
+    return inter / union;
+  }
+
+  // ── Validation réalisateur ─────────────────────────────────────────────────
   const acDirs = realisateur
     ? realisateur.split(',').map(d => normStr(d)).filter(Boolean)
     : [];
 
-  // Vérifie la cohérence du réalisateur sur un candidat TMDB (via credits dans append_to_response)
   function checkDirectors(crew) {
-    if (!acDirs.length || !crew?.length) return true; // pas de contrainte ou pas d'info
+    if (!acDirs.length || !crew?.length) return true;
     const tmdbDirs = crew
       .filter(c => c.job === 'Director' || c.job === 'Series Director')
       .map(c => normStr(c.name));
-    if (!tmdbDirs.length) return true; // TMDB n'a pas de director listé → on accepte
-    // Match si le nom de famille d'un réal AlloCiné apparaît dans un nom TMDB ou vice-versa
+    if (!tmdbDirs.length) return true; // pas d'info → on accepte
     return acDirs.some(acD => {
       const acLast = acD.split(' ').pop();
       return tmdbDirs.some(tmD => {
@@ -799,7 +813,7 @@ async function tmdbLookup(titre, titreOriginal, annee, type = 'movie', realisate
     });
   }
 
-  // Récupère imdbId + credits en un seul appel via append_to_response
+  // ── Fetch détails (credits + external_ids en un appel) ────────────────────
   async function fetchDetails(tmdbId) {
     try {
       const r = await axios.get(
@@ -808,24 +822,79 @@ async function tmdbLookup(titre, titreOriginal, annee, type = 'movie', realisate
       );
       const d = r.data;
       return {
-        imdbId: d.external_ids?.imdb_id || null,
-        crew:   d.credits?.crew         || [],
+        imdbId:    d.external_ids?.imdb_id || null,
+        crew:      d.credits?.crew         || [],
+        tmdbYear:  Number((d.release_date || d.first_air_date || '').split('-')[0]) || null,
+        tmdbTitle: d.title || d.name || '',
       };
-    } catch(_) { return { imdbId: null, crew: [] }; }
+    } catch(_) { return { imdbId: null, crew: [], tmdbYear: null, tmdbTitle: '' }; }
   }
 
-  // Tentatives : titre original et titre français, chacun avec et sans année
+  // ── Sélection du meilleur candidat ─────────────────────────────────────────
+  // Retourne le premier candidat qui passe tous les filtres :
+  //   1. Similarité de titre ≥ 0.25 (évite les matchs fantaisistes sur titres courts/génériques)
+  //   2. Écart d'année ≤ 3 si l'année AlloCiné est connue (diff sortie FR / sortie mondiale)
+  //   3. Réalisateur cohérent
+  async function bestCandidate(results, query) {
+    for (const hit of results.slice(0, 5)) {
+      const { imdbId, crew, tmdbYear, tmdbTitle } = await fetchDetails(hit.id);
+
+      // 1. Similarité de titre
+      const hitTitle = hit.title || hit.name || '';
+      const sim = Math.max(titleSimilarity(query, hitTitle), titleSimilarity(query, tmdbTitle));
+      if (sim < 0.25) {
+        console.log(`[TMDB] "${query}" → ${hit.id} "${hitTitle}" rejeté (similarité ${sim.toFixed(2)})`);
+        continue;
+      }
+
+      // 2. Filtre d'année (tolérance ±3 pour couvrir sorties décalées)
+      if (anneeNum && tmdbYear && Math.abs(tmdbYear - anneeNum) > 3) {
+        console.log(`[TMDB] "${query}" → ${hit.id} rejeté (année TMDB ${tmdbYear} vs AlloCiné ${anneeNum})`);
+        continue;
+      }
+
+      // 3. Réalisateur
+      if (!checkDirectors(crew)) {
+        console.log(`[TMDB] "${query}" → ${hit.id} rejeté (réalisateur ne correspond pas)`);
+        continue;
+      }
+
+      return {
+        tmdbId:     hit.id,
+        tmdbRating: hit.vote_average ? Math.round(hit.vote_average * 10) / 10 : null,
+        tmdbVotes:  hit.vote_count   || 0,
+        imdbId,
+      };
+    }
+    return null;
+  }
+
+  // ── Construction des tentatives ────────────────────────────────────────────
+  // Ordre : titreOriginal > titre français ; avec année exacte > ±1 > sans année
   const titleCandidates = [];
   if (titreOriginal?.trim()) titleCandidates.push(titreOriginal.trim());
   if (titre?.trim() && titre.trim() !== titreOriginal?.trim()) titleCandidates.push(titre.trim());
 
   const attempts = [];
   for (const q of titleCandidates) {
-    if (annee) attempts.push({ q, year: String(annee) }); // avec année en priorité
-    attempts.push({ q, year: null });                       // sans année en fallback
+    if (anneeNum) {
+      attempts.push({ q, year: String(anneeNum) });         // exact
+      attempts.push({ q, year: String(anneeNum - 1) });     // -1 (sortie FR décalée)
+      attempts.push({ q, year: String(anneeNum + 1) });     // +1 (sortie anticipée)
+    }
+    attempts.push({ q, year: null });                        // sans année (dernier recours)
   }
 
-  for (const { q, year } of attempts) {
+  // Déduplique les requêtes identiques (même q+year)
+  const seen = new Set();
+  const uniqueAttempts = attempts.filter(({ q, year }) => {
+    const k = `${q}|${year}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+
+  for (const { q, year } of uniqueAttempts) {
     try {
       const params = new URLSearchParams({ api_key: TMDB_API_KEY, query: q, language: 'fr-FR' });
       if (year) params.set(yearParam, year);
@@ -833,20 +902,8 @@ async function tmdbLookup(titre, titreOriginal, annee, type = 'movie', realisate
       const results = resp.data?.results;
       if (!results?.length) continue;
 
-      // Teste jusqu'à 3 candidats et valide le réalisateur
-      for (const hit of results.slice(0, 3)) {
-        const { imdbId, crew } = await fetchDetails(hit.id);
-        if (!checkDirectors(crew)) {
-          console.log(`[TMDB] "${q}" → candidat ${hit.id} rejeté (réal. ne correspond pas)`);
-          continue;
-        }
-        return {
-          tmdbId:      hit.id,
-          tmdbRating:  hit.vote_average ? Math.round(hit.vote_average * 10) / 10 : null,
-          tmdbVotes:   hit.vote_count   || 0,
-          imdbId,
-        };
-      }
+      const hit = await bestCandidate(results, q);
+      if (hit) return hit;
     } catch(e) {
       console.warn(`[TMDB] lookup "${q}" (year=${year || '—'}) : ${e.message}`);
     }

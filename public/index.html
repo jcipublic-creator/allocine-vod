@@ -883,23 +883,22 @@ if ('serviceWorker' in navigator) {
 // ─── Ping serveur ─────────────────────────────────────────────────────────────
 async function pingServer() {
   const statusEl = document.getElementById('server-status');
-  const btnEl = document.getElementById('btn-run');
+  const btnEl  = document.getElementById('btn-run');
+  const btnPlat = document.getElementById('btn-plat');
   try {
     const r = await fetch('/api/health', { signal: AbortSignal.timeout(3000) });
     if (r.ok) {
       const d = await r.json();
       statusEl.style.color = 'var(--green)';
       statusEl.textContent = '🟢';
-      btnEl.disabled = false;
-      const btnPlat = document.getElementById('btn-plat');
+      if (btnEl)   btnEl.disabled   = false;
       if (btnPlat) btnPlat.disabled = false;
       return d; // ← données health pour la vérification de fraîcheur
     } else { throw new Error('non-ok'); }
   } catch {
     statusEl.textContent = '🔴 Hors ligne';
     statusEl.style.color = 'var(--orange)';
-    btnEl.disabled = true;
-    const btnPlat = document.getElementById('btn-plat');
+    if (btnEl)   btnEl.disabled   = true;
     if (btnPlat) btnPlat.disabled = true;
     return null;
   }

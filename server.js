@@ -524,6 +524,13 @@ function getCachedDetails(key) {
 }
 
 function setCachedDetails(key, value) {
+  // Préserver les champs TMDB si la nouvelle valeur n'en a pas (ex : re-scrape providers)
+  if (value && value.tmdbRating === undefined) {
+    const existing = detailsCache.get(key)?.value;
+    if (existing?.tmdbRating !== undefined) {
+      value = { ...value, tmdbId: existing.tmdbId, tmdbRating: existing.tmdbRating, tmdbVotes: existing.tmdbVotes, imdbId: existing.imdbId };
+    }
+  }
   detailsCache.set(key, { value, cachedAt: Date.now() });
   if (value && value.providers && value.providers.length > 0) {
     lastDetailsScrape = new Date().toISOString();
@@ -2714,6 +2721,13 @@ function getCachedSeriesDetails(key) {
 }
 
 function setCachedSeriesDetails(key, value) {
+  // Préserver les champs TMDB si la nouvelle valeur n'en a pas (ex : re-scrape providers)
+  if (value && value.tmdbRating === undefined) {
+    const existing = seriesDetailsCache.get(key)?.value;
+    if (existing?.tmdbRating !== undefined) {
+      value = { ...value, tmdbId: existing.tmdbId, tmdbRating: existing.tmdbRating, tmdbVotes: existing.tmdbVotes, imdbId: existing.imdbId };
+    }
+  }
   seriesDetailsCache.set(key, { value, cachedAt: Date.now() });
   lastSeriesDetailsScrape = new Date().toISOString();
   scheduleSeriesDetailsBackup();

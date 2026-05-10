@@ -2110,8 +2110,11 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   if (!TMDB_API_KEY) return res.status(503).json({ error: 'TMDB_API_KEY non configurée' });
   if (_tmdbStatus.running) return res.status(429).json({ error: 'Enrichissement déjà en cours' });
 
+  // force=true : re-fetche tout, même les entrées déjà enrichies (utile après amélioration de l'algo)
+  const force = req.query.force === 'true' || req.body?.force === true;
+
   // Répondre immédiatement — l'enrichissement tourne en arrière-plan
-  res.json({ ok: true, message: 'Enrichissement TMDB démarré en arrière-plan' });
+  res.json({ ok: true, message: `Enrichissement TMDB démarré en arrière-plan${force ? ' (force)' : ''}` });
 
   const DELAY = 500; // ms entre chaque item (2 appels API par item : search + details/credits/external_ids)
   const sleep = ms => new Promise(r => setTimeout(r, ms));
@@ -2120,6 +2123,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   const totalItems = detailsCache.size + seriesDetailsCache.size + cachedCinema.length;
   Object.assign(_tmdbStatus, {
     running: true,
+    force,
     startedAt: new Date().toISOString(),
     done: 0,
     total: totalItems,
@@ -2134,8 +2138,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   for (const [key, det] of detailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
-    // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
-    if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    if (!force && typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const filmId = val.allocineId || key.replace(/^(id:|q:)/, '');
     const film   = cachedFilms.find(f => String(f.allocineId) === String(filmId)) || {};
     const titre  = film.titre || null;
@@ -2157,8 +2160,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   for (const [key, det] of seriesDetailsCache) {
     const val = det?.value;
     if (!val) { _tmdbStatus.done++; continue; }
-    // Skip uniquement si déjà une vraie note (pas null = échec précédent à retenter)
-    if (typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    if (!force && typeof val.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const serieId = val.allocineId || key.replace(/^sid:/, '');
     const serie   = cachedSeries.find(s => String(s.allocineId) === String(serieId)) || {};
     const titre   = serie.titre || null;
@@ -2182,7 +2184,7 @@ app.post('/api/tmdb-enrich', requireSecret, async (req, res) => {
   for (let i = 0; i < cachedCinema.length; i++) {
     const f = cachedCinema[i];
     if (!f) { _tmdbStatus.done++; continue; }
-    if (typeof f.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
+    if (!force && typeof f.tmdbRating === 'number') { _tmdbStatus.skipped++; _tmdbStatus.done++; continue; }
     const titre = f.titre || null;
     const titreO = f.titreOriginal || null;
     if (!titre && !titreO) { _tmdbStatus.done++; continue; }

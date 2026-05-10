@@ -199,9 +199,10 @@ function renderPlatBadges(providers) {
 /** Lance l'enrichissement TMDB en arrière-plan (notes + liens IMDB). */
 async function launchTmdbEnrich() {
   try {
-    const r = await fetch('/api/tmdb-enrich', { method: 'POST', headers: { 'x-app-secret': _appSecret } });
+    // force=true : re-enrichit tout, même les entrées déjà traitées (nouvel algo de matching)
+    const r = await fetch('/api/tmdb-enrich?force=true', { method: 'POST', headers: { 'x-app-secret': _appSecret } });
     const d = await r.json();
-    if (d.ok) UI.showError('🎬 Enrichissement TMDB démarré (~20 min en arrière-plan)');
+    if (d.ok) UI.showError('🎬 Enrichissement TMDB démarré (~30 min en arrière-plan)');
     else UI.showError('Erreur TMDB : ' + (d.error || 'inconnue'));
   } catch(e) { UI.showError('Erreur TMDB : ' + e.message); }
 }

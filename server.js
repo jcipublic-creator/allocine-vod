@@ -761,7 +761,7 @@ const VOD_SLUG_TO_NAME = {
   'arte': 'Arte', 'france-tv': 'France TV', 'max': 'Max',
   'sfr-play': 'SFR Play', 'universcine': 'UniversCiné',
   'la-cinetek': 'La Cinetek', 'shadowz': 'Shadowz', 'shudder': 'Shudder',
-  'lionsgate-plus': 'Lionsgate+', 'mycanal': 'MyCanal',
+  'lionsgate-plus': 'Lionsgate+', 'mycanal': 'Canal+',
   'tf1-plus': 'TF1+', 'salto': 'Salto', 'bbox': 'Bbox',
   'fnac': 'Fnac', 'microsoft': 'Microsoft', 'youtube': 'YouTube',
   'google-play': 'Google Play', 'itunes': 'iTunes',

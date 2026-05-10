@@ -1661,8 +1661,14 @@ app.post('/api/userdata/import-ac-notes', requireSecret, async (req, res) => {
 app.get('/api/health', (_req, res) => {
   res.json({
     ok: true, isScraping, totalPages: TOTAL_PAGES,
-    cachedDetails: detailsCache.size, cachedFilms: cachedFilms.length,
+    cachedFilms: cachedFilms.length,
+    detailsCacheSize: detailsCache.size,
+    cachedSeries: cachedSeries.length,
+    seriesDetailsCacheSize: seriesDetailsCache.size,
+    cachedBestever: cachedBestever.length,
+    cachedCinema: cachedCinema.length,
     lastScrape, lastDetailsScrape,
+    lastSeriesScrape, lastBesteverScrape,
     version: VERSION, serverStart: SERVER_START,
     lastScrapeErrors,
   });

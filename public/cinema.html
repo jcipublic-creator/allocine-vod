@@ -395,13 +395,9 @@ body {
   <button class="menu-item" onclick="closeMenu();openMyProfile()">⚙️ Mon profil</button>
   <button class="menu-item" id="btn-user-mgmt" style="display:none" onclick="closeMenu();openUserManagement()">👥 Gestion des utilisateurs</button>
   <div class="menu-separator" id="debug-separator"></div>
-  <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
-    🛠 Debug <span class="sub-arrow">▶</span>
+  <button class="menu-item" id="btn-debug-toggle" onclick="closeMenu();window.open('/debug.html','_blank')">
+    🛠 Debug
   </button>
-  <div class="submenu" id="submenu-debug">
-    <button class="menu-item" id="btn-run" onclick="closeMenu();startScrape()" disabled>▶ Scraper</button>
-    <button class="menu-item" onclick="closeMenu();clearCinemaCache()">🗑️ Vider cache</button>
-  </div>
 </div>
 
 <div class="prog-zone" id="prog-zone">

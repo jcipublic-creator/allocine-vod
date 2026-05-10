@@ -469,19 +469,9 @@ body {
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadCSV()">⬇ Exporter CSV</button>
   <button class="menu-item desktop-only" style="font-size:13px" onclick="closeMenu();downloadXLSX()">⬇ Exporter Excel</button>
   <div class="menu-separator" id="debug-separator"></div>
-  <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
-    🛠 Debug <span class="sub-arrow">▶</span>
+  <button class="menu-item" id="btn-debug-toggle" onclick="closeMenu();window.open('/debug.html','_blank')">
+    🛠 Debug
   </button>
-  <div class="submenu" id="submenu-debug">
-    <button class="menu-item" id="btn-run" onclick="closeMenu();openConfirm()" disabled>▶ Scraper la liste</button>
-    <button class="menu-item" id="btn-plat" onclick="closeMenu();rescrapeDetails()" disabled>🔄 Rescraper les plateformes</button>
-    <button class="menu-item desktop-only" onclick="closeMenu();testAllocine()">🔍 Tester AlloCiné</button>
-    <button class="menu-item" onclick="closeMenu();clearDetailsCache()">🗑️ Vider cache plateformes</button>
-    <button class="menu-item" onclick="closeMenu();clearFilmsListCache()">🗑️ Vider cache liste</button>
-    <button class="menu-item" onclick="clearAllLocalCache()">🧹 Vider cache local navigateur</button>
-    <button class="menu-item" onclick="closeMenu();launchTmdbEnrich()">🎬 Enrichir notes TMDB</button>
-    <button class="menu-item" onclick="closeMenu();openACSync()">🔄 Sync notes AlloCiné</button>
-  </div>
 </div>
 
 <div class="prog-zone" id="prog-zone">

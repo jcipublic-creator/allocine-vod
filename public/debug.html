@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🛠 Debug — AlloCiné VOD</title>
+<style>
+:root {
+  --navy:   #0d2137;
+  --blue2:  #1a3550;
+  --blue3:  #2a4f70;
+  --gold:   #f0c040;
+  --text:   #d0e0f0;
+  --muted:  #7090a0;
+  --green:  #4caf7d;
+  --orange: #e08030;
+  --red:    #e05050;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+body {
+  background: var(--navy); color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Helvetica Neue', sans-serif;
+  font-size: 14px; min-height: 100vh;
+  padding: 0 0 40px;
+}
+
+/* ── Header ── */
+.header {
+  background: var(--blue2);
+  border-bottom: 1px solid var(--blue3);
+  padding: 14px 16px;
+  display: flex; align-items: center; gap: 10px;
+  position: sticky; top: 0; z-index: 10;
+}
+.header-title { font-size: 17px; font-weight: 700; color: var(--gold); flex: 1; }
+.header-back {
+  background: none; border: none; color: var(--text);
+  font-size: 22px; cursor: pointer; padding: 0 4px;
+  line-height: 1;
+}
+
+/* ── Layout ── */
+.content { padding: 16px; max-width: 600px; margin: 0 auto; }
+
+/* ── Section ── */
+.section { margin-bottom: 20px; }
+.section-title {
+  font-size: 10px; font-weight: 700; color: var(--gold);
+  text-transform: uppercase; letter-spacing: 1px;
+  margin-bottom: 8px; padding-bottom: 5px;
+  border-bottom: 1px solid rgba(240,192,64,.2);
+}
+
+/* ── Status card ── */
+.status-card {
+  background: var(--blue2); border: 1px solid var(--blue3);
+  border-radius: 8px; padding: 12px 14px; margin-bottom: 10px;
+}
+.status-row { display: flex; justify-content: space-between; align-items: center; padding: 4px 0; }
+.status-label { color: var(--muted); font-size: 12px; }
+.status-val { font-size: 12px; color: var(--text); }
+.status-val.ok { color: var(--green); }
+.status-val.warn { color: var(--orange); }
+.status-val.err { color: var(--red); }
+.status-val.running { color: var(--gold); animation: pulse .8s ease-in-out infinite alternate; }
+
+.progress-wrap { margin-top: 8px; }
+.progress-track { height: 4px; background: var(--blue3); border-radius: 2px; overflow: hidden; }
+.progress-fill { height: 100%; background: var(--gold); border-radius: 2px; transition: width .4s; }
+.progress-label { font-size: 10px; color: var(--gold); display: flex; justify-content: space-between; margin-top: 3px; }
+
+/* ── Boutons d'action ── */
+.btn-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.btn-action {
+  background: var(--blue2); border: 1px solid var(--blue3);
+  color: var(--text); border-radius: 8px;
+  padding: 12px 10px; cursor: pointer;
+  font-size: 13px; text-align: center; line-height: 1.3;
+  transition: background .15s, border-color .15s;
+  display: flex; flex-direction: column; align-items: center; gap: 5px;
+}
+.btn-action:active { background: var(--blue3); border-color: var(--gold); }
+.btn-action.danger { border-color: rgba(224,80,80,.4); }
+.btn-action.danger:active { border-color: var(--red); }
+.btn-action.primary { border-color: rgba(240,192,64,.4); }
+.btn-action.primary:active { border-color: var(--gold); }
+.btn-icon { font-size: 20px; }
+.btn-label { font-size: 11px; color: var(--muted); }
+.btn-action.full { grid-column: 1 / -1; flex-direction: row; justify-content: center; }
+
+/* ── Toast ── */
+#toast {
+  position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%);
+  background: var(--blue3); color: var(--text);
+  padding: 10px 18px; border-radius: 20px;
+  font-size: 13px; white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0,0,0,.4);
+  opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 100;
+}
+#toast.show { opacity: 1; }
+
+/* ── Accès refusé ── */
+#denied { display: none; text-align: center; padding: 60px 20px; }
+#denied .icon { font-size: 48px; margin-bottom: 16px; }
+#denied p { color: var(--muted); }
+
+@keyframes pulse { from { opacity: 1; } to { opacity: .5; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <button class="header-back" onclick="history.length > 1 ? history.back() : window.close()">‹</button>
+  <span class="header-title">🛠 Debug</span>
+  <span id="header-version" style="font-size:11px;color:var(--muted)"></span>
+</div>
+
+<div id="denied">
+  <div class="icon">🔒</div>
+  <p>Accès réservé au profil JC</p>
+</div>
+
+<div class="content" id="main" style="display:none">
+
+  <!-- ── Statuts ── -->
+  <div class="section">
+    <div class="section-title">Statuts serveur</div>
+    <div class="status-card" id="status-card">
+      <div class="status-row"><span class="status-label">Films scrapés</span><span class="status-val" id="s-films">—</span></div>
+      <div class="status-row"><span class="status-label">Séries scrapées</span><span class="status-val" id="s-series">—</span></div>
+      <div class="status-row"><span class="status-label">Bestever</span><span class="status-val" id="s-bestever">—</span></div>
+      <div class="status-row"><span class="status-label">Cinéma</span><span class="status-val" id="s-cinema">—</span></div>
+      <div class="status-row"><span class="status-label">Détails films</span><span class="status-val" id="s-details">—</span></div>
+      <div class="status-row"><span class="status-label">Détails séries</span><span class="status-val" id="s-series-details">—</span></div>
+    </div>
+  </div>
+
+  <!-- ── TMDB ── -->
+  <div class="section">
+    <div class="section-title">TMDB</div>
+    <div class="status-card" id="tmdb-card">
+      <div class="status-row"><span class="status-label">Clé API</span><span class="status-val" id="t-key">—</span></div>
+      <div class="status-row"><span class="status-label">Dernier run</span><span class="status-val" id="t-lastrun">—</span></div>
+      <div class="status-row"><span class="status-label">Films enrichis</span><span class="status-val" id="t-films">—</span></div>
+      <div class="status-row"><span class="status-label">Séries enrichies</span><span class="status-val" id="t-series">—</span></div>
+      <div class="status-row"><span class="status-label">Cinéma enrichi</span><span class="status-val" id="t-cinema">—</span></div>
+      <div class="status-row"><span class="status-label">Ignorés</span><span class="status-val" id="t-skipped">—</span></div>
+      <div id="tmdb-progress-wrap" class="progress-wrap" style="display:none">
+        <div class="progress-track"><div class="progress-fill" id="tmdb-progress-fill" style="width:0%"></div></div>
+        <div class="progress-label"><span id="tmdb-progress-txt">0 / 0</span><span id="tmdb-progress-pct">0%</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Films VOD ── -->
+  <div class="section">
+    <div class="section-title">Films VOD</div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('scrape-films')">
+        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Films récents</span>
+      </button>
+      <button class="btn-action" onclick="action('rescrape-details')">
+        <span class="btn-icon">🔄</span>Rescraper plateformes<span class="btn-label">Fiche par fiche</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-details-cache')">
+        <span class="btn-icon">🗑️</span>Vider cache plateformes<span class="btn-label">Redis</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-films-cache')">
+        <span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-label">Redis</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Séries ── -->
+  <div class="section">
+    <div class="section-title">Séries</div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('scrape-series-list')">
+        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Séries</span>
+      </button>
+      <button class="btn-action primary" onclick="action('scrape-series-details')">
+        <span class="btn-icon">🔄</span>Rescraper détails<span class="btn-label">Séries</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-series-list')">
+        <span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-label">Redis</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-series-details')">
+        <span class="btn-icon">🗑️</span>Vider cache détails<span class="btn-label">Redis</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Best ever ── -->
+  <div class="section">
+    <div class="section-title">Best Ever</div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('scrape-bestever')">
+        <span class="btn-icon">▶</span>Scraper la liste<span class="btn-label">Best ever</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-bestever')">
+        <span class="btn-icon">🗑️</span>Vider cache liste<span class="btn-label">Redis</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Cinéma ── -->
+  <div class="section">
+    <div class="section-title">Cinéma</div>
+    <div class="btn-grid">
+      <button class="btn-action primary" onclick="action('scrape-cinema')">
+        <span class="btn-icon">▶</span>Scraper cinéma<span class="btn-label">Films à l'affiche</span>
+      </button>
+      <button class="btn-action danger" onclick="action('clear-cinema')">
+        <span class="btn-icon">🗑️</span>Vider cache<span class="btn-label">Redis</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── TMDB actions ── -->
+  <div class="section">
+    <div class="section-title">TMDB — Enrichissement</div>
+    <div class="btn-grid">
+      <button class="btn-action primary full" id="btn-tmdb-enrich" onclick="action('tmdb-enrich')">
+        <span class="btn-icon">🎬</span>Lancer enrichissement TMDB (force)<span class="btn-label">Toutes les listes</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Global ── -->
+  <div class="section">
+    <div class="section-title">Cache navigateur</div>
+    <div class="btn-grid">
+      <button class="btn-action danger full" onclick="action('clear-local-cache')">
+        <span class="btn-icon">🧹</span>Vider cache local (navigateur)<span class="btn-label">Recharge la page</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- ── Notes AlloCiné ── -->
+  <div class="section">
+    <div class="section-title">Notes AlloCiné</div>
+    <div class="btn-grid">
+      <button class="btn-action full" onclick="action('ac-sync')">
+        <span class="btn-icon">🔄</span>Sync notes AlloCiné<span class="btn-label">Import depuis AlloCiné</span>
+      </button>
+    </div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Secret ──
+let _secret = '';
+async function loadSecret() {
+  try {
+    const r = await fetch('/api/config');
+    if (r.ok) { const d = await r.json(); _secret = d.secret || ''; }
+  } catch(e) {}
+}
+
+function apiFetch(url, opts = {}) {
+  if (_secret) opts = { ...opts, headers: { ...(opts.headers||{}), 'x-app-secret': _secret } };
+  return fetch(url, opts);
+}
+
+// ── Auth check ──
+function checkAuth() {
+  const userId = localStorage.getItem('vod_user_id');
+  if (!userId) return false;
+  // Vérifier via l'API si l'utilisateur courant est JC
+  return true; // la vérif serveur se fait via requireSecret + on vérifie le nom côté serveur
+}
+
+async function initAuth() {
+  await loadSecret();
+  // Vérifier que l'utilisateur actuel est bien JC
+  const userId = localStorage.getItem('vod_user_id');
+  if (!userId) { showDenied(); return; }
+  try {
+    const r = await apiFetch(`/api/users`);
+    if (!r.ok) { showDenied(); return; }
+    const d = await r.json();
+    const user = (d.users || []).find(u => u.id === userId);
+    if (!user || user.name.toUpperCase() !== 'JC') { showDenied(); return; }
+  } catch(e) { showDenied(); return; }
+  document.getElementById('main').style.display = '';
+  loadStatus();
+  setInterval(loadStatus, 8000);
+}
+
+function showDenied() { document.getElementById('denied').style.display = ''; }
+
+// ── Statuts ──
+async function loadStatus() {
+  try {
+    const [health, tmdb] = await Promise.all([
+      apiFetch('/api/health').then(r => r.json()),
+      apiFetch('/api/tmdb-status').then(r => r.json()),
+    ]);
+    renderHealth(health);
+    renderTmdb(tmdb);
+    if (health.version) document.getElementById('header-version').textContent = health.version;
+  } catch(e) {}
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'2-digit' }) + ' ' +
+         d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+}
+
+function renderHealth(h) {
+  const set = (id, val, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val;
+    el.className = 'status-val' + (cls ? ' ' + cls : '');
+  };
+  set('s-films',          h.cachedFilms != null ? `${h.cachedFilms} films (${fmtDate(h.lastScrape)})` : '—');
+  set('s-series',         h.cachedSeries != null ? `${h.cachedSeries} séries (${fmtDate(h.lastSeriesScrape)})` : '—');
+  set('s-bestever',       h.cachedBestever != null ? `${h.cachedBestever} films (${fmtDate(h.lastBesteverScrape)})` : '—');
+  set('s-cinema',         h.cachedCinema != null ? `${h.cachedCinema} films` : '—');
+  set('s-details',        h.detailsCacheSize != null ? `${h.detailsCacheSize} entrées (${fmtDate(h.lastDetailsScrape)})` : '—');
+  set('s-series-details', h.seriesDetailsCacheSize != null ? `${h.seriesDetailsCacheSize} entrées` : '—');
+}
+
+function renderTmdb(t) {
+  const set = (id, val, cls) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.textContent = val;
+    el.className = 'status-val' + (cls ? ' ' + cls : '');
+  };
+  set('t-key',     t.keyConfigured ? '✓ Configurée' : '✗ Manquante', t.keyConfigured ? 'ok' : 'err');
+  set('t-lastrun', t.lastRun ? fmtDate(t.lastRun) : '—');
+  set('t-films',   t.enrichedFilms != null ? t.enrichedFilms : '—');
+  set('t-series',  t.enrichedSeries != null ? t.enrichedSeries : '—');
+  set('t-cinema',  t.enrichedCinema != null ? t.enrichedCinema : '—');
+  set('t-skipped', t.skipped != null ? t.skipped : '—');
+
+  const wrap = document.getElementById('tmdb-progress-wrap');
+  if (t.running && t.total > 0) {
+    wrap.style.display = '';
+    document.getElementById('tmdb-progress-fill').style.width = (t.pct || 0) + '%';
+    document.getElementById('tmdb-progress-txt').textContent = `${t.done} / ${t.total}`;
+    document.getElementById('tmdb-progress-pct').textContent = Math.round(t.pct || 0) + '%';
+    document.getElementById('t-lastrun').textContent = '⏳ En cours…';
+    document.getElementById('t-lastrun').className = 'status-val running';
+    // Poll plus fréquemment pendant le run
+    setTimeout(loadStatus, 2000);
+  } else {
+    wrap.style.display = 'none';
+  }
+}
+
+// ── Toast ──
+let _toastTimer;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+// ── Actions ──
+async function action(type) {
+  switch (type) {
+
+    case 'tmdb-enrich': {
+      toast('Enrichissement TMDB lancé…');
+      try {
+        await apiFetch('/api/tmdb-enrich?force=true', { method: 'POST' });
+        toast('TMDB : enrichissement terminé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-details-cache': {
+      if (!confirm('Vider le cache plateformes films (Redis) ?')) break;
+      try {
+        await apiFetch('/api/clear-details-cache', { method: 'POST' });
+        toast('Cache plateformes films vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-films-cache': {
+      if (!confirm('Vider le cache liste films (Redis) ?')) break;
+      try {
+        await apiFetch('/api/clear-films-cache', { method: 'POST' });
+        toast('Cache liste films vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-series-list': {
+      if (!confirm('Vider le cache liste séries (Redis) ?')) break;
+      try {
+        await apiFetch('/api/series/clear-cache?type=list', { method: 'POST' });
+        toast('Cache liste séries vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-series-details': {
+      if (!confirm('Vider le cache détails séries (Redis) ?')) break;
+      try {
+        await apiFetch('/api/series/clear-cache?type=details', { method: 'POST' });
+        toast('Cache détails séries vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-bestever': {
+      if (!confirm('Vider le cache best ever (Redis) ?')) break;
+      try {
+        await apiFetch('/api/bestever/clear-cache', { method: 'POST' });
+        toast('Cache best ever vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'clear-cinema': {
+      if (!confirm('Vider le cache cinéma (Redis) ?')) break;
+      try {
+        await apiFetch('/api/cinema/clear-cache', { method: 'POST' });
+        toast('Cache cinéma vidé ✓');
+        loadStatus();
+      } catch(e) { toast('Erreur : ' + e.message); }
+      break;
+    }
+
+    case 'scrape-films': {
+      if (!confirm('Lancer le scraping des films VOD ?')) break;
+      window.open('/index.html', '_blank');
+      toast('Ouvre Films → lance depuis le menu Debug');
+      break;
+    }
+
+    case 'rescrape-details': {
+      window.open('/index.html', '_blank');
+      toast('Ouvre Films → Rescraper les plateformes');
+      break;
+    }
+
+    case 'scrape-series-list': {
+      window.open('/series.html', '_blank');
+      toast('Ouvre Séries → Scraper la liste');
+      break;
+    }
+
+    case 'scrape-series-details': {
+      window.open('/series.html', '_blank');
+      toast('Ouvre Séries → Rescraper les détails');
+      break;
+    }
+
+    case 'scrape-bestever': {
+      window.open('/bestever.html', '_blank');
+      toast('Ouvre Best Ever → Scraper');
+      break;
+    }
+
+    case 'scrape-cinema': {
+      window.open('/cinema.html', '_blank');
+      toast('Ouvre Cinéma → Scraper');
+      break;
+    }
+
+    case 'clear-local-cache': {
+      if (!confirm('Vider tout le cache local du navigateur ?')) break;
+      const KEYS = [
+        'vod_films','vod_details','vod_updated','vod_cache_v1','vod_cache_v2','vod_cache_v3','vod_cache_version',
+        'vod_series','vod_series_details','vod_series_updated','vod_series_v1','vod_series_v2','vod_series_v3','vod_series_version','vod_series_cache',
+        'bestever_films','bestever_details','bestever_updated','bestever_cache_v1','bestever_cache_v2','bestever_cache_v3',
+        'vod_cinema_films','vod_cinema_date',
+      ];
+      KEYS.forEach(k => localStorage.removeItem(k));
+      toast('Cache local vidé ✓');
+      break;
+    }
+
+    case 'ac-sync': {
+      window.open('/index.html', '_blank');
+      toast('Ouvre Films → Sync notes AlloCiné');
+      break;
+    }
+  }
+}
+
+// ── Init ──
+initAuth();
+</script>
+</body>
+</html>

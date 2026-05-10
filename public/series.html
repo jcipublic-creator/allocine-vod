@@ -428,20 +428,9 @@ body {
   <button class="menu-item" onclick="closeMenu();openMyProfile()">⚙️ Mon profil</button>
   <button class="menu-item" id="btn-user-mgmt" style="display:none" onclick="closeMenu();openUserManagement()">👥 Gestion des utilisateurs</button>
   <div class="menu-separator" id="debug-separator"></div>
-  <button class="menu-item-sub" id="btn-debug-toggle" onclick="toggleSubmenu(event)">
-    🛠 Debug <span class="sub-arrow">▶</span>
+  <button class="menu-item" id="btn-debug-toggle" onclick="closeMenu();window.open('/debug.html','_blank')">
+    🛠 Debug
   </button>
-  <div class="submenu" id="submenu-debug">
-    <button class="menu-item" id="btn-run"         onclick="closeMenu();openConfirmSeries('list')"    disabled>▶ Rescraper la liste</button>
-    <button class="menu-item" id="btn-run-details" onclick="closeMenu();openConfirmSeries('details')" disabled>🔄 Rescraper les détails</button>
-    <button class="menu-item" id="btn-run-all"     onclick="closeMenu();openConfirmSeries('all')"     disabled>⚡ Rescraper tout</button>
-    <button class="menu-item" onclick="closeMenu();confirmClearCache('list')">🗑️ Vider cache liste</button>
-    <button class="menu-item" onclick="closeMenu();confirmClearCache('details')">🗑️ Vider cache détails</button>
-    <button class="menu-item" onclick="clearAllLocalCache()">🧹 Vider cache local navigateur</button>
-    <button class="menu-item" onclick="closeMenu();launchTmdbEnrich()">🎬 Enrichir notes TMDB</button>
-    <button class="menu-item" onclick="closeMenu();confirmClearCache('all')">🗑️ Vider tout le cache</button>
-    <button class="menu-item" onclick="closeMenu();openACSync()">🔄 Sync notes AlloCiné</button>
-  </div>
 </div>
 
 <!-- ── Barres de progression ── -->

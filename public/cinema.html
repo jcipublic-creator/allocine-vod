@@ -130,6 +130,7 @@ body {
 .card-poster-ph { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 20px; background: var(--navy); }
 .card-info { flex: 1; min-width: 0; }
 .card-title { font-size: 14px; font-weight: 600; color: #fff; line-height: 1.25; }
+.badge-new  { display: inline-block; font-size: 7px; font-weight: 600; letter-spacing: .3px; color: #000; background: var(--gold); border-radius: 3px; padding: 1px 4px; margin-left: 5px; vertical-align: middle; text-transform: uppercase; opacity: .75; }
 .card-meta  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew  { font-size: 11px; color: var(--muted); margin-top: 2px; }
 .card-crew strong { color: var(--text); font-weight: 600; }
@@ -579,13 +580,15 @@ function renderCards(films) {
       ? `<div class="card-poster"><img src="${esc(f.poster)}" alt="" loading="lazy" onerror="posterError(this)"></div>`
       : `<div class="card-poster"><div class="card-poster-ph">🎬</div></div>`;
     const datePill = f.dateSortie ? `<span class="decade-pill">${esc(f.dateSortie)}</span>` : '';
+    const sortieDate = parseDateCI(f.dateSortie);
+    const isNew = sortieDate && (Date.now() - sortieDate.getTime()) < 8 * 24 * 60 * 60 * 1000;
     const seancesTxt = f.nbSeances ? f.nbSeances.toLocaleString('fr-FR') + ' séances' : '';
     return `
 <div class="card" id="card-${i}" data-idx="${i}" onclick="openFilm('${url}')">
   <div class="card-top">
     ${posterHtml}
     <div class="card-info">
-      <div class="card-title">${esc(f.titre)}${datePill}</div>
+      <div class="card-title">${esc(f.titre)}${isNew ? '<span class="badge-new">new</span>' : ''}${datePill}</div>
       <div class="card-meta">${esc((f.genre||'').split(',').map(g=>g.trim()).filter(Boolean).join(', ') || '—')}${f.duree ? ` <span style="opacity:.75">· ${esc(f.duree)}</span>` : ''}</div>
       ${f.realisateur ? `<div class="card-crew">De <strong>${esc(f.realisateur)}</strong></div>` : ''}
       ${f.acteurs ? `<div class="card-actors">${esc(f.acteurs.split(',').map(a=>a.trim()).filter(Boolean).slice(0,5).join(', '))}</div>` : ''}

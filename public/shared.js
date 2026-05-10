@@ -129,7 +129,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 const LS_FILMS   = 'vod_films';
 const LS_DETAILS = 'vod_details';
 const LS_DATE    = 'vod_updated';
-const LS_VERSION = 'vod_cache_v2'; // ⚠️ changer UNIQUEMENT si le format des données évolue
+const LS_VERSION = 'vod_cache_v3'; // ⚠️ changer UNIQUEMENT si le format des données évolue
 
 const esc = s => String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 
@@ -211,9 +211,9 @@ async function launchTmdbEnrich() {
 function clearAllLocalCache() {
   if (!confirm('Vider tout le cache local du navigateur ?\nLes données seront rechargées depuis le serveur.')) return;
   const KEYS = [
-    'vod_films', 'vod_details', 'vod_updated', 'vod_cache_v1', 'vod_cache_v2', 'vod_cache_version',
-    'vod_series', 'vod_series_details', 'vod_series_updated', 'vod_series_v1', 'vod_series_v2', 'vod_series_version', 'vod_series_cache',
-    'bestever_films', 'bestever_details', 'bestever_updated', 'bestever_cache_v1', 'bestever_cache_v2',
+    'vod_films', 'vod_details', 'vod_updated', 'vod_cache_v1', 'vod_cache_v2', 'vod_cache_v3', 'vod_cache_version',
+    'vod_series', 'vod_series_details', 'vod_series_updated', 'vod_series_v1', 'vod_series_v2', 'vod_series_v3', 'vod_series_version', 'vod_series_cache',
+    'bestever_films', 'bestever_details', 'bestever_updated', 'bestever_cache_v1', 'bestever_cache_v2', 'bestever_cache_v3',
     'vod_cinema_films', 'vod_cinema_date',
   ];
   KEYS.forEach(k => localStorage.removeItem(k));

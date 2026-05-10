@@ -1827,7 +1827,7 @@ app.get('/api/details', async (req, res) => {
     return res.json({ pays: null, annee: null, allocineId: null, allocineUrl: null, providers: [] });
 
   const cached = getCachedDetails(cacheKey);
-  if (cached && (cached.providers?.length > 0 || cached.error)) {
+  if (cached && (cached.providers?.length > 0 || cached.error || cached.tmdbRating !== undefined)) {
     console.log(`Cache détails: ${cacheKey} → ${cached.providers?.length || 0} plateformes`);
     return res.json(cached);
   }
@@ -1912,9 +1912,11 @@ app.get('/api/details', async (req, res) => {
       }
     }
 
+    // Renvoyer le cache mergé (qui inclut tmdbRating si déjà enrichi) plutôt que data brut
+    const merged = getCachedDetails(cacheKey) || data;
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Détails "${query || resolvedId}" → ${pays || '?'} (${annee || '?'}) | synopsis:${synopsis ? 'oui' : 'non'} | ${pNames}`);
-    return res.json(data);
+    return res.json(merged);
 
   } catch (error) {
     const status  = error.response?.status;
@@ -3150,7 +3152,7 @@ app.get('/api/series/details', async (req, res) => {
 
   const cacheKey = `sid:${seriesId}`;
   const cached   = getCachedSeriesDetails(cacheKey);
-  if (cached && (cached.providers?.length > 0 || cached.error)) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
+  if (cached && (cached.providers?.length > 0 || cached.error || cached.tmdbRating !== undefined)) { console.log(`Cache série: ${seriesId}`); return res.json(cached); }
 
   try {
     const url   = `https://www.allocine.fr/series/ficheserie_gen_cserie=${seriesId}.html`;
@@ -3214,9 +3216,11 @@ app.get('/api/series/details', async (req, res) => {
     if (nbSaisons || providers.length > 0 || pays || statut)
       setCachedSeriesDetails(cacheKey, data);
 
+    // Renvoyer le cache mergé (qui inclut tmdbRating si déjà enrichi) plutôt que data brut
+    const merged = getCachedSeriesDetails(cacheKey) || data;
     const pNames = providers.map(p => `${p.name}(${p.type})`).join(', ') || '—';
     console.log(`Série ${seriesId} → ${pays || '?'} statut:${statut || '?'} saisons:${nbSaisons ?? '?'} | ${pNames}`);
-    return res.json(data);
+    return res.json(merged);
 
   } catch(e) {
     const status = e.response?.status;

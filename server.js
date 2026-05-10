@@ -1932,12 +1932,19 @@ app.post('/api/normalize-providers', requireSecret, async (_req, res) => {
     'Max':     'HBO Max', // slug 'hbo-max' était mappé 'Max', AlloCiné affiche 'HBO Max'
   };
 
-  const normalizeList = providers => providers.map(p => {
-    const legacy = LEGACY_RENAMES[p.name];
-    if (legacy) return { ...p, name: legacy };
-    const mapped = VOD_SLUG_TO_NAME[p.name] || VOD_SLUG_TO_NAME[p.name.toLowerCase()];
-    return mapped ? { ...p, name: mapped } : p;
-  });
+  const normalizeList = providers => {
+    const seen = new Set();
+    return providers.map(p => {
+      const legacy = LEGACY_RENAMES[p.name];
+      if (legacy) return { ...p, name: legacy };
+      const mapped = VOD_SLUG_TO_NAME[p.name] || VOD_SLUG_TO_NAME[p.name.toLowerCase()];
+      return mapped ? { ...p, name: mapped } : p;
+    }).filter(p => {
+      if (seen.has(p.name)) return false; // déduplique après renommage
+      seen.add(p.name);
+      return true;
+    });
+  };
 
   const hasChange = (before, after) =>
     before.some((p, i) => p.name !== after[i].name);
